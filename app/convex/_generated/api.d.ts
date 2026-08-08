@@ -16,6 +16,7 @@ import type * as lib_auth from "../lib/auth.js";
 import type * as peps from "../peps.js";
 import type * as seed from "../seed.js";
 import type * as seedData from "../seedData.js";
+import type * as testHelpers from "../testHelpers.js";
 
 import type {
   ApiFromModules,
@@ -32,6 +33,7 @@ declare const fullApi: ApiFromModules<{
   peps: typeof peps;
   seed: typeof seed;
   seedData: typeof seedData;
+  testHelpers: typeof testHelpers;
 }>;
 
 /**

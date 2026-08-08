@@ -2,11 +2,12 @@ import { v } from 'convex/values';
 import { internalMutation, query } from './_generated/server';
 import type { MutationCtx } from './_generated/server';
 import type { Id } from './_generated/dataModel';
-import { requireUser } from './lib/auth';
+import { requireRole } from './lib/auth';
 
 // Motor de costeo PEPS/FIFO. Reglas de negocio que este archivo existe para
 // garantizar (ver plan: ~/.claude/plans/quiero-que-hagas-el-wise-creek.md):
-//   1. Las salidas siempre consumen la capa más antigua primero (FIFO real).
+//   1. Las salidas siempre consumen la capa más antigua primero (FIFO real,
+//      por fecha REAL de recepción — no por cuándo alguien tecleó el costo).
 //   2. Un material normal NUNCA se consume por encima de su existencia —
 //      consumirFIFO bloquea con error en vez de subcostear.
 //   3. Triturado (materiales.esInterno) es la ÚNICA excepción: su faltante
@@ -36,6 +37,11 @@ export async function crearCapaImpl(
     materialId: Id<'materiales'>;
     kgOriginal: number;
     costoUnitario: number;
+    // Fecha REAL de recepción del material (no "ahora") — determina el
+    // orden FIFO. Para Triturado, "ahora" (momento del cierre) sí es la
+    // fecha real de generación, así que el caller la pasa explícita en
+    // ambos casos; este archivo nunca asume Date.now() por defecto.
+    fechaEntrada: number;
     origen: OrigenCapa;
     entradaId: Id<'entradas'> | null;
     cierreTurnoId: Id<'cierresTurno'> | null;
@@ -54,7 +60,7 @@ export async function crearCapaImpl(
   const now = Date.now();
   const capaId = await ctx.db.insert('capasCosto', {
     materialId: args.materialId,
-    fechaEntrada: now,
+    fechaEntrada: args.fechaEntrada,
     kgOriginal: args.kgOriginal,
     kgRestante: args.kgOriginal,
     costoUnitario: args.costoUnitario,
@@ -108,9 +114,9 @@ export async function consumirFIFOImpl(
     throw new Error(`consumirFIFO: material ${materialId} no existe.`);
   }
 
-  // FIFO real: capas del material, no agotadas, ordenadas por fecha de
-  // entrada ascendente (la más antigua primero) — by_material_fecha ya
-  // las entrega en ese orden con .order('asc').
+  // FIFO real: capas del material, no agotadas, ordenadas por FECHA REAL
+  // de entrada ascendente (la más antigua primero) — by_material_fecha
+  // indexa por fechaEntrada, nunca por cuándo se costeó/creó el registro.
   const capas = await ctx.db
     .query('capasCosto')
     .withIndex('by_material_fecha', (q) => q.eq('materialId', materialId))
@@ -178,9 +184,12 @@ export async function revertirConsumoImpl(
   for (const detalle of consumo.capasDetalle) {
     const capa = await ctx.db.get(detalle.capaId);
     if (!capa) {
-      // No debería pasar (nada se borra en este sistema), pero no tumbar
-      // la reversa completa por una capa individual faltante.
-      continue;
+      // "Nada se borra" es una regla dura de este sistema — una capa
+      // referenciada que no existe es corrupción de datos, no un caso
+      // normal a tolerar en silencio. Falla duro en vez de seguir de largo.
+      throw new Error(
+        `revertirConsumo: la capa ${detalle.capaId} referenciada en cierreConsumos ${cierreConsumoId} no existe — inconsistencia de datos, revisar antes de continuar.`
+      );
     }
     const nuevoRestante = capa.kgRestante + detalle.kgTomado;
     await ctx.db.patch(detalle.capaId, { kgRestante: nuevoRestante, agotada: false });
@@ -208,6 +217,7 @@ export const crearCapa = internalMutation({
     materialId: v.id('materiales'),
     kgOriginal: v.number(),
     costoUnitario: v.number(),
+    fechaEntrada: v.number(),
     origen: v.union(v.literal('entrada'), v.literal('triturado'), v.literal('inventarioInicial')),
     entradaId: v.union(v.id('entradas'), v.null()),
     cierreTurnoId: v.union(v.id('cierresTurno'), v.null()),
@@ -237,13 +247,16 @@ export const revertirConsumo = internalMutation({
   handler: async (ctx, args) => revertirConsumoImpl(ctx, args),
 });
 
-// --- Lectura pública (requiere sesión válida, cualquier rol — la
-// restricción de rol específica vive en la pantalla que consuma esto) ---
+// --- Lectura pública. Endurecido tras auditoría: estas queries devuelven
+// datos financieros (costo unitario, valor de inventario) — requieren rol
+// específico, no solo sesión válida. existenciaMaterial es la única que no
+// expone costo (solo kg), así que se deja disponible a un set más amplio
+// de roles operativos. ---
 
 export const existenciaMaterial = query({
   args: { materialId: v.id('materiales'), token: v.string() },
   handler: async (ctx, { materialId, token }) => {
-    await requireUser(ctx, token);
+    await requireRole(ctx, token, ['compras', 'calidad', 'gerencia', 'admin']);
     const capas = await ctx.db
       .query('capasCosto')
       .withIndex('by_material_agotada', (q) => q.eq('materialId', materialId).eq('agotada', false))
@@ -255,7 +268,7 @@ export const existenciaMaterial = query({
 export const valorInventarioMaterial = query({
   args: { materialId: v.id('materiales'), token: v.string() },
   handler: async (ctx, { materialId, token }) => {
-    await requireUser(ctx, token);
+    await requireRole(ctx, token, ['compras', 'gerencia', 'admin']);
     const capas = await ctx.db
       .query('capasCosto')
       .withIndex('by_material_agotada', (q) => q.eq('materialId', materialId).eq('agotada', false))

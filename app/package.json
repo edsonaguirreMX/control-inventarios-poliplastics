@@ -11,7 +11,8 @@
     "dev:backend": "convex dev",
     "dev:web": "node src/server.js",
     "build": "node scripts/build-client.mjs",
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "test": "vitest run"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
@@ -19,6 +20,9 @@
     "express": "^4.21.2"
   },
   "devDependencies": {
-    "esbuild": "^0.28.1"
+    "@edge-runtime/vm": "^5.0.0",
+    "convex-test": "^0.0.55",
+    "esbuild": "^0.28.1",
+    "vitest": "^4.1.10"
   }
 }

@@ -43,6 +43,23 @@ export async function aplicarCierreImpl(
   costoRealPorKg: number;
   costoRealPorMetro: number;
 }> {
+  // Ningún dato capturado puede ser negativo — un cierre con metros o
+  // consumo negativo alteraría merma/costo real sin que nada lo detecte.
+  if (args.metrosBuenos < 0) {
+    throw new Error('aplicarCierre: metrosBuenos no puede ser negativo.');
+  }
+  if (args.caballetes105Pzas < 0) {
+    throw new Error('aplicarCierre: caballetes105Pzas no puede ser negativo.');
+  }
+  if (args.caballetes106Pzas < 0) {
+    throw new Error('aplicarCierre: caballetes106Pzas no puede ser negativo.');
+  }
+  for (const c of args.consumoPorMaterial) {
+    if (c.kgConsumido < 0) {
+      throw new Error(`aplicarCierre: kgConsumido no puede ser negativo (material ${c.materialId}).`);
+    }
+  }
+
   const parametros = await ctx.db.query('parametrosProduccion').first();
   if (!parametros) {
     throw new Error('aplicarCierre: no hay parametrosProduccion configurados — corre el seed primero.');
@@ -91,6 +108,11 @@ export async function aplicarCierreImpl(
       materialId: triturado._id,
       kgOriginal: trituradoKg,
       costoUnitario: 0,
+      // El Triturado entra al inventario exactamente en el momento del
+      // cierre que lo generó — "ahora" SÍ es su fecha real de recepción,
+      // a diferencia de una entrada de compra que puede costearse días
+      // después de haberse recibido físicamente.
+      fechaEntrada: Date.now(),
       origen: 'triturado',
       entradaId: null,
       cierreTurnoId: args.cierreTurnoId,
@@ -120,50 +142,64 @@ export async function revertirCierreImpl(
     await ctx.db.patch(consumo._id, { vigente: false });
   }
 
-  // Capa de Triturado que este cierre generó (a lo sumo una activa — un
-  // recierre previo pudo haber dejado capas ya agotadas/voided de rondas
-  // anteriores, por eso se filtra por agotada:false en vez de usar .unique()
-  // directo sobre el índice).
+  // Capa de Triturado que este cierre generó. Un recierre previo puede
+  // haber dejado capas de rondas anteriores ya voided (agotada:true) con
+  // el mismo cierreTurnoId — la relevante es siempre la más recientemente
+  // creada (la de la aplicación actual), SIN filtrar por agotada: si esa
+  // capa fue consumida al 100% por un cierre posterior, también queda
+  // agotada:true, y filtrarla por error la hacía invisible para el chequeo
+  // de bloqueo de abajo (bug real encontrado en auditoría — una capa
+  // totalmente consumida dejaba "revertir" sin bloquear).
   const capasTriturado = await ctx.db
     .query('capasCosto')
     .withIndex('by_cierreTurnoId_origen', (q) => q.eq('cierreTurnoId', args.cierreTurnoId).eq('origen', 'triturado'))
     .collect();
-  const capaTriturado = capasTriturado.find((c) => !c.agotada) ?? null;
+  const capaTriturado =
+    capasTriturado.length === 0
+      ? null
+      : capasTriturado.reduce((masReciente, c) => (c.createdAt > masReciente.createdAt ? c : masReciente));
 
   if (capaTriturado) {
-    // Consumo NETO, no solo "¿existe algún movimiento tipo consumo?" — nada
-    // se borra en este sistema, así que un consumo que ya fue revertido
-    // (reversa_consumo) sigue viéndose en el historial para siempre. Si no
-    // se descuenta, un cierre posterior que consumió y luego revirtió esta
-    // capa dejaría bloqueada la reversión de ESTE cierre para siempre.
     const movimientos = await ctx.db
       .query('capaMovimientos')
       .withIndex('by_capaId', (q) => q.eq('capaId', capaTriturado._id))
       .collect();
-    const consumoNeto = movimientos.reduce((neto, m) => {
-      if (m.tipo === 'consumo') return neto + m.kg;
-      if (m.tipo === 'reversa_consumo') return neto - m.kg;
-      return neto;
-    }, 0);
 
-    if (consumoNeto > 0) {
-      throw new Error(
-        `Este cierre no se puede revertir: el Triturado que generó tiene ${consumoNeto}kg consumidos (netos) por un cierre posterior — revierte ese cierre primero.`
-      );
+    // Si un recierre anterior ya voided esta misma capa, no volver a
+    // hacerlo (idempotente) — de lo contrario se duplicaría la
+    // reversa_generacion y la reconciliación del ledger dejaría de cuadrar.
+    const yaVoided = movimientos.some((m) => m.tipo === 'reversa_generacion');
+    if (!yaVoided) {
+      // Consumo NETO, no solo "¿existe algún movimiento tipo consumo?" —
+      // nada se borra en este sistema, así que un consumo ya revertido
+      // sigue viéndose en el historial para siempre. Sin descontar la
+      // reversa, un cierre posterior que consumió y luego revirtió esta
+      // capa dejaría bloqueada la reversión de ESTE cierre para siempre.
+      const consumoNeto = movimientos.reduce((neto, m) => {
+        if (m.tipo === 'consumo') return neto + m.kg;
+        if (m.tipo === 'reversa_consumo') return neto - m.kg;
+        return neto;
+      }, 0);
+
+      if (consumoNeto > 0) {
+        throw new Error(
+          `Este cierre no se puede revertir: el Triturado que generó tiene ${consumoNeto}kg consumidos (netos) por un cierre posterior — revierte ese cierre primero.`
+        );
+      }
+
+      await ctx.db.patch(capaTriturado._id, { kgRestante: 0, agotada: true });
+      await ctx.db.insert('capaMovimientos', {
+        capaId: capaTriturado._id,
+        materialId: capaTriturado.materialId,
+        tipo: 'reversa_generacion',
+        kg: capaTriturado.kgOriginal,
+        costoUnitario: capaTriturado.costoUnitario,
+        origenTipo: 'correccion',
+        origenId: String(args.cierreTurnoId),
+        createdAt: Date.now(),
+        createdBy: args.createdBy,
+      });
     }
-
-    await ctx.db.patch(capaTriturado._id, { kgRestante: 0, agotada: true });
-    await ctx.db.insert('capaMovimientos', {
-      capaId: capaTriturado._id,
-      materialId: capaTriturado.materialId,
-      tipo: 'reversa_generacion',
-      kg: capaTriturado.kgOriginal,
-      costoUnitario: capaTriturado.costoUnitario,
-      origenTipo: 'correccion',
-      origenId: String(args.cierreTurnoId),
-      createdAt: Date.now(),
-      createdBy: args.createdBy,
-    });
   }
 
   return { ok: true };

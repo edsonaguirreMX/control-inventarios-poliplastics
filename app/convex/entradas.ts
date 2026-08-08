@@ -9,6 +9,32 @@ import { requireRole, requireUser } from './lib/auth';
 // entradas-costeo.html, momento en el que SÍ se genera la capa PEPS (nunca
 // antes: sin costo no hay capa que crear).
 
+// entrada.fecha es "YYYY-MM-DD" (fecha REAL de recepción, capturada por
+// quien registra la entrada) — la capa PEPS debe ordenarse por esa fecha,
+// nunca por cuándo alguien tecleó el costo días después. Se interpreta a
+// medianoche UTC: no importa la hora exacta, solo el orden entre fechas.
+function fechaStringATimestamp(fecha: string): number {
+  const ms = Date.parse(`${fecha}T00:00:00Z`);
+  if (Number.isNaN(ms)) {
+    throw new Error(`Fecha inválida: "${fecha}" (se espera formato YYYY-MM-DD).`);
+  }
+  return ms;
+}
+
+async function validarMaterialParaEntrada(ctx: { db: { get: (id: any) => Promise<any> } }, materialId: any) {
+  const material = await ctx.db.get(materialId);
+  if (!material) {
+    throw new Error('El material seleccionado no existe.');
+  }
+  if (!material.activo) {
+    throw new Error(`${material.nombre} no está activo en el catálogo — no se pueden registrar entradas.`);
+  }
+  if (material.esInterno) {
+    throw new Error(`${material.nombre} se genera internamente por merma — no se registra como entrada de compra.`);
+  }
+  return material;
+}
+
 export const crearEntrada = mutation({
   args: {
     fecha: v.string(),
@@ -25,12 +51,23 @@ export const crearEntrada = mutation({
     if (args.cantidadKg <= 0) {
       throw new Error('crearEntrada: cantidadKg debe ser mayor a 0.');
     }
-    if (args.costoUnitario !== undefined && args.costoUnitario < 0) {
+    const vieneConCosto = args.costoUnitario !== undefined;
+    if (vieneConCosto && args.costoUnitario! < 0) {
       throw new Error('crearEntrada: costoUnitario no puede ser negativo.');
     }
+    // Un operador solo captura kg — costear (aunque sea en el mismo acto de
+    // crear) es decisión de Compras/Admin. Sin este bloqueo, un operador
+    // podría crear capas PEPS con costo arbitrario llamando la API directo.
+    if (vieneConCosto && user.rol === 'operador') {
+      throw new Error(
+        'Un operador no puede capturar el costo de una entrada — guarda solo la cantidad; Compras la completará después.'
+      );
+    }
+
+    await validarMaterialParaEntrada(ctx, args.materialId);
 
     const now = Date.now();
-    const vieneConCosto = args.costoUnitario !== undefined;
+    const fechaEntrada = fechaStringATimestamp(args.fecha);
 
     const entradaId = await ctx.db.insert('entradas', {
       fecha: args.fecha,
@@ -55,6 +92,7 @@ export const crearEntrada = mutation({
         materialId: args.materialId,
         kgOriginal: args.cantidadKg,
         costoUnitario: args.costoUnitario!,
+        fechaEntrada,
         origen: 'entrada',
         entradaId,
         cierreTurnoId: null,
@@ -94,10 +132,15 @@ export const costearEntrada = mutation({
       );
     }
 
+    // Defensa adicional: el material pudo haberse desactivado entre que se
+    // creó la entrada (pendiente) y el momento de costearla.
+    await validarMaterialParaEntrada(ctx, entrada.materialId);
+
     const capaId = await crearCapaImpl(ctx, {
       materialId: entrada.materialId,
       kgOriginal: entrada.cantidadKg,
       costoUnitario: args.costoUnitario,
+      fechaEntrada: fechaStringATimestamp(entrada.fecha),
       origen: 'entrada',
       entradaId: args.entradaId,
       cierreTurnoId: null,
@@ -121,10 +164,12 @@ export const costearEntrada = mutation({
   },
 });
 
+// Devuelve costo unitario y valor de capas — dato financiero, restringido a
+// Compras/Admin (igual que el guard de página de entradas-costeo.html).
 export const listEntradas = query({
   args: { desde: v.optional(v.string()), hasta: v.optional(v.string()), token: v.string() },
   handler: async (ctx, { desde, hasta, token }) => {
-    await requireUser(ctx, token);
+    await requireRole(ctx, token, ['compras', 'admin']);
     const entradas = await ctx.db
       .query('entradas')
       .withIndex('by_fecha', (q) => {
@@ -142,7 +187,7 @@ export const listEntradas = query({
 export const listCapasVigentes = query({
   args: { materialId: v.optional(v.id('materiales')), token: v.string() },
   handler: async (ctx, { materialId, token }) => {
-    await requireUser(ctx, token);
+    await requireRole(ctx, token, ['compras', 'admin']);
     if (materialId !== undefined) {
       return ctx.db
         .query('capasCosto')
@@ -156,10 +201,12 @@ export const listCapasVigentes = query({
   },
 });
 
-// Lista liviana para poblar el selector de material de esta pantalla — no
-// incluye Triturado (no se "compra", se genera internamente por merma) ni
-// los campos calculados de Catálogo (%mezcla, reorden), que son de la
-// Épica 2. Ordenada igual que el catálogo para que la lista se vea estable.
+// Lista liviana para poblar el selector de material — no incluye Triturado
+// (no se "compra", se genera internamente por merma) ni los campos
+// calculados de Catálogo (%mezcla, reorden), que son de la Épica 2. Sin
+// datos de costo, así que se deja disponible a cualquier rol autenticado
+// (la usan tanto entradas-costeo.html —compras/admin— como, más adelante,
+// el flujo de "Entrada de material" del operador en cierre-turno).
 export const listMaterialesActivos = query({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {
