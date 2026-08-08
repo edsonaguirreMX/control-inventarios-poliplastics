@@ -276,12 +276,6 @@ footer.page-foot{font-size:.78rem;color:var(--ink-faint);border-top:1px solid va
     </ul>
   </section>
 
-  <div class="action-bar">
-    <span class="dirty-flag" id="dirtyFlag"><span class="dot"></span>Cambios sin guardar</span>
-    <button class="btn-ghost" id="btnReset" disabled onclick="resetEntradas()">Restablecer</button>
-    <button class="btn-primary" id="btnSave" disabled onclick="saveEntradas()">Guardar cambios</button>
-  </div>
-
   <section class="card">
     <div class="card-head">
       <div>
@@ -341,76 +335,105 @@ if (row) {
 // del orden de documento — espera la MISMA promesa que ya se está
 // resolviendo ahí (no dispara un requireRole nuevo).
 await window.__authReady;
-const MATERIALES = [
-  {id:'hdpe-r-pel', name:'HDPE reciclado peletizado'},
-  {id:'hdpe-v-pel', name:'HDPE virgen peletizado'},
-  {id:'hdpe-r-hoj', name:'HDPE reciclado en hojuela'},
-  {id:'hdpe-r-hoj-sl', name:'HDPE reciclado hojuela sin lavar'},
-  {id:'caco3', name:'Carbonato de calcio peletizado'},
-  {id:'masterbatch', name:'Masterbatch de color'},
-  {id:'aditivo-uv', name:'Aditivo UV'},
-];
-function matName(id){ return (MATERIALES.find(m=>m.id===id)||{}).name || id; }
-
-const DEFAULTS = [
-  {id:'e1', fecha:'07/08', material:'hdpe-r-pel', cantidad:12000, costo:15.28, proveedor:'Recicladora Norte', folio:'F-3391'},
-  {id:'e2', fecha:'06/08', material:'hdpe-v-pel', cantidad:5000, costo:22.95, proveedor:'Polímeros del Bajío', folio:'F-3388'},
-  {id:'e3', fecha:'06/08', material:'hdpe-r-hoj', cantidad:15000, costo:10.85, proveedor:'Recicladora Norte', folio:'F-3387'},
-  {id:'e4', fecha:'05/08', material:'hdpe-r-hoj-sl', cantidad:4000, costo:8.52, proveedor:'Recicladora Norte', folio:'F-3379'},
-  {id:'e5', fecha:'05/08', material:'caco3', cantidad:9000, costo:7.35, proveedor:'Calcitas del Centro', folio:'F-3375'},
-  {id:'e6', fecha:'04/08', material:'masterbatch', cantidad:1200, costo:47.20, proveedor:'Grupo Masterbatch MX', folio:'F-3368'},
-  {id:'e7', fecha:'04/08', material:'aditivo-uv', cantidad:600, costo:68.90, proveedor:'Aditivos Industriales SA', folio:'F-3366'},
-  {id:'e8', fecha:'07/08', material:'caco3', cantidad:6500, costo:null, proveedor:'', folio:''},
-  {id:'e9', fecha:'06/08', material:'hdpe-r-pel', cantidad:7000, costo:null, proveedor:'', folio:''},
-  {id:'e10', fecha:'03/08', material:'aditivo-uv', cantidad:400, costo:65.50, proveedor:'Aditivos Industriales SA', folio:'F-3350'},
-];
-const CAPAS = {
-  'hdpe-r-pel': [{fecha:'20/07', kg:4800, costo:14.10}, {fecha:'07/08', kg:6000, costo:15.28}],
-  'hdpe-v-pel': [{fecha:'06/08', kg:5100, costo:22.95}],
-  'hdpe-r-hoj': [{fecha:'22/07', kg:20000, costo:10.60}, {fecha:'06/08', kg:15000, costo:10.85}],
-  'hdpe-r-hoj-sl': [{fecha:'25/07', kg:2200, costo:8.30}, {fecha:'05/08', kg:4000, costo:8.52}],
-  'caco3': [{fecha:'28/07', kg:15500, costo:6.90}, {fecha:'05/08', kg:9000, costo:7.35}],
-  'masterbatch': [{fecha:'24/07', kg:950, costo:46.50}, {fecha:'04/08', kg:1200, costo:47.20}],
-  'aditivo-uv': [{fecha:'12/07', kg:900, costo:64.20}, {fecha:'03/08', kg:600, costo:68.90}],
-};
-
-let ENTRADAS = clone(DEFAULTS);
-let SAVED = clone(DEFAULTS);
-let dirty = false;
-let nextId = ENTRADAS.length + 1;
-
-function clone(arr){ return arr.map(e=>({...e})); }
+const api = window.api; // expuesto por session.js (bundleado) — ver su comentario
 const fmt = n => Math.round(n).toLocaleString('es-MX');
 const fmtMoney = n => n.toLocaleString('es-MX', {minimumFractionDigits:2, maximumFractionDigits:2});
+function isoHoy(){ return new Date().toISOString().slice(0,10); }
+function isoADisplay(iso){ if(!iso) return ''; const [y,m,d] = iso.split('-'); return `${d}/${m}`; }
 
-function rowHtml(e){
-  const costeada = e.costo !== null && e.costo !== undefined && e.costo !== '' && !isNaN(e.costo) && +e.costo > 0;
-  const subtotal = costeada ? (+e.cantidad||0) * (+e.costo||0) : null;
-  return `<tr class="${costeada?'':'pendiente'}" data-id="${e.id}">
-    <td><div class="field fecha"><input type="text" value="${e.fecha}" data-field="fecha" placeholder="DD/MM"></div></td>
-    <td><div class="field material"><select data-field="material">${MATERIALES.map(m=>`<option value="${m.id}" ${m.id===e.material?'selected':''}>${m.name}</option>`).join('')}</select></div></td>
-    <td><div class="field cantidad"><input type="number" value="${e.cantidad}" data-field="cantidad"><span class="pre">kg</span></div></td>
-    <td><div class="field costo"><span class="pre">$</span><input type="number" step="0.01" value="${e.costo ?? ''}" data-field="costo" placeholder="—"></div></td>
-    <td><div class="field proveedor"><input type="text" value="${e.proveedor||''}" data-field="proveedor" placeholder="opcional"></div></td>
-    <td><div class="field folio"><input type="text" value="${e.folio||''}" data-field="folio" placeholder="opcional"></div></td>
-    <td class="subtotal-cell">${subtotal!==null ? '$'+fmt(subtotal) : '—'}</td>
-    <td><span class="estado-pill ${costeada?'costeada':'pendiente'}">${costeada?'✓ Costeada':'⏳ Pendiente'}</span></td>
-    <td><button class="btn-delete" onclick="removeEntrada('${e.id}')" title="Eliminar">🗑</button></td>
+let MATERIALES = [];       // [{_id, slug, nombre, variante}]
+let ENTRADAS = [];         // docs reales de la tabla `entradas`
+let CAPAS = [];            // docs reales de `capasCosto` (todas las vigentes)
+let draftRows = [];        // filas nuevas aún no guardadas (solo en memoria)
+let nextDraftId = 1;
+
+function matName(materialId){
+  const m = MATERIALES.find(x=>x._id===materialId);
+  return m ? `${m.nombre} ${m.variante||''}`.trim() : materialId;
+}
+
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 2600);
+}
+
+async function cargarTodo(){
+  const [materiales, entradas, capas] = await Promise.all([
+    window.Session.call(api.entradas.listMaterialesActivos, {}),
+    window.Session.call(api.entradas.listEntradas, {}),
+    window.Session.call(api.entradas.listCapasVigentes, {}),
+  ]);
+  MATERIALES = materiales;
+  ENTRADAS = entradas;
+  CAPAS = capas;
+  renderTable();
+  renderKPI();
+  renderCapas();
+}
+
+function draftRowHtml(d){
+  return `<tr class="pendiente" data-draft="${d.draftId}">
+    <td><div class="field fecha"><input type="date" value="${d.fecha}" data-draft-field="fecha"></div></td>
+    <td><div class="field material"><select data-draft-field="materialId">${MATERIALES.map(m=>`<option value="${m._id}" ${m._id===d.materialId?'selected':''}>${m.nombre} ${m.variante||''}</option>`).join('')}</select></div></td>
+    <td><div class="field cantidad"><input type="number" value="${d.cantidadKg||''}" data-draft-field="cantidadKg"><span class="pre">kg</span></div></td>
+    <td><div class="field costo"><span class="pre">$</span><input type="number" step="0.01" value="${d.costoUnitario??''}" data-draft-field="costoUnitario" placeholder="opcional"></div></td>
+    <td><div class="field proveedor"><input type="text" value="${d.proveedor||''}" data-draft-field="proveedor" placeholder="opcional"></div></td>
+    <td><div class="field folio"><input type="text" value="${d.folio||''}" data-draft-field="folio" placeholder="opcional"></div></td>
+    <td class="subtotal-cell">—</td>
+    <td><span class="estado-pill pendiente">nueva</span></td>
+    <td style="display:flex;gap:.3rem;">
+      <button class="btn-delete" data-draft-guardar="${d.draftId}" title="Guardar">✓</button>
+      <button class="btn-delete" data-draft-cancelar="${d.draftId}" title="Cancelar">✕</button>
+    </td>
   </tr>`;
 }
-function renderTable(){
-  document.getElementById('entradasBody').innerHTML = ENTRADAS.slice().sort((a,b)=> a.fecha<b.fecha?1:-1 ).map(rowHtml).join('');
-}
-renderTable();
 
-function isCosteada(e){ return e.costo !== null && e.costo !== undefined && e.costo !== '' && !isNaN(e.costo) && +e.costo > 0; }
+function rowHtml(e){
+  const costeada = e.estado === 'costeada';
+  const subtotal = costeada ? e.cantidadKg * e.costoUnitario : null;
+  const puedeEliminar = !costeada && e.capaId === null;
+  if (costeada){
+    return `<tr data-id="${e._id}">
+      <td>${isoADisplay(e.fecha)}</td>
+      <td>${matName(e.materialId)}</td>
+      <td>${fmt(e.cantidadKg)} kg</td>
+      <td>$${fmtMoney(e.costoUnitario)}</td>
+      <td>${e.proveedor||'—'}</td>
+      <td>${e.folio||'—'}</td>
+      <td class="subtotal-cell">$${fmt(subtotal)}</td>
+      <td><span class="estado-pill costeada">✓ Costeada</span></td>
+      <td></td>
+    </tr>`;
+  }
+  return `<tr class="pendiente" data-id="${e._id}">
+    <td>${isoADisplay(e.fecha)}</td>
+    <td>${matName(e.materialId)}</td>
+    <td>${fmt(e.cantidadKg)} kg</td>
+    <td><div class="field costo"><span class="pre">$</span><input type="number" step="0.01" data-field="costoUnitario" placeholder="—"></div></td>
+    <td><div class="field proveedor"><input type="text" value="${e.proveedor||''}" data-field="proveedor" placeholder="opcional"></div></td>
+    <td><div class="field folio"><input type="text" value="${e.folio||''}" data-field="folio" placeholder="opcional"></div></td>
+    <td class="subtotal-cell">—</td>
+    <td><span class="estado-pill pendiente">⏳ Pendiente</span></td>
+    <td style="display:flex;gap:.3rem;">
+      <button class="btn-delete" data-costear="${e._id}" title="Costear" disabled>✓</button>
+      ${puedeEliminar ? `<button class="btn-delete" data-eliminar="${e._id}" title="Eliminar">🗑</button>` : ''}
+    </td>
+  </tr>`;
+}
+
+function renderTable(){
+  const filas = ENTRADAS.slice().sort((a,b)=> a.fecha<b.fecha?1:-1).map(rowHtml).join('');
+  const draftsHtml = draftRows.map(draftRowHtml).join('');
+  document.getElementById('entradasBody').innerHTML = draftsHtml + filas;
+}
 
 function renderKPI(){
-  const pendientes = ENTRADAS.filter(e=>!isCosteada(e)).length;
-  const costeadas = ENTRADAS.filter(isCosteada);
-  const valorCosteado = costeadas.reduce((s,e)=>s+(+e.cantidad||0)*(+e.costo||0), 0);
-  const kgTotal = ENTRADAS.reduce((s,e)=>s+(+e.cantidad||0), 0);
-  const valorCapas = Object.values(CAPAS).reduce((s,layers)=>s+layers.reduce((s2,l)=>s2+l.kg*l.costo,0), 0);
+  const pendientes = ENTRADAS.filter(e=>e.estado==='pendiente').length;
+  const costeadas = ENTRADAS.filter(e=>e.estado==='costeada');
+  const valorCosteado = costeadas.reduce((s,e)=>s+e.cantidadKg*e.costoUnitario, 0);
+  const kgTotal = ENTRADAS.reduce((s,e)=>s+e.cantidadKg, 0);
+  const valorCapas = CAPAS.reduce((s,c)=>s+c.kgRestante*c.costoUnitario, 0);
   document.getElementById('kpiRow').innerHTML = `
     <div class="stat-tile">
       <span class="stat-label">Pendientes de costeo</span>
@@ -420,7 +443,7 @@ function renderKPI(){
     <div class="stat-tile">
       <span class="stat-label">Valor recibido (costeado)</span>
       <span class="stat-value">$${fmt(valorCosteado)}</span>
-      <span class="stat-sub">Últimos ${DATES_WINDOW} días</span>
+      <span class="stat-sub">Entradas registradas</span>
     </div>
     <div class="stat-tile">
       <span class="stat-label">Kg recibidos</span>
@@ -433,26 +456,25 @@ function renderKPI(){
       <span class="stat-sub">Inventario vigente a costo real</span>
     </div>`;
 }
-const DATES_WINDOW = 10;
-renderKPI();
 
 function renderCapas(){
   let rows = '';
   MATERIALES.forEach(m=>{
-    const layers = CAPAS[m.id] || [];
-    const totalKg = layers.reduce((s,l)=>s+l.kg,0);
-    const totalVal = layers.reduce((s,l)=>s+l.kg*l.costo,0);
+    const layers = CAPAS.filter(c=>c.materialId===m._id).sort((a,b)=>a.fechaEntrada-b.fechaEntrada);
+    if (layers.length === 0) return;
+    const totalKg = layers.reduce((s,l)=>s+l.kgRestante,0);
+    const totalVal = layers.reduce((s,l)=>s+l.kgRestante*l.costoUnitario,0);
     layers.forEach((l,i)=>{
       rows += `<tr>
-        <td>${i===0?`<b>${m.name}</b>`:''}</td>
-        <td class="capa-age">${l.fecha}${i===0?' (más antigua)':''}</td>
-        <td class="num">${fmt(l.kg)} kg</td>
-        <td class="num">$${fmtMoney(l.costo)}</td>
-        <td class="num">$${fmt(l.kg*l.costo)}</td>
+        <td>${i===0?`<b>${m.nombre} ${m.variante||''}</b>`:''}</td>
+        <td class="capa-age">${new Date(l.fechaEntrada).toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit'})}${i===0?' (más antigua)':''}</td>
+        <td class="num">${fmt(l.kgRestante)} kg</td>
+        <td class="num">$${fmtMoney(l.costoUnitario)}</td>
+        <td class="num">$${fmt(l.kgRestante*l.costoUnitario)}</td>
       </tr>`;
     });
     rows += `<tr class="mat-total">
-      <td colspan="2">Total ${m.name}</td>
+      <td colspan="2">Total ${m.nombre} ${m.variante||''}</td>
       <td class="num">${fmt(totalKg)} kg</td>
       <td class="num">$${fmtMoney(totalVal/(totalKg||1))} prom.</td>
       <td class="num">$${fmt(totalVal)}</td>
@@ -460,72 +482,81 @@ function renderCapas(){
   });
   document.getElementById('capasTable').innerHTML = `
     <thead><tr><th>Material</th><th>Recibida</th><th class="num">kg restantes</th><th class="num">Costo unitario</th><th class="num">Valor</th></tr></thead>
-    <tbody>${rows}</tbody>`;
-}
-renderCapas();
-
-function markDirty(){
-  dirty = true;
-  document.getElementById('dirtyFlag').classList.add('show');
-  document.getElementById('btnSave').disabled = false;
-  document.getElementById('btnReset').disabled = false;
+    <tbody>${rows || '<tr><td colspan="5">Sin capas vigentes todavía.</td></tr>'}</tbody>`;
 }
 
-document.getElementById('entradasBody').addEventListener('input', e=>{
-  const field = e.target.dataset.field; if(!field) return;
-  const tr = e.target.closest('tr');
-  const en = ENTRADAS.find(x=>x.id===tr.dataset.id);
-  if(!en) return;
-  en[field] = field==='cantidad'||field==='costo' ? (e.target.value===''?(field==='costo'?null:0):parseFloat(e.target.value)) : e.target.value;
-  const wasCosteada = !tr.classList.contains('pendiente');
-  const nowCosteada = isCosteada(en);
-  if(wasCosteada !== nowCosteada || field==='cantidad' || field==='costo'){
-    // refresco solo esta fila para no perder el foco de otras
-    const subtotal = nowCosteada ? (+en.cantidad||0)*(+en.costo||0) : null;
-    tr.classList.toggle('pendiente', !nowCosteada);
-    tr.querySelector('.subtotal-cell').textContent = subtotal!==null ? '$'+fmt(subtotal) : '—';
-    const pill = tr.querySelector('.estado-pill');
-    pill.className = 'estado-pill ' + (nowCosteada?'costeada':'pendiente');
-    pill.textContent = nowCosteada ? '✓ Costeada' : '⏳ Pendiente';
+// --- Interacción: fila pendiente existente (costear) ---
+document.getElementById('entradasBody').addEventListener('input', (e)=>{
+  const field = e.target.dataset.field;
+  if (field === 'costoUnitario'){
+    const tr = e.target.closest('tr');
+    const btn = tr.querySelector('[data-costear]');
+    const val = parseFloat(e.target.value);
+    if (btn) btn.disabled = !(val > 0);
   }
-  renderKPI();
-  markDirty();
+});
+document.getElementById('entradasBody').addEventListener('click', async (e)=>{
+  const costearId = e.target.dataset.costear;
+  const eliminarId = e.target.dataset.eliminar;
+  const guardarDraft = e.target.dataset.draftGuardar;
+  const cancelarDraft = e.target.dataset.draftCancelar;
+
+  if (costearId){
+    const tr = e.target.closest('tr');
+    const costoUnitario = parseFloat(tr.querySelector('[data-field="costoUnitario"]').value);
+    const proveedor = tr.querySelector('[data-field="proveedor"]').value;
+    const folio = tr.querySelector('[data-field="folio"]').value;
+    if (!(costoUnitario > 0)) return;
+    e.target.disabled = true;
+    try {
+      await window.Session.call(api.entradas.costearEntrada, { entradaId: costearId, costoUnitario, proveedor, folio }, 'mutation');
+      toast('✓ Entrada costeada — capa PEPS creada');
+      await cargarTodo();
+    } catch (err){
+      alert(err.message || String(err));
+      e.target.disabled = false;
+    }
+  } else if (eliminarId){
+    if (!confirm('¿Eliminar esta entrada pendiente? Se perderá su registro.')) return;
+    try {
+      await window.Session.call(api.entradas.eliminarEntradaPendiente, { entradaId: eliminarId }, 'mutation');
+      toast('Entrada eliminada');
+      await cargarTodo();
+    } catch (err){ alert(err.message || String(err)); }
+  } else if (guardarDraft){
+    const draft = draftRows.find(d=>String(d.draftId)===guardarDraft);
+    if (!draft) return;
+    if (!draft.materialId || !(draft.cantidadKg > 0)){
+      alert('Selecciona material y captura una cantidad mayor a 0.');
+      return;
+    }
+    try {
+      await window.Session.call(api.entradas.crearEntrada, {
+        fecha: draft.fecha, materialId: draft.materialId, cantidadKg: draft.cantidadKg,
+        costoUnitario: draft.costoUnitario > 0 ? draft.costoUnitario : undefined,
+        proveedor: draft.proveedor || undefined, folio: draft.folio || undefined,
+      }, 'mutation');
+      draftRows = draftRows.filter(d=>d.draftId!==draft.draftId);
+      toast('✓ Entrada registrada');
+      await cargarTodo();
+    } catch (err){ alert(err.message || String(err)); }
+  } else if (cancelarDraft){
+    draftRows = draftRows.filter(d=>String(d.draftId)!==cancelarDraft);
+    renderTable();
+  }
+});
+document.getElementById('entradasBody').addEventListener('input', (e)=>{
+  const draftId = e.target.closest('tr')?.dataset.draft;
+  const field = e.target.dataset.draftField;
+  if (!draftId || !field) return;
+  const draft = draftRows.find(d=>String(d.draftId)===draftId);
+  if (!draft) return;
+  draft[field] = (field==='cantidadKg'||field==='costoUnitario') ? parseFloat(e.target.value) : e.target.value;
 });
 
 function addEntrada(){
-  const id = 'new'+(nextId++);
-  ENTRADAS.push({id, fecha:'07/08', material:'hdpe-r-pel', cantidad:0, costo:null, proveedor:'', folio:''});
+  draftRows.push({ draftId: nextDraftId++, fecha: isoHoy(), materialId: MATERIALES[0]?._id || '', cantidadKg: 0, costoUnitario: null, proveedor:'', folio:'' });
   renderTable();
-  renderKPI();
-  markDirty();
-  const tr = document.querySelector(`tr[data-id="${id}"]`);
-  if(tr) tr.querySelector('input[data-field="cantidad"]').focus();
-}
-function removeEntrada(id){
-  if(!confirm('¿Eliminar esta entrada? Se perderá su registro.')) return;
-  ENTRADAS = ENTRADAS.filter(x=>x.id!==id);
-  renderTable();
-  renderKPI();
-  markDirty();
-}
-
-function saveEntradas(){
-  SAVED = clone(ENTRADAS);
-  dirty = false;
-  document.getElementById('dirtyFlag').classList.remove('show');
-  document.getElementById('btnSave').disabled = true;
-  document.getElementById('btnReset').disabled = true;
-  const t = document.getElementById('toast');
-  t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 2400);
-}
-function resetEntradas(){
-  ENTRADAS = clone(SAVED);
-  renderTable();
-  renderKPI();
-  dirty = false;
-  document.getElementById('dirtyFlag').classList.remove('show');
-  document.getElementById('btnSave').disabled = true;
-  document.getElementById('btnReset').disabled = true;
 }
 
 /* ============================================================
@@ -546,32 +577,29 @@ function downloadCSV(filename, rows){
 function exportEntradasCSV(){
   const rows = [['Fecha','Material','Cantidad (kg)','Costo unitario ($)','Proveedor','Folio','Subtotal ($)','Estado']];
   ENTRADAS.slice().sort((a,b)=> a.fecha<b.fecha?1:-1).forEach(e=>{
-    const costeada = isCosteada(e);
-    rows.push([e.fecha, matName(e.material), Math.round(e.cantidad||0),
-      costeada ? (+e.costo).toFixed(2) : '', e.proveedor||'', e.folio||'',
-      costeada ? Math.round((+e.cantidad||0)*(+e.costo||0)) : '',
+    const costeada = e.estado === 'costeada';
+    rows.push([isoADisplay(e.fecha), matName(e.materialId), Math.round(e.cantidadKg),
+      costeada ? e.costoUnitario.toFixed(2) : '', e.proveedor||'', e.folio||'',
+      costeada ? Math.round(e.cantidadKg*e.costoUnitario) : '',
       costeada ? 'Costeada' : 'Pendiente']);
   });
   downloadCSV('entradas-costeo-tejaflex.csv', rows);
 }
 function exportCapasCSV(){
-  const rows = [['Material','Recibida','kg restantes','Costo unitario ($)','Valor ($)']];
-  MATERIALES.forEach(m=>{
-    (CAPAS[m.id]||[]).forEach(l=>{
-      rows.push([m.name, l.fecha, Math.round(l.kg), l.costo.toFixed(2), Math.round(l.kg*l.costo)]);
-    });
+  const rows = [['Material','kg restantes','Costo unitario ($)','Valor ($)']];
+  CAPAS.forEach(c=>{
+    rows.push([matName(c.materialId), Math.round(c.kgRestante), c.costoUnitario.toFixed(2), Math.round(c.kgRestante*c.costoUnitario)]);
   });
   downloadCSV('capas-costo-tejaflex.csv', rows);
 }
 function exportPDF(){ window.print(); }
 
+await cargarTodo();
+
 /* El HTML llama estas funciones vía onclick="" — en un <script type="module">
    quedan en el scope del módulo, no globales, así que hay que exponerlas
    explícitamente para que esos atributos sigan funcionando. */
 window.addEntrada = addEntrada;
-window.removeEntrada = removeEntrada;
-window.saveEntradas = saveEntradas;
-window.resetEntradas = resetEntradas;
 window.exportEntradasCSV = exportEntradasCSV;
 window.exportCapasCSV = exportCapasCSV;
 window.exportPDF = exportPDF;

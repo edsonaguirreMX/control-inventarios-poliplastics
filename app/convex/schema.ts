@@ -120,7 +120,8 @@ export default defineSchema({
     origenTipo: v.union(
       v.literal("entrada"),
       v.literal("cierreTurno"),
-      v.literal("correccion")
+      v.literal("correccion"),
+      v.literal("inventarioInicial")
     ),
     origenId: v.string(),
     createdAt: v.number(),

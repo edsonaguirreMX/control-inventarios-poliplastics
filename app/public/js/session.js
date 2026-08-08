@@ -118,3 +118,11 @@ async function call(fnRef, args = {}, kind = 'query') {
 
 window.Session = { login, getUser, logout, requireRole, call };
 window.__convexClient = client;
+// Las páginas HTML normales no pasan por esbuild (solo este archivo lo
+// hace) — no pueden hacer `import { api } from '.../_generated/api'` ellas
+// mismas, esa ruta no la sirve Express y aunque la sirviera, el navegador
+// no puede resolver el bare import "convex/server" de adentro sin
+// bundler. Por eso `api` se expone aquí como global — cualquier página que
+// ya cargue /js/convex-client.js (todas las conectadas) puede usar
+// `window.api.modulo.funcion` como referencia para Session.call().
+window.api = api;
