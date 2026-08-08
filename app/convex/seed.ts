@@ -11,10 +11,16 @@
 import { action } from './_generated/server';
 import { internal } from './_generated/api';
 import bcrypt from 'bcryptjs';
+import crypto from 'node:crypto';
 
 const ADMIN_USUARIO = 'edson';
 const ADMIN_NOMBRE = 'Edson Aguirre';
-const ADMIN_PASSWORD_TEMPORAL = 'Tejaflex2026!';
+
+// Password aleatoria por corrida — nunca queda una credencial fija en el
+// repo. Legible pero con suficiente entropía (~96 bits en base64url).
+function generarPasswordTemporal() {
+  return crypto.randomBytes(12).toString('base64url');
+}
 
 export const seedInicial = action({
   args: {},
@@ -27,7 +33,8 @@ export const seedInicial = action({
       };
     }
 
-    const adminPasswordHash = await bcrypt.hash(ADMIN_PASSWORD_TEMPORAL, 10);
+    const adminPasswordTemporal = generarPasswordTemporal();
+    const adminPasswordHash = await bcrypt.hash(adminPasswordTemporal, 10);
 
     const resultado = await ctx.runMutation(internal.seedData.insertSeedData, {
       adminPasswordHash,
@@ -38,8 +45,8 @@ export const seedInicial = action({
       ...resultado,
       adminUsuario: ADMIN_USUARIO,
       adminNombre: ADMIN_NOMBRE,
-      adminPasswordTemporal: ADMIN_PASSWORD_TEMPORAL,
-      nota: 'Copia esta contraseña ahora — no se vuelve a mostrar. Cámbiala desde Gestión de Usuarios en cuanto esa pantalla esté conectada (Épica 9).',
+      adminPasswordTemporal,
+      nota: 'Copia esta contraseña ahora — no se vuelve a mostrar ni queda guardada en ningún lado en texto plano. Cámbiala desde Gestión de Usuarios en cuanto esa pantalla esté conectada (Épica 9).',
     };
   },
 });

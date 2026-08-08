@@ -287,7 +287,7 @@ if (row) {
   });
 }
 </script>
-<script>
+<script type="module">
 const MATERIALS = [
   {id:'hdpe-r-pel', name:'HDPE reciclado', variant:'peletizado', kgPorCarga:25},
   {id:'hdpe-v-pel', name:'HDPE virgen', variant:'peletizado (sustituto)', kgPorCarga:0, sustituto:true},
@@ -595,4 +595,11 @@ function discardEdit(){
 /* ---------- inicio ---------- */
 renderDayStrip();
 renderResult();
+
+/* El HTML llama estas funciones vía onclick="" — en un <script type="module">
+   quedan en el scope del módulo, no globales, así que hay que exponerlas
+   explícitamente para que esos atributos sigan funcionando. */
+window.toggleEditMat = toggleEditMat;
+window.saveEdit = saveEdit;
+window.discardEdit = discardEdit;
 </script>

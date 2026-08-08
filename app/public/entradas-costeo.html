@@ -331,7 +331,7 @@ if (row) {
   });
 }
 </script>
-<script>
+<script type="module">
 const MATERIALES = [
   {id:'hdpe-r-pel', name:'HDPE reciclado peletizado'},
   {id:'hdpe-v-pel', name:'HDPE virgen peletizado'},
@@ -555,4 +555,15 @@ function exportCapasCSV(){
   downloadCSV('capas-costo-tejaflex.csv', rows);
 }
 function exportPDF(){ window.print(); }
+
+/* El HTML llama estas funciones vía onclick="" — en un <script type="module">
+   quedan en el scope del módulo, no globales, así que hay que exponerlas
+   explícitamente para que esos atributos sigan funcionando. */
+window.addEntrada = addEntrada;
+window.removeEntrada = removeEntrada;
+window.saveEntradas = saveEntradas;
+window.resetEntradas = resetEntradas;
+window.exportEntradasCSV = exportEntradasCSV;
+window.exportCapasCSV = exportCapasCSV;
+window.exportPDF = exportPDF;
 </script>

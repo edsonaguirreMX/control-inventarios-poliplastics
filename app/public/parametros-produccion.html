@@ -309,7 +309,7 @@ if (row) {
   });
 }
 </script>
-<script>
+<script type="module">
 const DEFAULTS = {
   cargas: 8, turnos: 2, kgPorMetro: 4,
   materiales: [
@@ -407,4 +407,10 @@ function resetParams(){
   document.getElementById('btnSave').disabled = true;
   document.getElementById('btnReset').disabled = true;
 }
+
+/* El HTML llama estas funciones vía onclick="" — en un <script type="module">
+   quedan en el scope del módulo, no globales, así que hay que exponerlas
+   explícitamente para que esos atributos sigan funcionando. */
+window.saveParams = saveParams;
+window.resetParams = resetParams;
 </script>

@@ -261,7 +261,7 @@ if (row) {
   });
 }
 </script>
-<script>
+<script type="module">
 const ROLES = [
   {id:'operador', label:'Operador'},
   {id:'admin', label:'Admin'},
@@ -444,4 +444,11 @@ function resetReglas(){
   document.getElementById('btnSave').disabled = true;
   document.getElementById('btnReset').disabled = true;
 }
+
+/* El HTML llama estas funciones vía onclick="" — en un <script type="module">
+   quedan en el scope del módulo, no globales, así que hay que exponerlas
+   explícitamente para que esos atributos sigan funcionando. */
+window.markAllRead = markAllRead;
+window.saveReglas = saveReglas;
+window.resetReglas = resetReglas;
 </script>

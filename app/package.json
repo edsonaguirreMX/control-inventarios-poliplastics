@@ -5,7 +5,7 @@
   "description": "Tejaflex — Control de Materias Primas: aplicación viva (Convex + Express)",
   "type": "module",
   "engines": {
-    "node": ">=18"
+    "node": ">=20.6.0"
   },
   "scripts": {
     "dev:backend": "convex dev",

@@ -9,10 +9,14 @@ const PUBLIC_DIR = path.join(APP_DIR, 'public');
 // En desarrollo local, `npx convex dev` escribe CONVEX_URL en .env.local.
 // En Railway (producción) esa variable llega vía el entorno del servicio y
 // este archivo no existe — falla en silencio y sigue con process.env tal cual.
+// process.loadEnvFile requiere Node >=20.6 (ver "engines" en package.json);
+// si faltara en un runtime más viejo, el catch también lo cubre — el server
+// sigue arrancando, solo sin CONVEX_URL en local hasta actualizar Node.
 try {
   process.loadEnvFile(path.join(APP_DIR, '.env.local'));
 } catch {
-  // .env.local no existe (producción) — no es un error.
+  // .env.local no existe (producción), o process.loadEnvFile no existe en
+  // este runtime — ninguno de los dos casos debe tumbar el servidor.
 }
 const PORT = process.env.PORT || 3000;
 

@@ -334,7 +334,7 @@ if (row) {
   });
 }
 </script>
-<script>
+<script type="module">
 const PRODUCCION_TEORICA_PLANTA = 4400; // kg/día, ambas líneas (materia prima compartida)
 const KG_POR_METRO = 4;
 
@@ -529,4 +529,10 @@ function resetCatalog(){
   document.getElementById('btnSave').disabled = true;
   document.getElementById('btnReset').disabled = true;
 }
+
+/* El HTML llama estas funciones vía onclick="" — en un <script type="module">
+   quedan en el scope del módulo, no globales, así que hay que exponerlas
+   explícitamente para que esos atributos sigan funcionando. */
+window.saveCatalog = saveCatalog;
+window.resetCatalog = resetCatalog;
 </script>

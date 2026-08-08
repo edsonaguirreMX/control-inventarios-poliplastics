@@ -339,7 +339,7 @@ if (row) {
   });
 }
 </script>
-<script>
+<script type="module">
 const PANEL_CONTROL_URL = '/panel-control.html';
 
 const CONTENIDO = [
@@ -466,7 +466,7 @@ function generarAhora(){
   HISTORIAL.unshift({fecha:'07/08/2026 (manual)', correos:CONFIG.correos.length, whatsapp:CONFIG.whatsapp.length, estado:'ok'});
   renderHistorial();
   renderKPI();
-  window.open(PANEL_CONTROL_URL+'?role=admin&autoprint=1', '_blank');
+  window.open(PANEL_CONTROL_URL+'?autoprint=1', '_blank');
 }
 
 function saveConfig(){
@@ -491,4 +491,13 @@ function resetConfig(){
   document.getElementById('btnSave').disabled = true;
   document.getElementById('btnReset').disabled = true;
 }
+
+/* El HTML llama estas funciones vía onclick="" — en un <script type="module">
+   quedan en el scope del módulo, no globales, así que hay que exponerlas
+   explícitamente para que esos atributos sigan funcionando. */
+window.agregarDestinatario = agregarDestinatario;
+window.quitarDestinatario = quitarDestinatario;
+window.generarAhora = generarAhora;
+window.saveConfig = saveConfig;
+window.resetConfig = resetConfig;
 </script>

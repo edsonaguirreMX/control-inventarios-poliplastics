@@ -600,7 +600,7 @@ function entrSave(){
   const btn = document.getElementById('entrSaveBtn');
   btn.textContent = '✓ Entrada guardada'; btn.classList.add('done'); btn.disabled = true;
   const t = document.getElementById('entrToast');
-  const quien = SESSION_USUARIO ? ` — registrada por ${SESSION_USUARIO}` : '';
+  const quien = sessionUser.nombre ? ` — registrada por ${sessionUser.nombre}` : '';
   t.textContent = `✓ Entrada registrada — va directo a inventario general, sin línea asignada${quien}`;
   t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 2400);
 }
@@ -835,10 +835,10 @@ function wizSave(){
   btn.textContent = '✓ Turno cerrado'; btn.classList.add('done'); btn.disabled = true;
   const key = 'L'+wizState.linea+'T'+wizState.turno;
   const hora = new Date().toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'});
-  CIERRES[key] = SESSION_USUARIO ? {por:SESSION_USUARIO, hora} : true;
+  CIERRES[key] = sessionUser.nombre ? {por:sessionUser.nombre, hora} : true;
   renderCierreGrid();
   const t = document.getElementById('wizToast');
-  const quien = SESSION_USUARIO ? ` · Cerrado por ${SESSION_USUARIO}` : '';
+  const quien = sessionUser.nombre ? ` · Cerrado por ${sessionUser.nombre}` : '';
   t.textContent = `✓ Turno cerrado — Línea ${wizState.linea} · Turno ${wizState.turno} · 07/08/2026${quien}`;
   t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 2400);
   document.getElementById('wizBackHomeBtn').hidden = false;
