@@ -248,7 +248,12 @@ footer.page-foot{font-size:.78rem;color:var(--ink-faint);border-top:1px solid va
    si esta promesa se resuelve.
    ============================================================ */
 const ROLE_LABEL = { operador:'Operador', admin:'Admin', gerencia:'Gerencia y Comercial', compras:'Compras', calidad:'Calidad y Producción' };
-const user = await window.Session.requireRole(['admin']);
+// Puerta explícita de autorización: se guarda la promesa en window para que
+// el segundo <script type="module"> de esta página (con la lógica
+// principal) la espere explícitamente en su primera línea, en vez de
+// depender solo del orden de documento entre módulos independientes.
+window.__authReady = window.Session.requireRole(['admin']);
+const user = await window.__authReady;
 window.usuarioSesion = user.nombre;
 window.rolSesion = user.rol;
 const row = document.getElementById('sessionRow');
@@ -262,6 +267,10 @@ if (row) {
 }
 </script>
 <script type="module">
+// Puerta explícita: este módulo depende del de sesión de arriba, no solo
+// del orden de documento — espera la MISMA promesa que ya se está
+// resolviendo ahí (no dispara un requireRole nuevo).
+await window.__authReady;
 const ROLES = [
   {id:'operador', label:'Operador'},
   {id:'admin', label:'Admin'},
