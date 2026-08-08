@@ -1,0 +1,5 @@
+# Herramientas locales, no forman parte del proyecto
+.claude/
+.DS_Store
+
+# El código vivo de la app tiene su propio .gitignore (node_modules, .env, .convex, etc.)

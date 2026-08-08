@@ -1,0 +1,17 @@
+{
+  "name": "tejaflex-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tejaflex — Control de Materias Primas: aplicación viva (Convex + Express)",
+  "type": "module",
+  "scripts": {
+    "dev:backend": "convex dev",
+    "dev:web": "node src/server.js",
+    "build": "convex deploy --cmd-url-env-var-name CONVEX_URL",
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "convex": "^1.43.0",
+    "express": "^4.21.2"
+  }
+}
