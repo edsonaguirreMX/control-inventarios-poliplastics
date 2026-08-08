@@ -5,3 +5,7 @@ dist
 .convex
 .DS_Store
 npm-debug.log*
+
+# Generado por `npm run build` (scripts/build-client.mjs) — no se versiona
+public/js/convex-client.js
+public/js/convex-client.js.map
