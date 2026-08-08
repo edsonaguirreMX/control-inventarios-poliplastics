@@ -122,6 +122,10 @@ a{color:inherit;}
 }
 .role-chip.sel{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);}
 
+.field-error{
+  display:none;font-size:.8rem;color:#c0392b;background:#fdecea;border-radius:8px;padding:.55rem .75rem;
+}
+
 .btn-primary{
   border:none;background:var(--accent);color:var(--accent-ink);border-radius:10px;padding:.8rem;
   font-family:'Big Shoulders Display',sans-serif;font-size:1rem;letter-spacing:.03em;text-transform:uppercase;cursor:pointer;
@@ -182,13 +186,9 @@ a{color:inherit;}
           <label>Contraseña</label>
           <input type="password" id="operadorPassword" placeholder="••••••••" autocomplete="current-password">
         </div>
-        <label class="remember-row"><input type="checkbox" id="operadorRemember"> Recordar mis datos en este dispositivo</label>
-        <div id="operadorRememberedTag"></div>
-        <div class="demo-note">
-          <span>Modo de demostración — elige una cuenta (rotan de línea y turno, cualquier contraseña funciona):</span>
-          <div class="role-chips" id="operadorChips"></div>
-        </div>
-        <button class="btn-primary" id="btnOperadorEntrar" disabled onclick="login('operador')">Entrar</button>
+        <label class="remember-row"><input type="checkbox" id="operadorRemember"> Recordar en este dispositivo</label>
+        <div id="operadorError" class="field-error"></div>
+        <button class="btn-primary" id="btnOperadorEntrar" disabled>Entrar</button>
       </div>
       <div id="operadorSuccess" style="display:none;"></div>
     </div>
@@ -204,13 +204,9 @@ a{color:inherit;}
           <label>Contraseña</label>
           <input type="password" id="adminPassword" placeholder="••••••••" autocomplete="current-password">
         </div>
-        <label class="remember-row"><input type="checkbox" id="adminRemember"> Recordar mis datos en este dispositivo</label>
-        <div id="adminRememberedTag"></div>
-        <div class="demo-note">
-          <span>Modo de demostración — elige qué cuenta simular (cualquier contraseña funciona):</span>
-          <div class="role-chips" id="roleChips"></div>
-        </div>
-        <button class="btn-primary" id="btnAdminEntrar" disabled onclick="login('admin')">Entrar</button>
+        <label class="remember-row"><input type="checkbox" id="adminRemember"> Recordar en este dispositivo</label>
+        <div id="adminError" class="field-error"></div>
+        <button class="btn-primary" id="btnAdminEntrar" disabled>Entrar</button>
       </div>
       <div id="adminSuccess" style="display:none;"></div>
     </div>
@@ -219,128 +215,88 @@ a{color:inherit;}
   <p class="footnote">Los roles y accesos se asignan en <a href="/gestion-usuarios.html">Gestión de Usuarios</a> (Admin). Como los operadores rotan de línea y turno, su cuenta no queda ligada a ninguna — eligen línea y turno cada vez que cierran un turno.</p>
 </div>
 
-<script>
-const OPERADORES = [
-  {id:'roberto', name:'Roberto Sánchez', usuario:'roberto.sanchez'},
-  {id:'diego', name:'Diego Flores', usuario:'diego.flores'},
-  {id:'jorge', name:'Jorge Medina', usuario:'jorge.medina'},
-  {id:'karla', name:'Karla Núñez', usuario:'karla.nunez'},
-];
-const ADMIN_ACCOUNTS = [
-  {id:'admin', name:'Edson Aguirre', role:'admin', roleLabel:'Admin', usuario:'edson'},
-  {id:'gerencia', name:'Ana Torres', role:'gerencia', roleLabel:'Gerencia y Comercial', usuario:'ana.torres'},
-  {id:'compras', name:'Luis Ramírez', role:'compras', roleLabel:'Compras', usuario:'luis.ramirez'},
-  {id:'calidad', name:'Marisol Peña', role:'calidad', roleLabel:'Calidad y Producción', usuario:'marisol.pena'},
-];
+<script src="/config.js"></script>
+<script type="module" src="/js/convex-client.js"></script>
+<script type="module">
+// window.Session lo expone convex-client.js (bundle de public/js/session.js,
+// tarea 1.2) — este script corre después porque ambos son type="module" y
+// los módulos se ejecutan en orden de documento tras el parseo del HTML.
 const CIERRE_TURNO_URL = '/cierre-turno-propuestas.html';
 const PANEL_CONTROL_URL = '/panel-control.html';
 
+function redirectByRole(rol) {
+  window.location.href = rol === 'operador' ? CIERRE_TURNO_URL : PANEL_CONTROL_URL;
+}
+
 /* ---------- tabs ---------- */
-document.getElementById('tabSwitch').addEventListener('click', e=>{
-  const b = e.target.closest('button'); if(!b) return;
+document.getElementById('tabSwitch').addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (!b) return;
   setTab(b.dataset.tab);
 });
-function setTab(tab){
-  document.querySelectorAll('#tabSwitch button').forEach(c=>c.classList.toggle('active', c.dataset.tab===tab));
-  document.getElementById('paneOperador').classList.toggle('active', tab==='operador');
-  document.getElementById('paneAdmin').classList.toggle('active', tab==='admin');
+function setTab(tab) {
+  document.querySelectorAll('#tabSwitch button').forEach((c) => c.classList.toggle('active', c.dataset.tab === tab));
+  document.getElementById('paneOperador').classList.toggle('active', tab === 'operador');
+  document.getElementById('paneAdmin').classList.toggle('active', tab === 'admin');
 }
 
-/* ---------- demo chips ---------- */
-document.getElementById('operadorChips').innerHTML = OPERADORES.map(o=>
-  `<button class="role-chip" data-id="${o.id}" onclick="pickDemo('operador','${o.id}')">${o.name}</button>`).join('');
-document.getElementById('roleChips').innerHTML = ADMIN_ACCOUNTS.map(a=>
-  `<button class="role-chip" data-id="${a.id}" onclick="pickDemo('admin','${a.id}')">${a.roleLabel}</button>`).join('');
+/* ---------- habilitar "Entrar" solo con usuario + contraseña ---------- */
+function wireEntrarState(kind) {
+  const emailId = kind === 'operador' ? 'operadorEmail' : 'adminEmail';
+  const passId = kind === 'operador' ? 'operadorPassword' : 'adminPassword';
+  const btnId = kind === 'operador' ? 'btnOperadorEntrar' : 'btnAdminEntrar';
+  const update = () => {
+    const usuario = document.getElementById(emailId).value.trim();
+    const password = document.getElementById(passId).value;
+    document.getElementById(btnId).disabled = !(usuario && password);
+  };
+  document.getElementById(emailId).addEventListener('input', update);
+  document.getElementById(passId).addEventListener('input', update);
+  document.getElementById(passId).addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !document.getElementById(btnId).disabled) login(kind);
+  });
+}
+wireEntrarState('operador');
+wireEntrarState('admin');
 
-let selectedOperador = null;
-let selectedAdminAccount = null;
+/* ---------- login real contra Convex ---------- */
+async function login(kind) {
+  const emailId = kind === 'operador' ? 'operadorEmail' : 'adminEmail';
+  const passId = kind === 'operador' ? 'operadorPassword' : 'adminPassword';
+  const rememberId = kind === 'operador' ? 'operadorRemember' : 'adminRemember';
+  const btnId = kind === 'operador' ? 'btnOperadorEntrar' : 'btnAdminEntrar';
+  const errorId = kind === 'operador' ? 'operadorError' : 'adminError';
 
-function pickDemo(kind, id){
-  if(kind==='operador'){
-    selectedOperador = OPERADORES.find(o=>o.id===id);
-    document.querySelectorAll('#operadorChips .role-chip').forEach(c=>c.classList.toggle('sel', c.dataset.id===id));
-    document.getElementById('operadorEmail').value = selectedOperador.usuario;
-    document.getElementById('btnOperadorEntrar').disabled = false;
-  } else {
-    selectedAdminAccount = ADMIN_ACCOUNTS.find(a=>a.id===id);
-    document.querySelectorAll('#roleChips .role-chip').forEach(c=>c.classList.toggle('sel', c.dataset.id===id));
-    document.getElementById('adminEmail').value = selectedAdminAccount.usuario;
-    document.getElementById('btnAdminEntrar').disabled = false;
+  const usuario = document.getElementById(emailId).value.trim();
+  const password = document.getElementById(passId).value;
+  const remember = document.getElementById(rememberId).checked;
+  const btn = document.getElementById(btnId);
+  const errorBox = document.getElementById(errorId);
+
+  errorBox.style.display = 'none';
+  btn.disabled = true;
+  const textoOriginal = btn.textContent;
+  btn.textContent = 'Entrando…';
+
+  try {
+    const user = await window.Session.login(usuario, password, remember);
+    // El rol lo decide el backend, no la pestaña donde se escribió el login
+    // (si alguien mete credenciales de operador en la pestaña de Admin,
+    // igual se le manda a Cierre de Turno).
+    redirectByRole(user.rol);
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = textoOriginal;
+    errorBox.textContent = 'Usuario o contraseña incorrectos.';
+    errorBox.style.display = 'block';
   }
 }
-document.getElementById('operadorEmail').addEventListener('input', e=>{
-  document.getElementById('btnOperadorEntrar').disabled = !e.target.value;
-});
-document.getElementById('adminEmail').addEventListener('input', e=>{
-  document.getElementById('btnAdminEntrar').disabled = !e.target.value;
-});
+document.getElementById('btnOperadorEntrar').addEventListener('click', () => login('operador'));
+document.getElementById('btnAdminEntrar').addEventListener('click', () => login('admin'));
 
-/* ---------- recordar en este dispositivo (localStorage, propio de esta página) ---------- */
-const STORE_KEY = 'tejaflex_login_remember';
-function loadRemembered(){
-  let data;
-  try{ data = JSON.parse(localStorage.getItem(STORE_KEY) || 'null'); }catch(e){ data = null; }
-  if(!data) return;
-  if(data.tab) setTab(data.tab);
-  if(data.tab==='operador' && data.usuario){
-    document.getElementById('operadorEmail').value = data.usuario;
-    document.getElementById('operadorRemember').checked = true;
-    document.getElementById('btnOperadorEntrar').disabled = false;
-    document.getElementById('operadorRememberedTag').innerHTML = `<div class="remembered-tag">✓ Recordado en este dispositivo — ${data.usuario}</div>`;
-  }
-  if(data.tab==='admin' && data.usuario){
-    document.getElementById('adminEmail').value = data.usuario;
-    document.getElementById('adminRemember').checked = true;
-    document.getElementById('btnAdminEntrar').disabled = false;
-    document.getElementById('adminRememberedTag').innerHTML = `<div class="remembered-tag">✓ Recordado en este dispositivo — ${data.usuario}</div>`;
-  }
-}
-function saveRemembered(tab, usuario, remember){
-  if(remember){
-    try{ localStorage.setItem(STORE_KEY, JSON.stringify({tab, usuario})); }catch(e){}
-  } else {
-    try{
-      const cur = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
-      if(cur && cur.tab===tab) localStorage.removeItem(STORE_KEY);
-    }catch(e){}
-  }
-}
-loadRemembered();
-
-/* ---------- login ---------- */
-function login(kind){
-  if(kind==='operador'){
-    const usuario = document.getElementById('operadorEmail').value;
-    const remember = document.getElementById('operadorRemember').checked;
-    saveRemembered('operador', usuario, remember);
-    const acc = selectedOperador || OPERADORES.find(o=>o.usuario===usuario) || {name: usuario};
-    document.getElementById('operadorForm').style.display = 'none';
-    const box = document.getElementById('operadorSuccess');
-    box.style.display = 'block';
-    box.innerHTML = `
-      <div class="success-wrap">
-        <div class="success-check">✓</div>
-        <h3>Bienvenido, ${acc.name.split(' ')[0]}</h3>
-        <span class="role-tag">Operador — elige tu línea y turno al cerrar</span>
-        <a class="btn-link" href="${CIERRE_TURNO_URL}?usuario=${encodeURIComponent(acc.name)}">Ir a Cierre de Turno →</a>
-        <a class="link-back" onclick="document.getElementById('operadorForm').style.display='flex'; document.getElementById('operadorSuccess').style.display='none';">‹ No soy yo</a>
-      </div>`;
-  } else {
-    const usuario = document.getElementById('adminEmail').value;
-    const remember = document.getElementById('adminRemember').checked;
-    saveRemembered('admin', usuario, remember);
-    const acc = selectedAdminAccount || ADMIN_ACCOUNTS.find(a=>a.usuario===usuario) || ADMIN_ACCOUNTS[0];
-    document.getElementById('adminForm').style.display = 'none';
-    const box = document.getElementById('adminSuccess');
-    box.style.display = 'block';
-    box.innerHTML = `
-      <div class="success-wrap">
-        <div class="success-check">✓</div>
-        <h3>Bienvenido, ${acc.name.split(' ')[0]}</h3>
-        <span class="role-tag">${acc.roleLabel}</span>
-        <a class="btn-link" href="${PANEL_CONTROL_URL}?role=${acc.role}&usuario=${encodeURIComponent(acc.name)}">Ir al Panel de Control →</a>
-        <a class="link-back" onclick="document.getElementById('adminForm').style.display='flex'; document.getElementById('adminSuccess').style.display='none';">‹ No soy yo</a>
-      </div>`;
-  }
-}
+/* ---------- si ya hay una sesión válida (token recordado), saltar el login ---------- */
+(async () => {
+  const user = await window.Session.getUser();
+  if (user) redirectByRole(user.rol);
+})();
 </script>

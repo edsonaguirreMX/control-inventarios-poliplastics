@@ -452,29 +452,34 @@ button{font-family:inherit;}
 
 </div>
 
-<script>
+<script src="/config.js"></script>
+<script type="module" src="/js/convex-client.js"></script>
+<script type="module">
 /* ============================================================
-   SESIÓN (recibida por URL desde Login y Selección de Rol)
+   SESIÓN (autenticación real — Épica 1). Las funciones que el
+   HTML llama por onclick="" se exponen a window al final del
+   archivo — un module normal no las haría globales por sí solo.
    ============================================================ */
 const LOGIN_URL = '/login-acceso.html';
-const SESSION_USUARIO = new URLSearchParams(location.search).get('usuario') || '';
+const ROLE_LABEL = { operador:'Operador de piso', admin:'Admin' };
+const sessionUser = await window.Session.requireRole(['operador', 'admin']);
+
 function iniciales(nombre){
   return nombre.trim().split(/\s+/).slice(0,2).map(p=>p[0].toUpperCase()).join('');
 }
 function renderSessionBar(){
   const el = document.getElementById('sessionBar');
-  if(SESSION_USUARIO){
-    el.innerHTML = `
-      <div class="who">
-        <span class="avatar">${iniciales(SESSION_USUARIO)}</span>
-        <span>${SESSION_USUARIO}<small>Operador de piso</small></span>
-      </div>
-      <a class="logout-link" href="${LOGIN_URL}">Cerrar sesión</a>`;
-  } else {
-    el.innerHTML = `
-      <div class="who"><span>Sesión no identificada<small>Entra desde Login para registrar tu nombre</small></span></div>
-      <a class="logout-link" href="${LOGIN_URL}">Iniciar sesión</a>`;
-  }
+  el.innerHTML = `
+    <div class="who">
+      <span class="avatar">${iniciales(sessionUser.nombre)}</span>
+      <span>${sessionUser.nombre}<small>${ROLE_LABEL[sessionUser.rol] || sessionUser.rol}</small></span>
+    </div>
+    <a class="logout-link" href="#" id="logoutLink">Cerrar sesión</a>`;
+  document.getElementById('logoutLink').addEventListener('click', async (e) => {
+    e.preventDefault();
+    await window.Session.logout();
+    window.location.href = LOGIN_URL;
+  });
 }
 renderSessionBar();
 
@@ -855,4 +860,18 @@ function resetCierreForm(){
 
 /* estado inicial */
 renderConsumo();
+
+/* El HTML llama estas funciones vía onclick="" — en un <script type="module">
+   quedan en el scope del módulo, no globales, así que hay que exponerlas
+   explícitamente para que esos atributos sigan funcionando. */
+window.goEntradas = goEntradas;
+window.goCierre = goCierre;
+window.showHome = showHome;
+window.tryAdvanceEntrada = tryAdvanceEntrada;
+window.entrSave = entrSave;
+window.cierreGo = cierreGo;
+window.tryAdvance = tryAdvance;
+window.wizSave = wizSave;
+window.toggleMat = toggleMat;
+window.ackWarning = ackWarning;
 </script>

@@ -246,28 +246,28 @@ footer.page-foot{font-size:.78rem;color:var(--ink-faint);border-top:1px solid va
 
 <div class="toast" id="toast">✓ Usuarios actualizados</div>
 
-<script>
+<script src="/config.js"></script>
+<script type="module" src="/js/convex-client.js"></script>
+<script type="module">
 /* ============================================================
-   SESIÓN (recibida por URL desde Login / Panel de Control)
+   SESIÓN (autenticación real — Épica 1). Session.requireRole
+   redirige a /login-acceso.html si no hay sesión o el rol no
+   está permitido; el resto del script de la página solo corre
+   si esta promesa se resuelve.
    ============================================================ */
-(function(){
-  const LOGIN_URL = '/login-acceso.html';
-  const usuarioSesion = new URLSearchParams(location.search).get('usuario') || '';
-  window.usuarioSesion = usuarioSesion;
-  const row = document.getElementById('sessionRow');
-  if(row){
-    row.innerHTML = usuarioSesion
-      ? `<span class="role-badge">🔒 ${usuarioSesion} · Admin</span><a class="logout-link" href="${LOGIN_URL}">Cerrar sesión</a>`
-      : `<span class="role-badge">🔒 Acceso: Admin</span><a class="logout-link" href="${LOGIN_URL}">Iniciar sesión</a>`;
-  }
-  const bc = document.getElementById('breadcrumbLink');
-  if(bc && usuarioSesion){
-    const url = new URL(bc.getAttribute('href'));
-    url.searchParams.set('usuario', usuarioSesion);
-    url.searchParams.set('role', 'admin');
-    bc.setAttribute('href', url.toString());
-  }
-})();
+const ROLE_LABEL = { operador:'Operador', admin:'Admin', gerencia:'Gerencia y Comercial', compras:'Compras', calidad:'Calidad y Producción' };
+const user = await window.Session.requireRole(['admin']);
+window.usuarioSesion = user.nombre;
+window.rolSesion = user.rol;
+const row = document.getElementById('sessionRow');
+if (row) {
+  row.innerHTML = `<span class="role-badge">🔒 ${user.nombre} · ${ROLE_LABEL[user.rol]}</span><a class="logout-link" href="#" id="logoutLink">Cerrar sesión</a>`;
+  document.getElementById('logoutLink').addEventListener('click', async (e) => {
+    e.preventDefault();
+    await window.Session.logout();
+    window.location.href = '/login-acceso.html';
+  });
+}
 </script>
 <script>
 const ROLES = [
