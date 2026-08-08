@@ -3,6 +3,7 @@ import { describe, expect, test } from 'vitest';
 import schema from './schema';
 import { api } from './_generated/api';
 import { crearMaterialPrueba, crearUsuarioPrueba, crearSesionPrueba, crearParametrosPrueba } from './testHelpers';
+import { fechaOperativa } from './lib/fechaOperativa';
 
 const modules = import.meta.glob('./**/*.ts');
 
@@ -169,11 +170,77 @@ describe('correcciones: actualizarEntrada (tarea 5.3)', () => {
   });
 });
 
+describe('correcciones: actualizarEntradasBatch es atómico (No-Go de auditoría de PR 3, mayor #3)', () => {
+  test('corrige todas las entradas del batch en una sola transacción', async () => {
+    const t = convexTest(schema, modules);
+    const { matAId, comprasToken } = await setup(t);
+    const e1 = await t.mutation(api.entradas.crearEntrada, { fecha: '2026-08-08', materialId: matAId, cantidadKg: 100, token: comprasToken });
+    const e2 = await t.mutation(api.entradas.crearEntrada, { fecha: '2026-08-08', materialId: matAId, cantidadKg: 200, token: comprasToken });
+
+    await t.mutation(api.correcciones.actualizarEntradasBatch, {
+      entradas: [{ entradaId: e1, cantidadKg: 111 }, { entradaId: e2, cantidadKg: 222 }],
+      token: comprasToken,
+    });
+    expect((await t.run((ctx) => ctx.db.get(e1)))?.cantidadKg).toBe(111);
+    expect((await t.run((ctx) => ctx.db.get(e2)))?.cantidadKg).toBe(222);
+  });
+
+  test('BUG DE INTEGRIDAD REGRESIÓN: si una entrada del batch falla, NINGUNA corrección del batch queda aplicada (sin guardado parcial)', async () => {
+    const t = convexTest(schema, modules);
+    const { matAId, adminToken, operadorToken } = await setup(t);
+    // e1: se puede corregir sin problema. e2: ya tiene 60kg consumidos por
+    // un cierre, así que reducirla a 10kg debe fallar y hacer fallar TODO
+    // el batch — antes (loop de mutations independientes) e1 ya habría
+    // quedado corregida aunque la UI mostrara error.
+    const e1 = await t.mutation(api.entradas.crearEntrada, { fecha: '2026-08-08', materialId: matAId, cantidadKg: 100, costoUnitario: 8, token: adminToken });
+    const e2 = await t.mutation(api.entradas.crearEntrada, {
+      fecha: '2025-01-01', materialId: matAId, cantidadKg: 100, costoUnitario: 8, token: adminToken,
+    });
+    await t.mutation(api.cierres.crearCierreTurno, {
+      fecha: '2026-08-08', linea: 1, turno: 1, cargasPreparadas: 1, metrosBuenos: 0,
+      caballetes105Pzas: 0, caballetes106Pzas: 0,
+      consumoPorMaterial: [{ materialId: matAId, kgConsumido: 60 }], // toma de la capa más antigua (e2) primero
+      token: operadorToken,
+    });
+
+    await expect(
+      t.mutation(api.correcciones.actualizarEntradasBatch, {
+        entradas: [{ entradaId: e1, cantidadKg: 150 }, { entradaId: e2, cantidadKg: 10 }],
+        token: adminToken,
+      })
+    ).rejects.toThrow(/ya se consumieron/);
+
+    // e1 NO debe haber quedado en 150 — todo el batch se descartó.
+    expect((await t.run((ctx) => ctx.db.get(e1)))?.cantidadKg).toBe(100);
+  });
+
+  test('rechaza un batch vacío', async () => {
+    const t = convexTest(schema, modules);
+    const { comprasToken } = await setup(t);
+    await expect(
+      t.mutation(api.correcciones.actualizarEntradasBatch, { entradas: [], token: comprasToken })
+    ).rejects.toThrow(/al menos una entrada/);
+  });
+
+  test('operador NO puede usar el batch de corrección (solo compras/admin)', async () => {
+    const t = convexTest(schema, modules);
+    const { matAId, comprasToken, operadorToken } = await setup(t);
+    const e1 = await t.mutation(api.entradas.crearEntrada, { fecha: '2026-08-08', materialId: matAId, cantidadKg: 100, token: comprasToken });
+    await expect(
+      t.mutation(api.correcciones.actualizarEntradasBatch, { entradas: [{ entradaId: e1, cantidadKg: 150 }], token: operadorToken })
+    ).rejects.toThrow();
+  });
+});
+
 describe('correcciones: queries de lectura (tarea 5.1)', () => {
   test('listRegistrosUltimos10Dias marca el día de hoy si hay un cierre', async () => {
     const t = convexTest(schema, modules);
     const { matAId, adminToken, operadorToken } = await setup(t);
-    const hoy = new Date().toISOString().slice(0, 10);
+    // "Hoy" para la ventana de corrección es la fecha OPERATIVA
+    // (America/Mexico_City, misma regla que cierres/entradas) — no el
+    // UTC crudo, que puede diferir de esto según la hora en que corra el
+    // test (regresión del No-Go de auditoría de PR 3).
+    const hoy = fechaOperativa(Date.now(), 'America/Mexico_City', '06:00');
     await t.mutation(api.cierres.crearCierreTurno, {
       fecha: hoy, linea: 1, turno: 1, cargasPreparadas: 8, metrosBuenos: 40,
       caballetes105Pzas: 0, caballetes106Pzas: 0,

@@ -620,11 +620,17 @@ async function saveEdit(){
         consumoPorMaterial, nota: draft.nota || undefined,
       }, 'mutation');
     } else {
-      for(const fila of draft.entradas){
-        await window.Session.call(api.correcciones.actualizarEntrada, {
-          entradaId: fila.entradaId, cantidadKg: fila.cantidadKg, nota: draft.nota || undefined,
-        }, 'mutation');
-      }
+      // Una sola mutation atómica para todas las entradas del día editadas
+      // — nunca un loop de mutations independientes: si la segunda de tres
+      // fallara (p.ej. por el bloqueo de "ya se consumió más de lo
+      // permitido"), con el loop anterior la primera ya habría quedado
+      // corregida aunque la UI mostrara error (guardado parcial, mayor de
+      // la auditoría — especialmente delicado tratándose de correcciones
+      // administrativas). Con el batch, o se corrigen todas o ninguna.
+      await window.Session.call(api.correcciones.actualizarEntradasBatch, {
+        entradas: draft.entradas.map(f=>({ entradaId: f.entradaId, cantidadKg: f.cantidadKg })),
+        nota: draft.nota || undefined,
+      }, 'mutation');
     }
     btn.textContent = textoOriginal;
     setDirty(false);

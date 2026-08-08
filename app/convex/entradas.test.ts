@@ -127,3 +127,62 @@ describe('entradas: backend de Entradas (tarea 3.3, endurecido en auditoría)', 
     expect(Array.isArray(materiales)).toBe(true);
   });
 });
+
+describe('entradas: crearEntradasBatch es atómico (No-Go de auditoría de PR 3, mayor #3)', () => {
+  test('crea todas las entradas del batch en una sola transacción', async () => {
+    const t = convexTest(schema, modules);
+    const { matId, operadorToken } = await setup(t);
+    const matB = await crearMaterialPrueba(t, { esInterno: false, activo: true });
+
+    const ids = await t.mutation(api.entradas.crearEntradasBatch, {
+      fecha: '2026-08-08',
+      materiales: [{ materialId: matId, cantidadKg: 100 }, { materialId: matB, cantidadKg: 250 }],
+      token: operadorToken,
+    });
+    expect(ids).toHaveLength(2);
+    const entradas = await t.run((ctx) => ctx.db.query('entradas').collect());
+    expect(entradas).toHaveLength(2);
+  });
+
+  test('BUG DE INTEGRIDAD REGRESIÓN: si un material del batch falla, NINGUNA entrada del batch queda guardada (sin guardado parcial)', async () => {
+    const t = convexTest(schema, modules);
+    const { matId, operadorToken } = await setup(t);
+    const matInactivo = await crearMaterialPrueba(t, { activo: false });
+
+    // El primer material es válido, el segundo (inactivo) debe hacer
+    // fallar la mutation ENTERA — antes (loop de mutations independientes
+    // desde el cliente) el primero habría quedado guardado igual.
+    await expect(
+      t.mutation(api.entradas.crearEntradasBatch, {
+        fecha: '2026-08-08',
+        materiales: [{ materialId: matId, cantidadKg: 100 }, { materialId: matInactivo, cantidadKg: 50 }],
+        token: operadorToken,
+      })
+    ).rejects.toThrow(/no está activo/);
+
+    const entradas = await t.run((ctx) => ctx.db.query('entradas').collect());
+    expect(entradas).toHaveLength(0); // ni siquiera el material válido quedó guardado
+  });
+
+  test('rechaza un batch vacío', async () => {
+    const t = convexTest(schema, modules);
+    const { operadorToken } = await setup(t);
+    await expect(
+      t.mutation(api.entradas.crearEntradasBatch, { fecha: '2026-08-08', materiales: [], token: operadorToken })
+    ).rejects.toThrow(/al menos un material/);
+  });
+
+  test('un operador no puede colar costoUnitario vía el batch (mismo bloqueo que crearEntrada individual)', async () => {
+    const t = convexTest(schema, modules);
+    const { matId, adminToken } = await setup(t);
+    // crearEntradasBatch no acepta costoUnitario en su schema de args —
+    // esto es una prueba de contrato: el batch del operador solo puede
+    // crear entradas pendientes, nunca costeadas, ni siquiera con admin.
+    const ids = await t.mutation(api.entradas.crearEntradasBatch, {
+      fecha: '2026-08-08', materiales: [{ materialId: matId, cantidadKg: 100 }], token: adminToken,
+    });
+    const entrada = await t.run((ctx) => ctx.db.get(ids[0]));
+    expect(entrada?.estado).toBe('pendiente');
+    expect(entrada?.capaId).toBeNull();
+  });
+});
