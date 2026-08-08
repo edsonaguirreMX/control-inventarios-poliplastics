@@ -199,6 +199,24 @@ a{color:inherit;}
 }
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 
+/* Banners inline (nunca window.confirm()/alert() — congelan la
+   automatización de Chrome-MCP y son peor UX): confirmación de descartar
+   cambios sin guardar, y errores al guardar una corrección. */
+.field-warn{
+  margin:.8rem 0;padding:.55rem .7rem;border-radius:9px;
+  background:var(--warning-soft);color:var(--warning);font-size:.78rem;line-height:1.4;
+  display:flex;flex-direction:column;gap:.4rem;
+}
+.field-warn.error{background:var(--danger-soft);color:var(--danger);}
+.field-warn button{
+  align-self:flex-start;border:1px solid currentColor;background:none;color:inherit;
+  padding:.22rem .55rem;border-radius:7px;font-size:.72rem;font-weight:700;cursor:pointer;
+}
+/* Sin esto, [hidden] pierde contra el display:flex de arriba (misma
+   especificidad, la regla de autor gana sobre el estilo por defecto del
+   navegador) y el banner se queda visible aunque JS ponga hidden=true. */
+.field-warn[hidden]{display:none;}
+
 footer.page-foot{font-size:.78rem;color:var(--ink-faint);border-top:1px solid var(--border);padding-top:1.2rem;}
 
 @media (max-width:640px){
@@ -246,6 +264,7 @@ footer.page-foot{font-size:.78rem;color:var(--ink-faint);border-top:1px solid va
     <div class="section-label">Fecha</div>
     <div class="day-strip" id="dayStrip"></div>
     <p class="window-note">● verde = hay registro capturado para esta combinación · los cierres antes del día más antiguo mostrado ya no se pueden corregir aquí.</p>
+    <div class="field-warn" id="navConfirm" hidden></div>
   </section>
 
   <section class="card" id="resultCard"></section>
@@ -297,124 +316,116 @@ if (row) {
 // del orden de documento — espera la MISMA promesa que ya se está
 // resolviendo ahí (no dispara un requireRole nuevo).
 await window.__authReady;
-const MATERIALS = [
-  {id:'hdpe-r-pel', name:'HDPE reciclado', variant:'peletizado', kgPorCarga:25},
-  {id:'hdpe-v-pel', name:'HDPE virgen', variant:'peletizado (sustituto)', kgPorCarga:0, sustituto:true},
-  {id:'hdpe-r-hoj', name:'HDPE reciclado', variant:'en hojuela', kgPorCarga:50},
-  {id:'hdpe-r-hoj-sl', name:'HDPE reciclado', variant:'hojuela sin lavar', kgPorCarga:7.5},
-  {id:'caco3', name:'Carbonato de calcio', variant:'peletizado', kgPorCarga:50},
-  {id:'masterbatch', name:'Masterbatch', variant:'de color', kgPorCarga:2.5},
-  {id:'aditivo-uv', name:'Aditivo UV', variant:'', kgPorCarga:1.5},
-  {id:'triturado', name:'Triturado', variant:'interno', kgPorCarga:12.5, approx:true},
-];
+const api = window.api; // expuesto por session.js (bundleado) — ver su comentario
+
+// KG_POR_METRO/CAB_105_KG/CAB_106_KG solo alimentan la vista previa en vivo
+// de merma/caballetes/Triturado mientras se corrige — el cálculo
+// autoritativo real ocurre en el servidor (cierreEngine vía
+// recapturarCierreImpl), que sí lee parametrosProduccion real.
 const KG_POR_METRO = 4;
 const CAB_105_KG = 1.250;
 const CAB_106_KG = 1.9;
-const DAYS = ['07/08','06/08','05/08','04/08','03/08','02/08','01/08','31/07','30/07','29/07'];
 const fmt = n => Math.round(n).toLocaleString('es-MX');
+function isoADisplayCorto(iso){ const [, m, d] = iso.split('-'); return `${d}/${m}`; }
+function isoADisplayLargo(iso){ const [y, m, d] = iso.split('-'); return `${d}/${m}/${y}`; }
+function fechaHoraLegible(ms){ return new Date(ms).toLocaleString('es-MX', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'}); }
 
 /* ============================================================
-   DATOS ILUSTRATIVOS DE LOS ÚLTIMOS 10 DÍAS
+   ÚLTIMOS 10 DÍAS (ventana real de corrección) y datos de apoyo —
+   todo vía Convex, nunca hardcodeado.
    ============================================================ */
-function cierreKey(date, linea, turno){ return `${date}_L${linea}T${turno}`; }
+let DIAS_CIERRE = [];
+let DIAS_ENTRADA = [];
+let FORMULA = [];              // materiales+kgPorCarga real, para editar cierres (api.cierres.consumoEsperado)
+let MATERIALES_ENTRADA = [];   // materiales activos sin Triturado (api.entradas.listMaterialesActivos)
 
-const SIN_CIERRE = new Set(['04/08_L2T1','31/07_L1T1','29/07_L2T2']); // líneas caídas / sin registro, para el estado vacío
-
-function generarCierre(dayIdx, linea, turno){
-  const seed = dayIdx*7 + (+linea)*3 + (+turno)*5;
-  const cargas = 7 + (seed % 4);
-  const consumo = {};
-  MATERIALS.forEach(m=>{ consumo[m.id] = m.sustituto ? 0 : +(cargas*m.kgPorCarga).toFixed(2); });
-  const totalConsumo = Object.values(consumo).reduce((s,v)=>s+v,0);
-  const mermaPct = 0.01 + (seed % 6)*0.008; // ~1%–5%, banda creíble
-  const metros = Math.round((totalConsumo*(1-mermaPct))/KG_POR_METRO);
-  const cab105 = 4 + (seed % 5);
-  const cab106 = 2 + (seed % 4);
-  return {cargas, consumo, metros, cab105, cab106, edited:false};
+async function cargarDias(){
+  const [cierre, entrada] = await Promise.all([
+    window.Session.call(api.correcciones.listRegistrosUltimos10Dias, { tipo: 'cierre' }, 'query'),
+    window.Session.call(api.correcciones.listRegistrosUltimos10Dias, { tipo: 'entrada' }, 'query'),
+  ]);
+  // El backend regresa de más antiguo a más reciente — se invierte para
+  // mostrar el día más reciente primero, como en el diseño original.
+  DIAS_CIERRE = [...cierre].reverse();
+  DIAS_ENTRADA = [...entrada].reverse();
 }
-
-const RECORDS = { cierres:{}, entradas:{} };
-DAYS.forEach((date,dayIdx)=>{
-  ['1','2'].forEach(linea=>{
-    ['1','2'].forEach(turno=>{
-      const key = cierreKey(date, linea, turno);
-      if(!SIN_CIERRE.has(key)) RECORDS.cierres[key] = generarCierre(dayIdx, linea, turno);
-    });
-  });
-});
-RECORDS.entradas = {
-  '07/08': [{id:'hdpe-r-pel', kg:500}, {id:'caco3', kg:150}],
-  '05/08': [{id:'hdpe-v-pel', kg:1000}],
-  '02/08': [{id:'hdpe-r-hoj', kg:800}, {id:'aditivo-uv', kg:60}],
-  '31/07': [{id:'caco3', kg:300}, {id:'masterbatch', kg:120}],
-};
-
-/* ============================================================
-   BITÁCORA DE AUDITORÍA — quién corrigió cada registro y cuándo
-   ============================================================ */
-const EDIT_META = { entradas:{} }; // cierres guardan editedBy/editedAt en el propio RECORDS.cierres[key]
-
-/* ejemplo ilustrativo: un cierre y una entrada ya corregidos antes, para mostrar la bitácora sin tener que editar primero */
-RECORDS.cierres['05/08_L1T2'].edited = true;
-RECORDS.cierres['05/08_L1T2'].editedBy = 'Edson Aguirre';
-RECORDS.cierres['05/08_L1T2'].editedAt = '05/08/2026, 09:14';
-EDIT_META.entradas['02/08'] = { by:'Edson Aguirre', at:'02/08/2026, 11:40' };
+function diasActuales(){ return state.type==='cierre' ? DIAS_CIERRE : DIAS_ENTRADA; }
 
 /* ============================================================
    ESTADO DE LA PANTALLA
    ============================================================ */
-const state = { type:'cierre', date: DAYS[0], linea:'1', turno:'1' };
+const state = { type:'cierre', fecha:null, linea:1, turno:1 };
 let draft = null;   // copia editable del registro activo
 let dirty = false;
-
-function hasCierre(date, linea, turno){ return !!RECORDS.cierres[cierreKey(date, linea, turno)]; }
-function hasEntrada(date){ return !!RECORDS.entradas[date]; }
+let accionPendiente = null; // callback diferido cuando hay cambios sin guardar
 
 /* ---------- day strip ---------- */
 function renderDayStrip(){
-  document.getElementById('dayStrip').innerHTML = DAYS.map(d=>{
-    const on = d===state.date;
-    const has = state.type==='cierre' ? hasCierre(d, state.linea, state.turno) : hasEntrada(d);
-    return `<button class="day-pill ${on?'on':''}" data-date="${d}">
-      <span class="dd">${d}</span>
-      <span class="dot ${has?'has':'none'}"></span>
+  document.getElementById('dayStrip').innerHTML = diasActuales().map(d=>{
+    const on = d.fecha===state.fecha;
+    return `<button class="day-pill ${on?'on':''}" data-fecha="${d.fecha}">
+      <span class="dd">${isoADisplayCorto(d.fecha)}</span>
+      <span class="dot ${d.tieneRegistro?'has':'none'}"></span>
     </button>`;
   }).join('');
 }
+
+// Reemplazo de window.confirm() (congela la automatización de Chrome-MCP y
+// es peor UX): si hay cambios sin guardar, muestra un banner inline con un
+// botón explícito y difiere la acción; si no hay cambios, la ejecuta ya.
+function conCambiosSinGuardar(accion){
+  const banner = document.getElementById('navConfirm');
+  if(!dirty){ banner.hidden = true; accion(); return; }
+  accionPendiente = accion;
+  banner.hidden = false;
+  banner.innerHTML = `⚠ Tienes cambios sin guardar en este registro. Cambiar aquí los descarta. <button type="button" onclick="confirmarDescartarYContinuar()">Sí, descartar y continuar</button>`;
+}
+function confirmarDescartarYContinuar(){
+  document.getElementById('navConfirm').hidden = true;
+  setDirty(false);
+  const accion = accionPendiente; accionPendiente = null;
+  if(accion) accion();
+}
+
 document.getElementById('dayStrip').addEventListener('click', e=>{
   const b = e.target.closest('.day-pill'); if(!b) return;
-  if(dirty && !confirm('Tienes cambios sin guardar en este registro. ¿Descartarlos y cambiar de fecha?')) return;
-  state.date = b.dataset.date;
-  renderDayStrip();
-  renderResult();
+  conCambiosSinGuardar(async ()=>{
+    state.fecha = b.dataset.fecha;
+    renderDayStrip();
+    await renderResult();
+  });
 });
 
 /* ---------- type switch ---------- */
 document.getElementById('typeSwitch').addEventListener('click', e=>{
   const b = e.target.closest('button'); if(!b) return;
-  if(dirty && !confirm('Tienes cambios sin guardar. ¿Descartarlos y cambiar de tipo de registro?')) return;
-  [...b.parentElement.children].forEach(c=>c.classList.remove('on'));
-  b.classList.add('on');
-  state.type = b.dataset.type;
-  document.getElementById('lineaTurnoPicker').style.display = state.type==='cierre' ? '' : 'none';
-  renderDayStrip();
-  renderResult();
+  conCambiosSinGuardar(async ()=>{
+    [...b.parentElement.children].forEach(c=>c.classList.remove('on'));
+    b.classList.add('on');
+    state.type = b.dataset.type;
+    document.getElementById('lineaTurnoPicker').style.display = state.type==='cierre' ? '' : 'none';
+    state.fecha = diasActuales()[0]?.fecha ?? null;
+    renderDayStrip();
+    await renderResult();
+  });
 });
 
 /* ---------- línea / turno pickers ---------- */
 document.getElementById('lineaPick').addEventListener('click', e=>{
   const b = e.target.closest('button'); if(!b) return;
-  if(dirty && !confirm('Tienes cambios sin guardar. ¿Descartarlos y cambiar de línea?')) return;
-  [...b.parentElement.children].forEach(c=>c.classList.remove('on'));
-  b.classList.add('on'); state.linea = b.dataset.v;
-  renderDayStrip(); renderResult();
+  conCambiosSinGuardar(async ()=>{
+    [...b.parentElement.children].forEach(c=>c.classList.remove('on'));
+    b.classList.add('on'); state.linea = Number(b.dataset.v);
+    await renderResult();
+  });
 });
 document.getElementById('turnoPick').addEventListener('click', e=>{
   const b = e.target.closest('button'); if(!b) return;
-  if(dirty && !confirm('Tienes cambios sin guardar. ¿Descartarlos y cambiar de turno?')) return;
-  [...b.parentElement.children].forEach(c=>c.classList.remove('on'));
-  b.classList.add('on'); state.turno = b.dataset.v;
-  renderDayStrip(); renderResult();
+  conCambiosSinGuardar(async ()=>{
+    [...b.parentElement.children].forEach(c=>c.classList.remove('on'));
+    b.classList.add('on'); state.turno = Number(b.dataset.v);
+    await renderResult();
+  });
 });
 
 /* ============================================================
@@ -425,30 +436,41 @@ function setDirty(v){
   document.getElementById('dirtyFlag').style.display = v ? 'flex' : 'none';
   document.getElementById('btnSaveEdit').disabled = !v;
   document.getElementById('btnDiscard').disabled = !v;
+  if(!v) document.getElementById('navConfirm').hidden = true;
 }
 
-function renderResult(){
+async function renderResult(){
   const card = document.getElementById('resultCard');
   const actionBar = document.getElementById('actionBar');
   setDirty(false);
+  if(!state.fecha){ card.innerHTML = ''; actionBar.hidden = true; return; }
 
   if(state.type==='cierre'){
-    const key = cierreKey(state.date, state.linea, state.turno);
-    const record = RECORDS.cierres[key];
-    if(!record){
-      card.innerHTML = `<div class="empty-state">No hay <b>cierre de turno</b> capturado para <b>Línea ${state.linea} · Turno ${state.turno}</b> el <b>${state.date}/2026</b>.<br>No hay nada que corregir en esta combinación.</div>`;
+    const resultado = await window.Session.call(api.correcciones.getCierre, { fecha: state.fecha, linea: state.linea, turno: state.turno }, 'query');
+    if(!resultado){
+      card.innerHTML = `<div class="empty-state">No hay <b>cierre de turno</b> capturado para <b>Línea ${state.linea} · Turno ${state.turno}</b> el <b>${isoADisplayLargo(state.fecha)}</b>.<br>No hay nada que corregir en esta combinación.</div>`;
       actionBar.hidden = true;
       return;
     }
-    draft = JSON.parse(JSON.stringify(record));
+    const { cierre, consumos } = resultado;
+    FORMULA = await window.Session.call(api.cierres.consumoEsperado, { cargasPreparadas: cierre.cargasPreparadas }, 'query');
+    const consumoPorMaterial = new Map(consumos.map(c=>[c.materialId, c.kgConsumido]));
+    draft = {
+      cierreTurnoId: cierre._id,
+      cargas: cierre.cargasPreparadas, metros: cierre.metrosBuenos,
+      cab105: cierre.caballetes105Pzas, cab106: cierre.caballetes106Pzas,
+      consumo: Object.fromEntries(FORMULA.map(m=>[m.materialId, consumoPorMaterial.get(m.materialId) ?? 0])),
+      nota: '',
+    };
     card.innerHTML = `
       <div class="card-head">
         <div>
-          <h3>Cierre de turno — Línea ${state.linea} · Turno ${state.turno} <span class="date-tag">${state.date}/2026</span> ${record.edited?'<span class="edited-badge">✏️ Editado</span>':''}</h3>
-          <p class="card-sub">${record.edited ? 'Este registro ya se corrigió antes — se puede volver a ajustar.' : 'Captura original, sin correcciones previas.'}</p>
-          ${record.edited ? `<p class="edit-meta">Corregido por <b>${record.editedBy}</b> · ${record.editedAt}</p>` : ''}
+          <h3>Cierre de turno — Línea ${state.linea} · Turno ${state.turno} <span class="date-tag">${isoADisplayLargo(state.fecha)}</span> ${cierre.editado?'<span class="edited-badge">✏️ Editado</span>':''}</h3>
+          <p class="card-sub">${cierre.editado ? 'Este registro ya se corrigió antes — se puede volver a ajustar.' : 'Captura original, sin correcciones previas.'}</p>
+          ${cierre.editado ? `<p class="edit-meta">Corregido por última vez el ${fechaHoraLegible(cierre.editadoEn)} · ${cierre.vecesRecapturado} corrección(es)</p>` : ''}
         </div>
       </div>
+      <div class="field-warn error" id="editSaveError" hidden></div>
       <div class="field-row">
         <div class="field-block">
           <label>Cargas preparadas</label>
@@ -470,34 +492,40 @@ function renderResult(){
         </div>
       </div>
       <div class="section-label">Consumo por material</div>
-      <div id="editConsumoList">${MATERIALS.map(m=>consumoRowHtml(m, draft.consumo[m.id])).join('')}</div>
+      <div id="editConsumoList">${FORMULA.map(m=>consumoRowHtml(m, draft.consumo[m.materialId])).join('')}</div>
       <div class="derived-row">
         <div class="derived" id="editMermaTotal"><span>Merma total <span class="lock">🔒 calculada</span></span><b>0 kg</b></div>
         <div class="derived" id="editCaballetesKg"><span>Equivale a caballetes</span><b>0 kg</b></div>
         <div class="derived" id="editTriturado"><span>Regresa como Triturado</span><b>0 kg</b></div>
-      </div>`;
+      </div>
+      <div class="section-label">Nota de la corrección (opcional)</div>
+      <textarea id="editNota" rows="2" style="width:100%;font:inherit;padding:.5rem;border-radius:8px;border:1px solid var(--border);"></textarea>`;
     wireCierreInputs();
     recalcEdit();
     actionBar.hidden = false;
   } else {
-    const list = RECORDS.entradas[state.date];
-    if(!list){
-      card.innerHTML = `<div class="empty-state">No hay <b>entrada de material</b> capturada el <b>${state.date}/2026</b>.<br>No hay nada que corregir este día.</div>`;
+    if(!MATERIALES_ENTRADA.length){
+      MATERIALES_ENTRADA = await window.Session.call(api.entradas.listMaterialesActivos, {}, 'query');
+    }
+    const entradasDelDia = await window.Session.call(api.correcciones.getEntradasDelDia, { fecha: state.fecha }, 'query');
+    if(!entradasDelDia.length){
+      card.innerHTML = `<div class="empty-state">No hay <b>entrada de material</b> capturada el <b>${isoADisplayLargo(state.fecha)}</b>.<br>No hay nada que corregir este día.</div>`;
       actionBar.hidden = true;
       return;
     }
-    const byId = {}; list.forEach(e=>byId[e.id]=e.kg);
-    draft = { entradas: MATERIALS.map(m=>({id:m.id, kg: byId[m.id] ?? 0, on: byId[m.id]!==undefined})) };
-    const meta = EDIT_META.entradas[state.date];
+    const nombrePorId = new Map(MATERIALES_ENTRADA.map(m=>[m._id, m]));
+    draft = { entradas: entradasDelDia.map(e=>({ entradaId: e._id, cantidadKg: e.cantidadKg })), nota: '' };
     card.innerHTML = `
       <div class="card-head">
         <div>
-          <h3>Entrada de material <span class="date-tag">${state.date}/2026</span> ${meta?'<span class="edited-badge">✏️ Editado</span>':''}</h3>
-          <p class="card-sub">Sin línea asignada — va a almacén compartido.</p>
-          ${meta ? `<p class="edit-meta">Corregido por <b>${meta.by}</b> · ${meta.at}</p>` : ''}
+          <h3>Entrada de material <span class="date-tag">${isoADisplayLargo(state.fecha)}</span></h3>
+          <p class="card-sub">Sin línea asignada — va a almacén compartido. Cada renglón es una entrada capturada por separado (esta pantalla corrige cantidades, no crea ni elimina entradas).</p>
         </div>
       </div>
-      <div id="editEntradaList">${MATERIALS.map((m,i)=>entradaRowHtml(m, draft.entradas[i])).join('')}</div>`;
+      <div class="field-warn error" id="editSaveError" hidden></div>
+      <div id="editEntradaList">${entradasDelDia.map(e=>entradaRowHtml(nombrePorId.get(e.materialId), e)).join('')}</div>
+      <div class="section-label">Nota de la corrección (opcional)</div>
+      <textarea id="editNota" rows="2" style="width:100%;font:inherit;padding:.5rem;border-radius:8px;border:1px solid var(--border);"></textarea>`;
     wireEntradaInputs();
     actionBar.hidden = false;
   }
@@ -505,13 +533,13 @@ function renderResult(){
 
 /* ---------- filas: consumo (cierre) ---------- */
 function consumoRowHtml(m, val){
-  const hint = m.sustituto ? 'sustituto — comparte cupo de 25 kg/carga con HDPE reciclado'
-    : m.approx ? `≈ según cargas × ${m.kgPorCarga} kg — puede variar`
+  const hint = m.esSustituto ? 'sustituto — comparte cupo de 25 kg/carga con HDPE reciclado'
+    : m.esInterno ? `≈ según cargas × ${m.kgPorCarga} kg — puede variar`
     : `${m.kgPorCarga} kg por carga`;
-  return `<div class="mat-block" data-mat="${m.id}">
+  return `<div class="mat-block" data-mat="${m.materialId}">
     <div class="mat-row">
-      <div class="mat-name">${m.name}${m.variant?`<small>${m.variant}</small>`:''}</div>
-      <div class="qty-plain"><input type="number" inputmode="decimal" value="${val}" class="tnum" data-consumo="${m.id}"><span class="unit">kg</span></div>
+      <div class="mat-name">${m.nombre}${m.variante?`<small>${m.variante}</small>`:''}</div>
+      <div class="qty-plain"><input type="number" inputmode="decimal" value="${val}" class="tnum" data-consumo="${m.materialId}"><span class="unit">kg</span></div>
     </div>
     <small class="mat-hint">${hint}</small>
   </div>`;
@@ -532,6 +560,7 @@ function wireCierreInputs(){
       recalcEdit();
     });
   });
+  document.getElementById('editNota').addEventListener('input', e=>{ draft.nota = e.target.value; });
 }
 function recalcEdit(){
   const kgBuenos = (draft.metros||0)*KG_POR_METRO;
@@ -547,68 +576,84 @@ function recalcEdit(){
 }
 
 /* ---------- filas: entrada de material ---------- */
-function entradaRowHtml(m, e){
-  return `<div class="mat-block" data-mat="${m.id}">
+function entradaRowHtml(material, e){
+  const estadoLabel = e.estado === 'costeada' ? 'Costeada' : 'Pendiente de costeo';
+  const meta = [estadoLabel, e.proveedor, e.folio ? `Folio ${e.folio}` : null].filter(Boolean).join(' · ');
+  return `<div class="mat-block" data-entrada-id="${e._id}">
     <div class="mat-row">
-      <div class="mat-toggle ${e.on?'on':''}" onclick="toggleEditMat(this)"></div>
-      <div class="mat-name">${m.name}${m.variant?`<small>${m.variant}</small>`:''}</div>
-      <div class="qty-plain" style="${!e.on?'visibility:hidden':''}">
-        <input type="number" inputmode="decimal" value="${e.kg}" class="tnum" data-entrada="${m.id}">
+      <div class="mat-name">${material?.nombre ?? '?'}${material?.variante?`<small>${material.variante}</small>`:''}<small>${meta}</small></div>
+      <div class="qty-plain">
+        <input type="number" inputmode="decimal" value="${e.cantidadKg}" class="tnum" data-kg="${e._id}">
         <span class="unit">kg</span>
       </div>
     </div>
+    ${e.editado ? `<small class="mat-hint">✏️ Editada anteriormente</small>` : ''}
   </div>`;
 }
-function toggleEditMat(el){
-  el.classList.toggle('on');
-  const qty = el.parentElement.querySelector('.qty-plain');
-  qty.style.visibility = el.classList.contains('on') ? 'visible' : 'hidden';
-  setDirty(true);
-}
 function wireEntradaInputs(){
-  document.querySelectorAll('#editEntradaList input[data-entrada]').forEach(inp=>{
-    inp.addEventListener('input', ()=> setDirty(true));
+  document.querySelectorAll('#editEntradaList input[data-kg]').forEach(inp=>{
+    inp.addEventListener('input', e=>{
+      const fila = draft.entradas.find(f=>f.entradaId===e.target.dataset.kg);
+      if(fila) fila.cantidadKg = parseFloat(e.target.value)||0;
+      setDirty(true);
+    });
   });
+  document.getElementById('editNota').addEventListener('input', e=>{ draft.nota = e.target.value; });
 }
 
 /* ============================================================
    GUARDAR / DESCARTAR
    ============================================================ */
-function saveEdit(){
-  const quien = window.usuarioSesion || 'Administrador';
-  const cuando = new Date().toLocaleString('es-MX', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'});
-  if(state.type==='cierre'){
-    const key = cierreKey(state.date, state.linea, state.turno);
-    RECORDS.cierres[key] = {...draft, edited:true, editedBy:quien, editedAt:cuando};
-  } else {
-    const rows = [...document.querySelectorAll('#editEntradaList .mat-block')];
-    const list = rows.map(row=>{
-      const on = row.querySelector('.mat-toggle').classList.contains('on');
-      if(!on) return null;
-      const kg = parseFloat(row.querySelector('input').value)||0;
-      return {id: row.dataset.mat, kg};
-    }).filter(Boolean);
-    RECORDS.entradas[state.date] = list;
-    EDIT_META.entradas[state.date] = { by:quien, at:cuando };
+async function saveEdit(){
+  const btn = document.getElementById('btnSaveEdit');
+  const errorBox = document.getElementById('editSaveError');
+  errorBox.hidden = true;
+  const textoOriginal = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Guardando…';
+  try{
+    if(state.type==='cierre'){
+      const consumoPorMaterial = FORMULA.map(m=>({ materialId: m.materialId, kgConsumido: draft.consumo[m.materialId] ?? 0 }));
+      await window.Session.call(api.correcciones.actualizarCierreTurno, {
+        cierreTurnoId: draft.cierreTurnoId,
+        cargasPreparadas: draft.cargas, metrosBuenos: draft.metros,
+        caballetes105Pzas: draft.cab105, caballetes106Pzas: draft.cab106,
+        consumoPorMaterial, nota: draft.nota || undefined,
+      }, 'mutation');
+    } else {
+      for(const fila of draft.entradas){
+        await window.Session.call(api.correcciones.actualizarEntrada, {
+          entradaId: fila.entradaId, cantidadKg: fila.cantidadKg, nota: draft.nota || undefined,
+        }, 'mutation');
+      }
+    }
+    btn.textContent = textoOriginal;
+    setDirty(false);
+    const t = document.getElementById('toast');
+    t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 2400);
+    await cargarDias();
+    renderDayStrip();
+    await renderResult();
+  }catch(err){
+    btn.disabled = false; btn.textContent = textoOriginal;
+    errorBox.hidden = false;
+    errorBox.textContent = '⚠ ' + (err?.message || String(err));
   }
-  setDirty(false);
-  const t = document.getElementById('toast');
-  t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 2400);
-  renderDayStrip();
-  renderResult();
 }
-function discardEdit(){
-  renderResult();
+async function discardEdit(){
+  setDirty(false);
+  await renderResult();
 }
 
 /* ---------- inicio ---------- */
+await cargarDias();
+state.fecha = diasActuales()[0]?.fecha ?? null;
 renderDayStrip();
-renderResult();
+await renderResult();
 
 /* El HTML llama estas funciones vía onclick="" — en un <script type="module">
    quedan en el scope del módulo, no globales, así que hay que exponerlas
    explícitamente para que esos atributos sigan funcionando. */
-window.toggleEditMat = toggleEditMat;
+window.confirmarDescartarYContinuar = confirmarDescartarYContinuar;
 window.saveEdit = saveEdit;
 window.discardEdit = discardEdit;
 </script>

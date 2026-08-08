@@ -11,6 +11,8 @@
 import type * as auth from "../auth.js";
 import type * as authActions from "../authActions.js";
 import type * as cierreEngine from "../cierreEngine.js";
+import type * as cierres from "../cierres.js";
+import type * as correcciones from "../correcciones.js";
 import type * as entradas from "../entradas.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as peps from "../peps.js";
@@ -28,6 +30,8 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   authActions: typeof authActions;
   cierreEngine: typeof cierreEngine;
+  cierres: typeof cierres;
+  correcciones: typeof correcciones;
   entradas: typeof entradas;
   "lib/auth": typeof lib_auth;
   peps: typeof peps;
