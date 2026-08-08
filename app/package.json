@@ -4,10 +4,12 @@
   "private": true,
   "description": "Tejaflex — Control de Materias Primas: aplicación viva (Convex + Express)",
   "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "dev:backend": "convex dev",
     "dev:web": "node src/server.js",
-    "build": "convex deploy --cmd-url-env-var-name CONVEX_URL",
     "start": "node src/server.js"
   },
   "dependencies": {
