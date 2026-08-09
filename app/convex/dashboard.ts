@@ -7,7 +7,12 @@ import { fechaOperativa, sumarDiasISO } from './lib/fechaOperativa';
 // Roles que ven Panel de Control (mismo criterio que el guard de la
 // página en panel-control.html) — operador no tiene esta pantalla, su
 // captura vive en Cierre de Turno.
-const ROLES_DASHBOARD = ['compras', 'calidad', 'gerencia', 'admin'] as const;
+// Exportado: reporteDiario.ts lo reutiliza como destinatarios de la
+// notificación in-app "reporte generado" — son los mismos roles que
+// pueden ver Panel de Control, así no hace falta un selector de roles
+// aparte en reporteDiarioConfig ni arriesgar que diverja de quién
+// realmente consume el dashboard.
+export const ROLES_DASHBOARD = ['compras', 'calidad', 'gerencia', 'admin'] as const;
 
 // Ventana para "consumo diario promedio" — alimenta el punto de reorden
 // (regla 4 del spec: consumo diario promedio × (lead time + stock de
@@ -15,7 +20,7 @@ const ROLES_DASHBOARD = ['compras', 'calidad', 'gerencia', 'admin'] as const;
 // variación turno a turno sin diluir una tendencia reciente real.
 const VENTANA_CONSUMO_DIAS = 14;
 
-async function requireParametros(ctx: QueryCtx) {
+export async function requireParametros(ctx: QueryCtx) {
   const params = await ctx.db.query('parametrosProduccion').first();
   if (!params) {
     throw new Error('Panel de Control: no hay parámetros de producción configurados (parametrosProduccion vacío).');
@@ -23,7 +28,7 @@ async function requireParametros(ctx: QueryCtx) {
   return params;
 }
 
-async function fechaHoyOperativa(ctx: QueryCtx): Promise<{ hoy: string; kgPorMetro: number }> {
+export async function fechaHoyOperativa(ctx: QueryCtx): Promise<{ hoy: string; kgPorMetro: number }> {
   const params = await requireParametros(ctx);
   return { hoy: fechaOperativa(Date.now(), params.zonaHoraria, params.horaInicioTurno1), kgPorMetro: params.kgPorMetro };
 }
@@ -34,7 +39,7 @@ async function fechaHoyOperativa(ctx: QueryCtx): Promise<{ hoy: string; kgPorMet
 // ACTUAL (aplicarCierreImpl/recapturarCierreImpl lo sobreescriben en el
 // mismo lugar): no hace falta filtrar "vigente" aquí, eso solo aplica a
 // cierreConsumos (que sí conserva filas viejas para auditoría).
-async function cierresEnRango(ctx: QueryCtx, dias: number) {
+export async function cierresEnRango(ctx: QueryCtx, dias: number) {
   const { hoy } = await fechaHoyOperativa(ctx);
   const diaInicio = sumarDiasISO(hoy, -(dias - 1));
   const fechas = Array.from({ length: dias }, (_, i) => sumarDiasISO(diaInicio, i));
@@ -45,13 +50,14 @@ async function cierresEnRango(ctx: QueryCtx, dias: number) {
   return { hoy, fechas, cierres };
 }
 
-// KPIs "de hoy" + desglose por material para Compras/Calidad/Gerencia —
-// una sola llamada porque en el mockup original todo se derivaba del
-// mismo arreglo MATERIALS + un puñado de escalares de "hoy".
-export const getKPIsHoy = query({
-  args: { token: v.string() },
-  handler: async (ctx, { token }) => {
-    await requireRole(ctx, token, ROLES_DASHBOARD);
+// KPIs "de hoy" + desglose por material — extraído a función plana (sin
+// requireRole) para que el motor de alertas (7.2, alertas.ts) pueda
+// reutilizar EXACTAMENTE el mismo cálculo de existencia/reorden/merma/costo
+// que ve Compras/Calidad/Gerencia en el Panel de Control, en vez de
+// reimplementarlo por separado (eso sí divergiría con el tiempo — mismo
+// riesgo ya resuelto para Catálogo/Parámetros en PR 5). `getKPIsHoy` (más
+// abajo) es un wrapper delgado que solo agrega la autorización.
+export async function calcularKPIsHoyImpl(ctx: QueryCtx) {
     const params = await requireParametros(ctx);
     const { hoy, cierres: cierresVentana } = await cierresEnRango(ctx, VENTANA_CONSUMO_DIAS);
 
@@ -158,6 +164,13 @@ export const getKPIsHoy = query({
       costoEstandarPorKg,
       costoEstandarPorMetro,
     };
+}
+
+export const getKPIsHoy = query({
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    await requireRole(ctx, token, ROLES_DASHBOARD);
+    return calcularKPIsHoyImpl(ctx);
   },
 });
 

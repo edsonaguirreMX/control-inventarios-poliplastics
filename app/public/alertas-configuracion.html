@@ -128,6 +128,15 @@ a{color:inherit;}
   padding:.28rem .6rem;border-radius:20px;font-size:.72rem;font-weight:600;cursor:pointer;
 }
 .chip-toggle-row button.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);}
+.chip-toggle-row button:disabled{opacity:.5;cursor:not-allowed;}
+
+.field-warn{
+  margin:.8rem 0 0;padding:.55rem .7rem;border-radius:9px;
+  background:var(--warning-soft);color:var(--warning);font-size:.78rem;line-height:1.4;
+  display:flex;flex-direction:column;gap:.4rem;
+}
+.field-warn.error{background:var(--danger-soft);color:var(--danger);}
+.field-warn[hidden]{display:none;}
 
 /* switch */
 .switch{position:relative;width:2.5rem;height:1.4rem;flex:none;}
@@ -213,6 +222,8 @@ footer.page-foot{font-size:.78rem;color:var(--ink-faint);border-top:1px solid va
     <div id="reglasList"></div>
   </section>
 
+  <div class="field-warn error" id="saveError" hidden></div>
+
   <div class="action-bar">
     <span class="dirty-flag" id="dirtyFlag"><span class="dot"></span>Cambios sin guardar</span>
     <button class="btn-ghost" id="btnReset" disabled onclick="resetReglas()">Restablecer</button>
@@ -271,6 +282,7 @@ if (row) {
 // del orden de documento — espera la MISMA promesa que ya se está
 // resolviendo ahí (no dispara un requireRole nuevo).
 await window.__authReady;
+const api = window.api; // expuesto por session.js (bundleado) — ver su comentario
 const ROLES = [
   {id:'operador', label:'Operador'},
   {id:'admin', label:'Admin'},
@@ -283,43 +295,42 @@ const CANALES = [
   {id:'whatsapp', label:'WhatsApp'},
   {id:'sistema', label:'Sistema'},
 ];
+// Solo texto de ayuda junto al campo de umbral — no es dato de negocio, no
+// se guarda ni se lee del servidor (las 7 reglas son fijas, no se crean ni
+// se borran desde esta pantalla).
+const UMBRAL_LABELS = {
+  'turno-sin-cerrar': 'Minutos después del fin de turno',
+  'material-critico': null,
+  'material-por-vencer': '% de margen sobre el punto de reorden',
+  'merma-alta': 'Puntos porcentuales sobre la meta',
+  'produccion-baja': '% mínimo del objetivo semanal',
+  'costo-alto': '% sobre el costo estándar',
+  'entrada-sin-costear': 'Días sin costear',
+};
 function roleLabel(id){ return (ROLES.find(r=>r.id===id)||{}).label || id; }
+function roleLabelCanal(id){ return (CANALES.find(c=>c.id===id)||{}).label || id; }
+function fmtFechaHist(ms){
+  return new Date(ms).toLocaleString('es-MX', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit', hour12:false });
+}
 
-const DEFAULTS = [
-  {id:'turno-sin-cerrar', nombre:'Turno sin cerrar', desc:'Avisa si un turno no se cierra dentro del tiempo esperado después de terminar.', umbralLabel:'Minutos después del fin de turno', umbral:30, unidad:'min', destinatarios:['admin'], canal:['correo','sistema'], activa:true},
-  {id:'material-critico', nombre:'Material en punto de reorden crítico', desc:'Avisa en cuanto un material cruza por debajo de su punto de reorden.', umbralLabel:null, umbral:null, destinatarios:['compras'], canal:['correo','whatsapp','sistema'], activa:true},
-  {id:'material-por-vencer', nombre:'Material por vencer su punto de reorden', desc:'Avisa cuando un material entra a la zona amarilla, antes de volverse crítico.', umbralLabel:'% de margen sobre el punto de reorden', umbral:15, unidad:'%', destinatarios:['compras'], canal:['sistema'], activa:true},
-  {id:'merma-alta', nombre:'% de merma por arriba de la meta', desc:'Avisa cuando la merma del día supera la meta por más de este margen.', umbralLabel:'Puntos porcentuales sobre la meta', umbral:1.0, unidad:'pp', destinatarios:['calidad','admin'], canal:['correo','sistema'], activa:true},
-  {id:'produccion-baja', nombre:'Producción por debajo del objetivo', desc:'Avisa cuando la producción acumulada de la semana cae debajo de este % del objetivo.', umbralLabel:'% mínimo del objetivo semanal', umbral:90, unidad:'%', destinatarios:['calidad','gerencia'], canal:['sistema'], activa:true},
-  {id:'costo-alto', nombre:'Costo real por arriba del estándar', desc:'Avisa cuando el costo real por kg supera el costo estándar por más de este margen.', umbralLabel:'% sobre el costo estándar', umbral:5, unidad:'%', destinatarios:['gerencia','admin'], canal:['correo','sistema'], activa:true},
-  {id:'entrada-sin-costear', nombre:'Entrada pendiente de costeo', desc:'Avisa cuando una entrada lleva más de este número de días sin costo unitario.', umbralLabel:'Días sin costear', umbral:3, unidad:'días', destinatarios:['compras'], canal:['sistema'], activa:false},
-];
-const HISTORIAL = [
-  {fecha:'07/08 22:15', regla:'material-critico', detalle:'HDPE reciclado peletizado: 10,800 kg (bajo el punto de reorden de 12,554 kg)', destinatario:'Compras', canal:['correo','whatsapp'], leida:false},
-  {fecha:'07/08 22:15', regla:'material-critico', detalle:'Carbonato de calcio: 24,500 kg (bajo el punto de reorden de 28,054 kg)', destinatario:'Compras', canal:['correo','whatsapp'], leida:false},
-  {fecha:'07/08 20:00', regla:'merma-alta', detalle:'5.8% vs. meta 5.0%', destinatario:'Calidad y Producción, Admin', canal:['correo'], leida:true},
-  {fecha:'06/08 23:30', regla:'turno-sin-cerrar', detalle:'Línea 2 · Turno 2 sin cerrar 30 min después de su fin', destinatario:'Admin', canal:['correo'], leida:true},
-  {fecha:'05/08 09:00', regla:'entrada-sin-costear', detalle:'Carbonato de calcio, 6,500 kg recibidos hace 3 días sin costo unitario', destinatario:'Compras', canal:['sistema'], leida:false},
-  {fecha:'04/08 18:45', regla:'costo-alto', detalle:'+6.3% sobre estándar ($11.04 vs $10.39/kg)', destinatario:'Gerencia, Admin', canal:['correo'], leida:true},
-];
-
-let REGLAS = clone(DEFAULTS);
-let SAVED = clone(DEFAULTS);
+// REGLAS/HISTORIAL se llenan con datos reales de Convex (cargarTodo, más
+// abajo) — nunca hardcodeados.
+let REGLAS = [];
+let HISTORIAL = [];
 let dirty = false;
 
-function clone(arr){ return arr.map(r=>({...r, destinatarios:[...r.destinatarios], canal:[...r.canal]})); }
-
 function reglaHtml(r){
-  const umbralHtml = r.umbralLabel
-    ? `<div class="regla-block"><label>${r.umbralLabel}</label>
-        <div class="umbral-field"><input type="number" step="0.1" value="${r.umbral}" data-field="umbral"><span class="u">${r.unidad}</span></div>
+  const label = UMBRAL_LABELS[r.slug];
+  const umbralHtml = label
+    ? `<div class="regla-block"><label>${label}</label>
+        <div class="umbral-field"><input type="number" step="0.1" value="${r.umbral}" data-field="umbral"><span class="u">${r.unidad||''}</span></div>
        </div>`
     : `<div class="regla-block"><label>Condición</label><span class="umbral-none">Automática — no requiere umbral</span></div>`;
-  return `<div class="regla-row ${r.activa?'':'off'}" data-id="${r.id}">
+  return `<div class="regla-row ${r.activa?'':'off'}" data-id="${r.slug}">
     <div class="regla-top">
       <div>
         <div class="regla-name">${r.nombre}</div>
-        <div class="regla-desc">${r.desc}</div>
+        <div class="regla-desc">${r.descripcion}</div>
       </div>
       <label class="switch"><input type="checkbox" data-field="activa" ${r.activa?'checked':''}><span class="track"><span class="knob"></span></span></label>
     </div>
@@ -327,14 +338,18 @@ function reglaHtml(r){
       ${umbralHtml}
       <div class="regla-block">
         <label>Destinatarios</label>
-        <div class="chip-toggle-row" data-group="destinatarios">
-          ${ROLES.map(role=>`<button type="button" class="${r.destinatarios.includes(role.id)?'on':''}" data-v="${role.id}">${role.label}</button>`).join('')}
+        <div class="chip-toggle-row" data-group="destinatariosRoles">
+          ${ROLES.map(role=>`<button type="button" class="${r.destinatariosRoles.includes(role.id)?'on':''}" data-v="${role.id}">${role.label}</button>`).join('')}
         </div>
       </div>
       <div class="regla-block">
         <label>Canal</label>
-        <div class="chip-toggle-row" data-group="canal">
-          ${CANALES.map(c=>`<button type="button" class="${r.canal.includes(c.id)?'on':''}" data-v="${c.id}">${c.label}</button>`).join('')}
+        <div class="chip-toggle-row" data-group="canales">
+          ${CANALES.map(c=>{
+            const enUso = r.canales.includes(c.id);
+            const proximamente = c.id!=='sistema';
+            return `<button type="button" class="${enUso?'on':''}" data-v="${c.id}" ${proximamente?'disabled title="Envío real por este canal: próximamente (ver Reporte Diario)"':''}>${c.label}${proximamente?' 🔜':''}</button>`;
+          }).join('')}
         </div>
       </div>
     </div>
@@ -343,14 +358,14 @@ function reglaHtml(r){
 function renderReglas(){
   document.getElementById('reglasList').innerHTML = REGLAS.map(reglaHtml).join('');
 }
-renderReglas();
 
 function renderKPI(){
   const activas = REGLAS.filter(r=>r.activa).length;
-  const hoy = HISTORIAL.filter(h=>h.fecha.startsWith('07/08')).length;
+  const hace24h = Date.now() - 24*60*60*1000;
+  const ultimas24h = HISTORIAL.filter(h=>h.fecha >= hace24h).length;
   const sinLeer = HISTORIAL.filter(h=>!h.leida).length;
   const canales = new Set();
-  REGLAS.filter(r=>r.activa).forEach(r=>r.canal.forEach(c=>canales.add(c)));
+  REGLAS.filter(r=>r.activa).forEach(r=>r.canales.forEach(c=>canales.add(c)));
   document.getElementById('kpiRow').innerHTML = `
     <div class="stat-tile">
       <span class="stat-label">Reglas activas</span>
@@ -358,14 +373,14 @@ function renderKPI(){
       <span class="stat-sub">Vigilando el sistema ahora mismo</span>
     </div>
     <div class="stat-tile">
-      <span class="stat-label">Disparadas hoy</span>
-      <span class="stat-value">${hoy}</span>
-      <span class="stat-sub">07/08/2026</span>
+      <span class="stat-label">Disparadas últimas 24h</span>
+      <span class="stat-value">${ultimas24h}</span>
+      <span class="stat-sub">En el historial de abajo</span>
     </div>
     <div class="stat-tile">
       <span class="stat-label">Sin leer</span>
       <span class="stat-value">${sinLeer}</span>
-      <span class="stat-sub">En el historial de abajo</span>
+      <span class="stat-sub">Por ti, en este historial</span>
     </div>
     <div class="stat-tile">
       <span class="stat-label">Canales en uso</span>
@@ -373,24 +388,32 @@ function renderKPI(){
       <span class="stat-sub">${[...canales].map(roleLabelCanal).join(' · ') || 'Ninguno'}</span>
     </div>`;
 }
-function roleLabelCanal(id){ return (CANALES.find(c=>c.id===id)||{}).label || id; }
-renderKPI();
 
 function renderHistorial(){
-  document.getElementById('historialList').innerHTML = HISTORIAL.map((h,i)=>{
-    const regla = DEFAULTS.find(r=>r.id===h.regla) || {};
-    return `<div class="hist-row ${h.leida?'':'unread'}" data-i="${i}">
-      <div class="hist-fecha">${h.fecha}</div>
+  document.getElementById('historialList').innerHTML = HISTORIAL.map((h)=>{
+    return `<div class="hist-row ${h.leida?'':'unread'}" data-id="${h._id}">
+      <div class="hist-fecha">${fmtFechaHist(h.fecha)}</div>
       <div>
-        <div class="hist-nombre">${h.leida?'':'<span class="unread-dot"></span>'}${regla.nombre||h.regla}</div>
+        <div class="hist-nombre">${h.leida?'':'<span class="unread-dot"></span>'}${h.nombreRegla}</div>
         <div class="hist-detalle">${h.detalle}</div>
-        <div class="hist-meta">${h.canal.map(c=>`<span class="hist-canal-pill">${roleLabelCanal(c)}</span>`).join('')}</div>
+        <div class="hist-meta">${h.canales.map(c=>`<span class="hist-canal-pill">${roleLabelCanal(c)}</span>`).join('')}</div>
       </div>
-      <div class="hist-dest">${h.destinatario}</div>
+      <div class="hist-dest">${h.destinatariosRoles.map(roleLabel).join(', ')}</div>
     </div>`;
-  }).join('');
+  }).join('') || '<p style="color:var(--ink-faint);font-size:.85rem;">Sin alertas registradas todavía.</p>';
 }
-renderHistorial();
+
+async function cargarTodo(){
+  const [reglas, historial] = await Promise.all([
+    window.Session.call(api.alertas.listReglas, {}, 'query'),
+    window.Session.call(api.alertas.listHistorial, { limite: 40 }, 'query'),
+  ]);
+  REGLAS = reglas;
+  HISTORIAL = historial;
+  renderReglas();
+  renderKPI();
+  renderHistorial();
+}
 
 function markDirty(){
   dirty = true;
@@ -402,7 +425,7 @@ function markDirty(){
 document.getElementById('reglasList').addEventListener('change', e=>{
   if(e.target.dataset.field !== 'activa') return;
   const row = e.target.closest('.regla-row');
-  const r = REGLAS.find(x=>x.id===row.dataset.id);
+  const r = REGLAS.find(x=>x.slug===row.dataset.id);
   r.activa = e.target.checked;
   row.classList.toggle('off', !r.activa);
   renderKPI();
@@ -411,15 +434,15 @@ document.getElementById('reglasList').addEventListener('change', e=>{
 document.getElementById('reglasList').addEventListener('input', e=>{
   if(e.target.dataset.field !== 'umbral') return;
   const row = e.target.closest('.regla-row');
-  const r = REGLAS.find(x=>x.id===row.dataset.id);
+  const r = REGLAS.find(x=>x.slug===row.dataset.id);
   r.umbral = parseFloat(e.target.value)||0;
   markDirty();
 });
 document.getElementById('reglasList').addEventListener('click', e=>{
-  const btn = e.target.closest('.chip-toggle-row button'); if(!btn) return;
+  const btn = e.target.closest('.chip-toggle-row button'); if(!btn || btn.disabled) return;
   const group = btn.closest('.chip-toggle-row').dataset.group;
   const row = btn.closest('.regla-row');
-  const r = REGLAS.find(x=>x.id===row.dataset.id);
+  const r = REGLAS.find(x=>x.slug===row.dataset.id);
   const v = btn.dataset.v;
   const list = r[group];
   const idx = list.indexOf(v);
@@ -429,23 +452,43 @@ document.getElementById('reglasList').addEventListener('click', e=>{
   markDirty();
 });
 
-function markAllRead(){
-  HISTORIAL.forEach(h=>h.leida=true);
+async function markAllRead(){
+  await window.Session.call(api.alertas.marcarTodasLeidas, {}, 'mutation');
+  const historial = await window.Session.call(api.alertas.listHistorial, { limite: 40 }, 'query');
+  HISTORIAL = historial;
   renderHistorial();
   renderKPI();
 }
 
-function saveReglas(){
-  SAVED = clone(REGLAS);
-  dirty = false;
-  document.getElementById('dirtyFlag').classList.remove('show');
-  document.getElementById('btnSave').disabled = true;
-  document.getElementById('btnReset').disabled = true;
-  const t = document.getElementById('toast');
-  t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 2400);
+async function saveReglas(){
+  const btn = document.getElementById('btnSave');
+  const errorBox = document.getElementById('saveError');
+  errorBox.hidden = true;
+  const textoOriginal = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Guardando…';
+  try{
+    // Una sola mutation atómica para las 7 reglas — un solo botón
+    // "Guardar cambios" para toda la lista (mismo patrón ya establecido).
+    await window.Session.call(api.alertas.guardarReglasCompleto, {
+      reglas: REGLAS.map(r => ({ slug: r.slug, activa: r.activa, umbral: r.umbral, destinatariosRoles: r.destinatariosRoles, canales: r.canales })),
+    }, 'mutation');
+    dirty = false;
+    document.getElementById('dirtyFlag').classList.remove('show');
+    btn.disabled = true; btn.textContent = textoOriginal;
+    document.getElementById('btnReset').disabled = true;
+    const t = document.getElementById('toast');
+    t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 2400);
+  }catch(err){
+    btn.disabled = false; btn.textContent = textoOriginal;
+    errorBox.hidden = false;
+    errorBox.textContent = '⚠ ' + (err?.message || String(err));
+  }
 }
-function resetReglas(){
-  REGLAS = clone(SAVED);
+async function resetReglas(){
+  // Descarta ediciones locales releyendo de Convex — el servidor es la
+  // única fuente de verdad, no una copia "SAVED" en memoria del cliente.
+  const reglas = await window.Session.call(api.alertas.listReglas, {}, 'query');
+  REGLAS = reglas;
   renderReglas();
   renderKPI();
   dirty = false;
@@ -460,4 +503,6 @@ function resetReglas(){
 window.markAllRead = markAllRead;
 window.saveReglas = saveReglas;
 window.resetReglas = resetReglas;
+
+await cargarTodo();
 </script>

@@ -43,3 +43,51 @@ export function sumarDiasISO(fechaISO: string, dias: number): string {
   dt.setUTCDate(dt.getUTCDate() + dias);
   return dt.toISOString().slice(0, 10);
 }
+
+/**
+ * Conversión inversa a `fechaOperativa`: dado un día calendario + hora de
+ * reloj ("HH:MM") EN una zona horaria, regresa el instante (epoch ms) que
+ * representa. Usada por el motor de alertas (7.2) para saber, p.ej., "¿ya
+ * pasó la hora de fin del Turno 1 de hoy + minutos de gracia?".
+ *
+ * Técnica estándar de "ida y vuelta": se interpreta la fecha+hora deseada
+ * COMO SI fuera UTC (instanteSupuesto), se formatea ese instante en la
+ * zona objetivo para ver qué hora de reloj resultó ahí, y se corrige
+ * `instanteSupuesto` por la diferencia — exacto en cualquier fecha/DST
+ * porque usa el offset vigente en ese instante concreto, no uno fijo.
+ */
+export function horaLocalAInstante(fechaISO: string, horaHHMM: string, zonaHoraria: string): number {
+  const [anio, mes, dia] = fechaISO.split('-').map(Number);
+  const [hora, minuto] = horaHHMM.split(':').map(Number);
+  const instanteSupuesto = Date.UTC(anio, mes - 1, dia, hora, minuto);
+
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: zonaHoraria,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false,
+  });
+  const partes = fmt.formatToParts(new Date(instanteSupuesto));
+  const get = (tipo: string) => partes.find((p) => p.type === tipo)?.value ?? '0';
+  const horaParte = get('hour') === '24' ? 0 : Number(get('hour'));
+  const horaLocalDeInstanteSupuesto = Date.UTC(
+    Number(get('year')), Number(get('month')) - 1, Number(get('day')),
+    horaParte, Number(get('minute')), Number(get('second'))
+  );
+  const diferencia = instanteSupuesto - horaLocalDeInstanteSupuesto;
+  return instanteSupuesto + diferencia;
+}
+
+/** Día de la semana en español minúsculas SIN acentos ("miercoles", no
+ * "miércoles") de una fecha "YYYY-MM-DD" — se ancla a mediodía UTC para no
+ * depender de ninguna zona horaria al resolver el día calendario puro
+ * (evita el borde de medianoche). Sin acentos a propósito: coincide con la
+ * convención ya usada por `parametrosProduccion.diasLaborales` en el seed
+ * (`['lunes','martes','miercoles','jueves','viernes']`) — Intl.DateTimeFormat
+ * regresa "miércoles"/"sábado" con acento, y comparar directo contra
+ * diasLaborales sin normalizar nunca los igualaría. */
+export function nombreDiaSemana(fechaISO: string): string {
+  const dt = new Date(`${fechaISO}T12:00:00Z`);
+  const conAcento = new Intl.DateTimeFormat('es-MX', { weekday: 'long', timeZone: 'UTC' }).format(dt);
+  return conAcento.normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
