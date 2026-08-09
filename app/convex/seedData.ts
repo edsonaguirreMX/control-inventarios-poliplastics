@@ -73,7 +73,10 @@ const MATERIALES = [
   },
 ];
 
-const ALERTAS_REGLAS = [
+// Exportada (no solo usada internamente) para que testHelpers.ts pueda
+// sembrar exactamente las mismas 7 reglas reales en convex-test, sin
+// duplicar los valores y arriesgar que diverjan del seed de producción.
+export const ALERTAS_REGLAS = [
   {
     slug: 'turno-sin-cerrar', nombre: 'Turno sin cerrar',
     descripcion: 'Avisa si un turno no se cierra dentro del tiempo esperado después de terminar.',

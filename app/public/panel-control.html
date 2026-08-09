@@ -1045,30 +1045,40 @@ document.getElementById('rangePick').addEventListener('click', e=>{
 });
 
 /* ============================================================
-   ALERTAS — mismas reglas que Configuración de Alertas, filtradas por rol
+   ALERTAS (7.4) — conteo y lista REAL de no leídas para el usuario de la
+   sesión (api.alertas.noLeidasParaMi), no una simulación por rol
+   previsualizado: el selector de rol de abajo solo cambia qué SECCIONES
+   del dashboard se muestran (para que admin pueda ver las 4 vistas), pero
+   las alertas de la campana son siempre las del usuario real que inició
+   sesión — admin no "hereda" las alertas de Compras solo por
+   previsualizar su vista.
    ============================================================ */
-const ALERTAS = [
-  {fecha:'07/08 22:15', nombre:'Material en punto de reorden crítico', detalle:'HDPE reciclado peletizado: 10,800 kg (bajo el punto de reorden)', roles:['compras','admin'], leida:false},
-  {fecha:'07/08 22:15', nombre:'Material en punto de reorden crítico', detalle:'Carbonato de calcio: 24,500 kg (bajo el punto de reorden)', roles:['compras','admin'], leida:false},
-  {fecha:'07/08 20:00', nombre:'% de merma por arriba de la meta', detalle:'5.8% vs. meta 5.0%', roles:['calidad','admin'], leida:true},
-  {fecha:'06/08 23:30', nombre:'Turno sin cerrar', detalle:'Línea 2 · Turno 2 sin cerrar 30 min después de su fin', roles:['admin'], leida:true},
-  {fecha:'05/08 09:00', nombre:'Entrada pendiente de costeo', detalle:'Carbonato de calcio, 6,500 kg sin costo unitario', roles:['compras','admin'], leida:false},
-  {fecha:'04/08 18:45', nombre:'Costo real por arriba del estándar', detalle:'+6.3% sobre estándar ($11.04 vs $10.39/kg)', roles:['gerencia','admin'], leida:true},
-];
-let currentRole = 'compras';
-function renderBell(role){
-  const mine = ALERTAS.filter(a=>a.roles.includes(role));
-  const unread = mine.filter(a=>!a.leida).length;
-  const badge = document.getElementById('bellBadge');
-  badge.hidden = unread===0;
-  badge.textContent = unread;
-  document.getElementById('bellList').innerHTML = mine.length ? mine.map(a=>`
-    <div class="bell-item ${a.leida?'':'unread'}">
-      <div class="n">${a.nombre}</div>
-      <div class="d">${a.detalle}</div>
-      <div class="f">${a.fecha}</div>
-    </div>`).join('') : '<div class="bell-empty">Sin alertas para esta vista.</div>';
+let NO_LEIDAS = [];
+function fmtFechaBell(ms){
+  return new Date(ms).toLocaleString('es-MX', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit', hour12:false });
 }
+function renderBell(){
+  const badge = document.getElementById('bellBadge');
+  badge.hidden = NO_LEIDAS.length===0;
+  badge.textContent = NO_LEIDAS.length;
+  document.getElementById('bellList').innerHTML = NO_LEIDAS.length ? NO_LEIDAS.map(a=>`
+    <div class="bell-item unread" data-id="${a._id}" title="Clic para marcar como leída">
+      <div class="n">${a.nombreRegla}</div>
+      <div class="d">${a.detalle}</div>
+      <div class="f">${fmtFechaBell(a.fecha)}</div>
+    </div>`).join('') : '<div class="bell-empty">Sin alertas sin leer.</div>';
+}
+async function cargarAlertas(){
+  NO_LEIDAS = await window.Session.call(api.alertas.noLeidasParaMi, {}, 'query');
+  renderBell();
+}
+document.getElementById('bellList').addEventListener('click', async e=>{
+  const item = e.target.closest('.bell-item[data-id]'); if(!item) return;
+  const id = item.dataset.id;
+  await window.Session.call(api.alertas.marcarAlertaLeida, { alertaId: id }, 'mutation');
+  NO_LEIDAS = NO_LEIDAS.filter(a=>a._id!==id);
+  renderBell();
+});
 function toggleBell(){
   document.getElementById('bellDropdown').hidden = !document.getElementById('bellDropdown').hidden;
 }
@@ -1077,6 +1087,7 @@ document.addEventListener('click', e=>{
   if(wrap && !wrap.contains(e.target)) document.getElementById('bellDropdown').hidden = true;
 });
 
+let currentRole = 'compras';
 function applyRole(role){
   currentRole = role;
   document.querySelectorAll('#roleSwitch .role-btn').forEach(c=>c.classList.toggle('active', c.dataset.role===role));
@@ -1084,7 +1095,6 @@ function applyRole(role){
     const roles = el.dataset.roles.split(' ');
     el.style.display = roles.includes(role) ? '' : 'none';
   });
-  renderBell(role);
 }
 document.getElementById('roleSwitch').addEventListener('click', e=>{
   const b = e.target.closest('button'); if(!b) return;
@@ -1164,6 +1174,7 @@ async function cargarTodo(){
     window.Session.call(api.dashboard.tendenciaMerma, { dias: 30 }, 'query'),
     window.Session.call(api.dashboard.tendenciaCosto, { dias: 30 }, 'query'),
     window.Session.call(api.dashboard.getObjetivos, {}, 'query'),
+    cargarAlertas(),
   ]);
   KPI = kpis;
   DATES30 = prodSerie.map(d => isoADisplayCorto(d.fecha));

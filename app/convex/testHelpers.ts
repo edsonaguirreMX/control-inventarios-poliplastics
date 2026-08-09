@@ -88,6 +88,24 @@ export async function crearParametrosPrueba(t: AnyTestConvex, kgPorMetro = 4) {
   });
 }
 
+// Siembra las mismas 7 reglas de alerta reales del seed de producción
+// (importadas de seedData.ts, no duplicadas) — evaluarAlertas (7.2) las
+// necesita para saber qué evaluar; convex-test arranca con las tablas
+// vacías, no corre seed.ts automáticamente.
+export async function crearReglasAlertaPrueba(t: AnyTestConvex) {
+  const { ALERTAS_REGLAS } = await import('./seedData');
+  return t.run(async (ctx) => {
+    const now = Date.now();
+    for (const r of ALERTAS_REGLAS) {
+      await ctx.db.insert('alertasReglas', {
+        slug: r.slug, nombre: r.nombre, descripcion: r.descripcion, activa: r.activa,
+        umbral: r.umbral, unidad: r.unidad, destinatariosRoles: r.destinatariosRoles,
+        canales: [...r.canales], updatedAt: now, updatedBy: null,
+      });
+    }
+  });
+}
+
 export async function crearCierreDummy(t: AnyTestConvex, capturadoPor: any) {
   return t.run(async (ctx) => {
     const now = Date.now();

@@ -176,6 +176,13 @@ a{color:inherit;}
   background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:.8rem 1.1rem;
   box-shadow:var(--shadow);
 }
+.field-warn{
+  margin:.8rem 0 0;padding:.55rem .7rem;border-radius:9px;
+  background:var(--warning-soft);color:var(--warning);font-size:.78rem;line-height:1.4;
+  display:flex;flex-direction:column;gap:.4rem;
+}
+.field-warn.error{background:var(--danger-soft);color:var(--danger);}
+.field-warn[hidden]{display:none;}
 .dirty-flag{margin-right:auto;font-size:.8rem;color:var(--warning);font-weight:600;display:none;align-items:center;gap:.4rem;}
 .dirty-flag.show{display:flex;}
 .dirty-flag .dot{width:7px;height:7px;border-radius:50%;background:var(--warning);}
@@ -211,7 +218,7 @@ footer.page-foot{font-size:.78rem;color:var(--ink-faint);border-top:1px solid va
       <div>
         <div class="eyebrow">Tejaflex · Control de Materias Primas</div>
         <h1>Reporte Diario</h1>
-        <p class="sub">Un PDF con todo lo relevante del día, generado solo y enviado a quien tú definas — sin que nadie tenga que entrar a revisar el Panel de Control.</p>
+        <p class="sub">Genera solo, todos los días, un enlace a la vista de impresión del Panel de Control — así queda un registro sin que nadie tenga que entrar a revisarlo. El envío automático por correo/WhatsApp es la siguiente fase: por ahora los destinatarios de abajo quedan capturados, listos para cuando se active.</p>
       </div>
       <div class="session-row" id="sessionRow"></div>
     </header>
@@ -237,7 +244,7 @@ footer.page-foot{font-size:.78rem;color:var(--ink-faint);border-top:1px solid va
       </div>
       <div class="sched-block">
         <label>Formato</label>
-        <span class="static-pill">📄 PDF</span>
+        <span class="static-pill" title="El navegador genera el PDF con Imprimir → Guardar como PDF sobre la vista de impresión del Panel de Control">🖨️ Vista de impresión</span>
       </div>
       <div class="sched-block">
         <label>Estado</label>
@@ -247,7 +254,7 @@ footer.page-foot{font-size:.78rem;color:var(--ink-faint);border-top:1px solid va
         </div>
       </div>
       <div class="sched-block" style="margin-left:auto;">
-        <button class="btn-generate" onclick="generarAhora()">📄 Generar y enviar ahora</button>
+        <button class="btn-generate" onclick="generarAhora()">📄 Generar ahora</button>
       </div>
     </div>
   </section>
@@ -261,7 +268,7 @@ footer.page-foot{font-size:.78rem;color:var(--ink-faint);border-top:1px solid va
     </div>
     <div class="check-list" id="contenidoList"></div>
     <ul class="footnotes">
-      <li>Por ahora, el PDF que se genera incluye todas las secciones del Panel de Control tal cual. Elegir cuáles de estas entran o no al PDF final es un ajuste que dejamos para más adelante — de momento esta lista describe qué trae siempre.</li>
+      <li>Por ahora, el reporte incluye todas las secciones del Panel de Control tal cual (vista de impresión, no un PDF generado por el servidor). Elegir cuáles de estas entran o no es un ajuste que dejamos para más adelante — de momento esta lista describe qué trae siempre.</li>
     </ul>
   </section>
 
@@ -269,7 +276,7 @@ footer.page-foot{font-size:.78rem;color:var(--ink-faint);border-top:1px solid va
     <div class="card-head">
       <div>
         <h3>Destinatarios</h3>
-        <p class="card-sub">A quién le llega el PDF, por qué canal.</p>
+        <p class="card-sub">Captura aquí a quién le llegaría el reporte por correo/WhatsApp — el envío real todavía no está activo (próxima fase); por ahora estos datos solo quedan guardados.</p>
       </div>
     </div>
 
@@ -292,6 +299,8 @@ footer.page-foot{font-size:.78rem;color:var(--ink-faint);border-top:1px solid va
     </div>
   </section>
 
+  <div class="field-warn error" id="saveError" hidden></div>
+
   <div class="action-bar">
     <span class="dirty-flag" id="dirtyFlag"><span class="dot"></span>Cambios sin guardar</span>
     <button class="btn-ghost" id="btnReset" disabled onclick="resetConfig()">Restablecer</button>
@@ -309,12 +318,12 @@ footer.page-foot{font-size:.78rem;color:var(--ink-faint);border-top:1px solid va
   </section>
 
   <footer class="page-foot">
-    Mockup de diseño — el envío automático diario y su historial son ilustrativos. El botón "Generar y enviar ahora" sí produce el PDF real, usando la misma vista de impresión del Panel de Control. Basado en el Documento de Funcionalidades del Sistema de Control de Materias Primas Tejaflex.
+    Mockup de diseño — la lista de "Contenido del reporte" es ilustrativa (no se guarda todavía). El botón "Generar ahora" sí crea un registro real en el historial y abre la vista de impresión del Panel de Control; la generación automática diaria (a la hora configurada) también es real. El envío por correo/WhatsApp llega en una fase posterior — por ahora los destinatarios solo quedan capturados. Basado en el Documento de Funcionalidades del Sistema de Control de Materias Primas Tejaflex.
   </footer>
 
 </div>
 
-<div class="toast" id="toast">✓ Reporte generado y enviado</div>
+<div class="toast" id="toast">✓ Reporte generado</div>
 
 <script src="/config.js"></script>
 <script type="module" src="/js/convex-client.js"></script>
@@ -349,6 +358,7 @@ if (row) {
 // del orden de documento — espera la MISMA promesa que ya se está
 // resolviendo ahí (no dispara un requireRole nuevo).
 await window.__authReady;
+const api = window.api; // expuesto por session.js (bundleado) — ver su comentario
 const PANEL_CONTROL_URL = '/panel-control.html';
 
 const CONTENIDO = [
@@ -362,23 +372,15 @@ document.getElementById('contenidoList').innerHTML = CONTENIDO.map((c,i)=>`
   <label class="check-row"><input type="checkbox" data-idx="${i}" checked> ${c}</label>`).join('');
 document.getElementById('contenidoList').addEventListener('change', markDirty);
 
-const DEFAULTS = {
-  hora: '14:00',
-  activo: true,
-  correos: ['ana.torres@tejaflex.com', 'luis.ramirez@tejaflex.com', 'marisol.pena@tejaflex.com', 'edson@tejaflex.com'],
-  whatsapp: ['+52 33 1234 5678'],
-};
-let CONFIG = JSON.parse(JSON.stringify(DEFAULTS));
-let SAVED = JSON.parse(JSON.stringify(DEFAULTS));
+// CONFIG/HISTORIAL se llenan con datos reales de Convex (cargarTodo, más
+// abajo) — nunca hardcodeados.
+let CONFIG = { hora: '14:00', activo: false, correos: [], whatsapp: [] };
+let HISTORIAL = [];
 let dirty = false;
 
-const HISTORIAL = [
-  {fecha:'07/08/2026 14:00', correos:4, whatsapp:1, estado:'ok'},
-  {fecha:'06/08/2026 14:00', correos:4, whatsapp:1, estado:'ok'},
-  {fecha:'05/08/2026 14:00', correos:4, whatsapp:1, estado:'ok'},
-  {fecha:'04/08/2026 14:00', correos:3, whatsapp:1, estado:'fail'},
-  {fecha:'03/08/2026 14:00', correos:4, whatsapp:1, estado:'ok'},
-];
+function fmtFechaHist(ms){
+  return new Date(ms).toLocaleString('es-MX', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', hour12:false });
+}
 
 function renderChips(){
   document.getElementById('correoChips').innerHTML = CONFIG.correos.length
@@ -388,7 +390,6 @@ function renderChips(){
     ? CONFIG.whatsapp.map((c,i)=>`<span class="dest-chip">${c}<button onclick="quitarDestinatario('whatsapp',${i})" title="Quitar">✕</button></span>`).join('')
     : '<span class="dest-empty">Sin destinatarios de WhatsApp.</span>';
 }
-renderChips();
 
 function agregarDestinatario(tipo){
   const input = document.getElementById(tipo==='correo' ? 'nuevoCorreo' : 'nuevoWhatsapp');
@@ -416,40 +417,54 @@ function proximoEnvioLabel(){
 }
 function renderKPI(){
   const totalDest = CONFIG.correos.length + CONFIG.whatsapp.length;
-  const esteMes = HISTORIAL.length;
+  const registrados = HISTORIAL.length;
   document.getElementById('kpiRow').innerHTML = `
     <div class="stat-tile">
-      <span class="stat-label">Próximo envío</span>
+      <span class="stat-label">Próxima generación</span>
       <span class="stat-value" style="font-size:1.1rem;">${CONFIG.activo ? proximoEnvioLabel() : '—'}</span>
       <span class="stat-sub">${CONFIG.activo ? 'Todos los días' : 'Reporte desactivado'}</span>
     </div>
     <div class="stat-tile">
-      <span class="stat-label">Destinatarios</span>
+      <span class="stat-label">Destinatarios capturados</span>
       <span class="stat-value">${totalDest}</span>
-      <span class="stat-sub">${CONFIG.correos.length} correo · ${CONFIG.whatsapp.length} WhatsApp</span>
+      <span class="stat-sub">${CONFIG.correos.length} correo · ${CONFIG.whatsapp.length} WhatsApp (aún sin envío real)</span>
     </div>
     <div class="stat-tile">
-      <span class="stat-label">Envíos registrados</span>
-      <span class="stat-value">${esteMes}</span>
+      <span class="stat-label">Registrados</span>
+      <span class="stat-value">${registrados}</span>
       <span class="stat-sub">En el historial de abajo</span>
     </div>
     <div class="stat-tile">
       <span class="stat-label">Estado</span>
       <span class="stat-value" style="font-size:1.1rem;">${CONFIG.activo ? '🟢 Activo' : '⚪ Inactivo'}</span>
-      <span class="stat-sub">Formato PDF</span>
+      <span class="stat-sub">Vista de impresión</span>
     </div>`;
 }
-renderKPI();
 
+const GENERADO_POR_LABEL = { cron: 'Automático', manual: 'Manual' };
 function renderHistorial(){
-  document.getElementById('historialList').innerHTML = HISTORIAL.map(h=>`
+  document.getElementById('historialList').innerHTML = HISTORIAL.length ? HISTORIAL.map(h=>`
     <div class="hist-row">
-      <div class="hist-fecha">${h.fecha}</div>
-      <div class="hist-dest">${h.correos} correo(s) · ${h.whatsapp} WhatsApp</div>
-      <div class="hist-estado ${h.estado==='ok'?'ok':'fail'}">${h.estado==='ok' ? '✓ Enviado' : '✗ Falló'}</div>
-    </div>`).join('');
+      <div class="hist-fecha">${fmtFechaHist(h.fecha)}</div>
+      <div class="hist-dest">${GENERADO_POR_LABEL[h.generadoPor]||h.generadoPor} · ${h.destinatariosCount} destinatario(s) capturados</div>
+      <div class="hist-estado ${h.estado==='generado'?'ok':'fail'}">${h.estado==='generado' ? '✓ Generado' : ('✗ Falló' + (h.detalleError?`: ${h.detalleError}`:''))}</div>
+    </div>`).join('') : '<p style="color:var(--ink-faint);font-size:.85rem;">Sin reportes generados todavía.</p>';
 }
-renderHistorial();
+
+async function cargarTodo(){
+  const [config, historial] = await Promise.all([
+    window.Session.call(api.reporteDiario.getConfig, {}, 'query'),
+    window.Session.call(api.reporteDiario.listHistorial, { limite: 30 }, 'query'),
+  ]);
+  CONFIG = config;
+  HISTORIAL = historial;
+  document.getElementById('horaEnvio').value = CONFIG.hora;
+  document.getElementById('reporteActivo').checked = CONFIG.activo;
+  document.getElementById('estadoLabel').textContent = CONFIG.activo ? 'Activo' : 'Inactivo';
+  renderChips();
+  renderKPI();
+  renderHistorial();
+}
 
 function markDirty(){
   dirty = true;
@@ -469,27 +484,45 @@ document.getElementById('reporteActivo').addEventListener('change', e=>{
   markDirty();
 });
 
-function generarAhora(){
-  const t = document.getElementById('toast');
-  t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 2600);
-  HISTORIAL.unshift({fecha:'07/08/2026 (manual)', correos:CONFIG.correos.length, whatsapp:CONFIG.whatsapp.length, estado:'ok'});
+async function generarAhora(){
+  await window.Session.call(api.reporteDiario.generarReporteAhora, {}, 'mutation');
+  const historial = await window.Session.call(api.reporteDiario.listHistorial, { limite: 30 }, 'query');
+  HISTORIAL = historial;
   renderHistorial();
   renderKPI();
+  const t = document.getElementById('toast');
+  t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 2600);
   window.open(PANEL_CONTROL_URL+'?autoprint=1', '_blank');
 }
 
-function saveConfig(){
-  SAVED = JSON.parse(JSON.stringify(CONFIG));
-  dirty = false;
-  document.getElementById('dirtyFlag').classList.remove('show');
-  document.getElementById('btnSave').disabled = true;
-  document.getElementById('btnReset').disabled = true;
-  const t = document.getElementById('toast');
-  t.textContent = '✓ Configuración guardada';
-  t.classList.add('show'); setTimeout(()=>{ t.classList.remove('show'); t.textContent='✓ Reporte generado y enviado'; }, 2400);
+async function saveConfig(){
+  const btn = document.getElementById('btnSave');
+  const errorBox = document.getElementById('saveError');
+  errorBox.hidden = true;
+  const textoOriginal = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Guardando…';
+  try{
+    await window.Session.call(api.reporteDiario.guardarConfig, {
+      hora: CONFIG.hora, activo: CONFIG.activo, correos: CONFIG.correos, whatsapp: CONFIG.whatsapp,
+    }, 'mutation');
+    dirty = false;
+    document.getElementById('dirtyFlag').classList.remove('show');
+    btn.disabled = true; btn.textContent = textoOriginal;
+    document.getElementById('btnReset').disabled = true;
+    const t = document.getElementById('toast');
+    t.textContent = '✓ Configuración guardada';
+    t.classList.add('show'); setTimeout(()=>{ t.classList.remove('show'); t.textContent='✓ Reporte generado'; }, 2400);
+  }catch(err){
+    btn.disabled = false; btn.textContent = textoOriginal;
+    errorBox.hidden = false;
+    errorBox.textContent = '⚠ ' + (err?.message || String(err));
+  }
 }
-function resetConfig(){
-  CONFIG = JSON.parse(JSON.stringify(SAVED));
+async function resetConfig(){
+  // Descarta ediciones locales releyendo de Convex — el servidor es la
+  // única fuente de verdad, no una copia "SAVED" en memoria del cliente.
+  const config = await window.Session.call(api.reporteDiario.getConfig, {}, 'query');
+  CONFIG = config;
   document.getElementById('horaEnvio').value = CONFIG.hora;
   document.getElementById('reporteActivo').checked = CONFIG.activo;
   document.getElementById('estadoLabel').textContent = CONFIG.activo ? 'Activo' : 'Inactivo';
@@ -509,4 +542,6 @@ window.quitarDestinatario = quitarDestinatario;
 window.generarAhora = generarAhora;
 window.saveConfig = saveConfig;
 window.resetConfig = resetConfig;
+
+await cargarTodo();
 </script>

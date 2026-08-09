@@ -8,16 +8,19 @@
  * @module
  */
 
+import type * as alertas from "../alertas.js";
 import type * as auth from "../auth.js";
 import type * as authActions from "../authActions.js";
 import type * as cierreEngine from "../cierreEngine.js";
 import type * as cierres from "../cierres.js";
 import type * as correcciones from "../correcciones.js";
+import type * as crons from "../crons.js";
 import type * as dashboard from "../dashboard.js";
 import type * as entradas from "../entradas.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_fechaOperativa from "../lib/fechaOperativa.js";
 import type * as peps from "../peps.js";
+import type * as reporteDiario from "../reporteDiario.js";
 import type * as seed from "../seed.js";
 import type * as seedData from "../seedData.js";
 import type * as testHelpers from "../testHelpers.js";
@@ -30,16 +33,19 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  alertas: typeof alertas;
   auth: typeof auth;
   authActions: typeof authActions;
   cierreEngine: typeof cierreEngine;
   cierres: typeof cierres;
   correcciones: typeof correcciones;
+  crons: typeof crons;
   dashboard: typeof dashboard;
   entradas: typeof entradas;
   "lib/auth": typeof lib_auth;
   "lib/fechaOperativa": typeof lib_fechaOperativa;
   peps: typeof peps;
+  reporteDiario: typeof reporteDiario;
   seed: typeof seed;
   seedData: typeof seedData;
   testHelpers: typeof testHelpers;
