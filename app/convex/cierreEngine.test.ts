@@ -123,6 +123,67 @@ describe('cierreEngine: motor de aplicar/revertir cierre (tarea 3.2)', () => {
     expect(capasTriturado.filter((c) => !c.agotada)).toHaveLength(1); // solo una activa
   });
 
+  // EDS-71 (auditoría de PR2): revertirCierreImpl elegía "la capa de
+  // Triturado más reciente" comparando `createdAt` (Date.now() propio de
+  // la app) entre TODAS las capas del mismo cierreTurnoId — con 2+ capas
+  // en la mesa (varias rondas de recaptura), un empate de milisegundo
+  // podía elegir la equivocada. Este test deja 3 capas en la tabla (2 ya
+  // voided de rondas anteriores + 1 viva) para las que la selección
+  // ANTES dependía de comparar timestamps, y ahora se basa en cuál no
+  // tiene `reversa_generacion` en su ledger — sin importar el orden de
+  // inserción ni si dos quedaron con el mismo `createdAt`.
+  test('EDS-71: con 3 rondas de recaptura (3 capas de Triturado, 2 ya voided), revertir la última elige la capa viva correcta', async () => {
+    const t = convexTest(schema, modules);
+    const { userId, matAId } = await setupBase(t);
+    await sembrarCapaMatA(t, matAId, userId, 500, 5);
+    const cierreId = await crearCierreDummy(t, userId);
+
+    // Ronda 1
+    await t.run((ctx) =>
+      aplicarCierreImpl(ctx, {
+        cierreTurnoId: cierreId, metrosBuenos: 40, caballetes105Pzas: 0, caballetes106Pzas: 0,
+        consumoPorMaterial: [{ materialId: matAId, kgConsumido: 180 }], createdBy: userId,
+      })
+    );
+    await t.run((ctx) => revertirCierreImpl(ctx, { cierreTurnoId: cierreId, createdBy: userId }));
+    // Ronda 2
+    await t.run((ctx) =>
+      aplicarCierreImpl(ctx, {
+        cierreTurnoId: cierreId, metrosBuenos: 35, caballetes105Pzas: 0, caballetes106Pzas: 0,
+        consumoPorMaterial: [{ materialId: matAId, kgConsumido: 150 }], createdBy: userId,
+      })
+    );
+    await t.run((ctx) => revertirCierreImpl(ctx, { cierreTurnoId: cierreId, createdBy: userId }));
+    // Ronda 3 (la que debe quedar viva al final)
+    const r3 = await t.run((ctx) =>
+      aplicarCierreImpl(ctx, {
+        cierreTurnoId: cierreId, metrosBuenos: 30, caballetes105Pzas: 0, caballetes106Pzas: 0,
+        consumoPorMaterial: [{ materialId: matAId, kgConsumido: 130 }], createdBy: userId,
+      })
+    );
+    expect(r3.trituradoKg).toBe(10); // 130 - 120
+
+    // Ahora hay 3 capas de Triturado con el mismo cierreTurnoId: 2 voided
+    // (rondas 1 y 2) + 1 viva (ronda 3). Revertir debe encontrar y voidear
+    // EXACTAMENTE la de la ronda 3 — nunca lanzar el error de "más de una
+    // capa viva" (probaría que la detección de vivas/voided es correcta).
+    const capasAntes = await t.run((ctx) =>
+      ctx.db.query('capasCosto').withIndex('by_cierreTurnoId_origen', (q) => q.eq('cierreTurnoId', cierreId).eq('origen', 'triturado')).collect()
+    );
+    expect(capasAntes).toHaveLength(3);
+    expect(capasAntes.filter((c) => !c.agotada)).toHaveLength(1);
+
+    await expect(
+      t.run((ctx) => revertirCierreImpl(ctx, { cierreTurnoId: cierreId, createdBy: userId }))
+    ).resolves.not.toThrow();
+
+    const capasDespues = await t.run((ctx) =>
+      ctx.db.query('capasCosto').withIndex('by_cierreTurnoId_origen', (q) => q.eq('cierreTurnoId', cierreId).eq('origen', 'triturado')).collect()
+    );
+    expect(capasDespues.filter((c) => !c.agotada)).toHaveLength(0); // las 3 quedaron voided, ninguna viva
+    expect(capasDespues.every((c) => c.kgRestante === 0)).toBe(true);
+  });
+
   test('bloquea revertir si el Triturado generado ya fue consumido PARCIALMENTE por un cierre posterior', async () => {
     const t = convexTest(schema, modules);
     const { userId, matAId, trituradoId } = await setupBase(t);
