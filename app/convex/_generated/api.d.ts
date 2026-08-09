@@ -25,6 +25,8 @@ import type * as seed from "../seed.js";
 import type * as seedData from "../seedData.js";
 import type * as testHelpers from "../testHelpers.js";
 import type * as tiempo from "../tiempo.js";
+import type * as usuarios from "../usuarios.js";
+import type * as usuariosActions from "../usuariosActions.js";
 
 import type {
   ApiFromModules,
@@ -50,6 +52,8 @@ declare const fullApi: ApiFromModules<{
   seedData: typeof seedData;
   testHelpers: typeof testHelpers;
   tiempo: typeof tiempo;
+  usuarios: typeof usuarios;
+  usuariosActions: typeof usuariosActions;
 }>;
 
 /**

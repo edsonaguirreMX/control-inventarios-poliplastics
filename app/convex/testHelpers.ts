@@ -43,12 +43,16 @@ export async function crearMaterialPrueba(
   });
 }
 
-export async function crearUsuarioPrueba(t: AnyTestConvex, rol: 'operador' | 'admin' | 'compras' | 'gerencia' | 'calidad') {
+export async function crearUsuarioPrueba(
+  t: AnyTestConvex,
+  rol: 'operador' | 'admin' | 'compras' | 'gerencia' | 'calidad',
+  usuarioOverride?: string
+) {
   return t.run(async (ctx) => {
     const now = Date.now();
     return ctx.db.insert('users', {
       nombre: `Test ${rol}`,
-      usuario: `test.${rol}.${Math.random().toString(36).slice(2)}`,
+      usuario: usuarioOverride ?? `test.${rol}.${Math.random().toString(36).slice(2)}`,
       passwordHash: 'no-se-usa-en-estas-pruebas',
       rol,
       activo: true,
