@@ -72,11 +72,30 @@ async function actualizarUsuarioImpl(ctx: MutationCtx, args: ActualizarUsuarioAr
   await ctx.db.patch(args.userId, patch);
 }
 
+// Invariante del sistema: SIEMPRE debe quedar al menos un usuario
+// activo con rol admin — si no, nadie puede volver a entrar a Gestión de
+// Usuarios (ni a nada admin-only) para revertirlo. Se llama al FINAL de
+// updateUsuario/guardarUsuariosCompleto (nunca fila por fila dentro de un
+// loop — un batch legítimo puede reasignar roles entre varias personas y
+// pasar por un estado intermedio sin admin antes de terminar). Cubre el
+// vector que el guard de autodesactivación de eliminarUsuario NO cubre:
+// un admin puede quedarse "activo" pero cambiar su propio rol a algo que
+// no es admin vía updateUsuario/guardarUsuariosCompleto — el guard de
+// eliminarUsuario solo mira `activo`, no `rol`.
+async function verificarQuedaAlMenosUnAdminActivo(ctx: MutationCtx): Promise<void> {
+  const todos = await ctx.db.query('users').collect();
+  const quedaAdmin = todos.some((u) => u.activo && u.rol === 'admin');
+  if (!quedaAdmin) {
+    throw new Error('Ese cambio dejaría al sistema sin ningún admin activo — nadie podría volver a entrar a Gestión de Usuarios.');
+  }
+}
+
 export const updateUsuario = mutation({
   args: { userId: v.id('users'), nombre: v.optional(v.string()), usuario: v.optional(v.string()), rol: v.optional(ROL_VALUE), token: v.string() },
   handler: async (ctx, args) => {
     await requireRole(ctx, args.token, ['admin']);
     await actualizarUsuarioImpl(ctx, args);
+    await verificarQuedaAlMenosUnAdminActivo(ctx);
     return { ok: true };
   },
 });
@@ -100,6 +119,7 @@ export const guardarUsuariosCompleto = mutation({
     for (const u of args.usuarios) {
       await actualizarUsuarioImpl(ctx, u);
     }
+    await verificarQuedaAlMenosUnAdminActivo(ctx);
     return { ok: true };
   },
 });
@@ -123,12 +143,19 @@ export const crearUsuarioImpl = internalMutation({
 });
 
 // Llamada por usuariosActions.ts (regenerarPassword) DESPUÉS de hashear.
+// Invalida también las sesiones activas del usuario — si la contraseña se
+// regenera por sospecha de que alguien más la tiene, una sesión ya abierta
+// no debe seguir funcionando con la contraseña vieja hasta que expire sola.
 export const actualizarPasswordImpl = internalMutation({
   args: { userId: v.id('users'), passwordHash: v.string() },
   handler: async (ctx, args) => {
     const existente = await ctx.db.get(args.userId);
     if (!existente) throw new Error('regenerarPassword: el usuario no existe.');
     await ctx.db.patch(args.userId, { passwordHash: args.passwordHash, updatedAt: Date.now() });
+    const sesiones = await ctx.db.query('sessions').withIndex('by_userId', (q) => q.eq('userId', args.userId)).collect();
+    for (const s of sesiones) {
+      await ctx.db.delete(s._id);
+    }
   },
 });
 
@@ -142,14 +169,17 @@ export const actualizarPasswordImpl = internalMutation({
 // la pantalla el resultado es el mismo que promete el mockup: "ya no podrá
 // iniciar sesión" — requireUser ya rechaza activo:false — y además se
 // invalidan sus sesiones activas para que el efecto sea inmediato.
-// El guard de "no te desactives a ti mismo" (abajo) ya es, por sí solo,
-// suficiente para que el sistema NUNCA se quede sin ningún admin activo:
-// quien llama esta mutation siempre es un admin activo (requireRole ya lo
-// exige), así que si desactiva a alguien MÁS, el que llama sigue activo —
-// el conteo de admins activos jamás puede llegar a 0 por esta vía. Un
-// guard adicional de "no desactives al último admin" sería código muerto
-// (nunca podría dispararse sin que el de arriba ya lo hubiera bloqueado
-// antes) — se dejó fuera a propósito, no por descuido.
+// El guard de "no te desactives a ti mismo" (abajo) cubre el vector
+// `activo` de esta mutation específica: quien llama siempre es un admin
+// activo (requireRole ya lo exige), así que si desactiva a alguien MÁS,
+// el que llama sigue activo — el conteo de admins activos jamás llega a 0
+// por ESTA vía. Pero NO cubre el vector `rol`: un admin activo podría
+// cambiar su propio rol a algo que no es admin vía updateUsuario/
+// guardarUsuariosCompleto sin tocar `activo` — por eso esas dos mutations
+// tienen su propio guard aparte (verificarQuedaAlMenosUnAdminActivo,
+// arriba), que sí cubre ese caso (hallazgo bloqueante de la auditoría de
+// PR 7: no asumir que un guard resuelve todos los caminos hacia el mismo
+// estado inválido, solo el que se pensó al escribirlo).
 export const eliminarUsuario = mutation({
   args: { userId: v.id('users'), token: v.string() },
   handler: async (ctx, args) => {

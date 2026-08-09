@@ -139,6 +139,52 @@ describe('usuarios: updateUsuario / guardarUsuariosCompleto (tarea 9.1)', () => 
   });
 });
 
+describe('usuarios: invariante "siempre queda al menos un admin activo" (tarea 9.1) — BLOQUEANTE de la auditoría de PR 7', () => {
+  test('el único admin no puede cambiarse a sí mismo a otro rol vía updateUsuario — no persiste nada', async () => {
+    const t = convexTest(schema, modules);
+    const { adminToken, adminId } = await setup(t);
+    // setup() también crea un usuario de compras, pero NO otro admin —
+    // adminId es el único admin activo del sistema en este test.
+    await expect(
+      t.mutation(api.usuarios.updateUsuario, { userId: adminId, rol: 'compras', token: adminToken })
+    ).rejects.toThrow(/sin ningún admin activo/);
+
+    const usuarios = await t.query(api.usuarios.listUsuarios, { token: adminToken });
+    expect(usuarios.find((u) => u._id === adminId)?.rol).toBe('admin'); // no quedó a medias
+  });
+
+  test('el único admin no puede cambiarse a sí mismo a otro rol vía guardarUsuariosCompleto — no persiste nada, ni siquiera cambios de OTRAS filas del mismo batch', async () => {
+    const t = convexTest(schema, modules);
+    const { adminToken, adminId } = await setup(t);
+    const otroId = await crearUsuarioPrueba(t, 'operador');
+
+    await expect(
+      t.mutation(api.usuarios.guardarUsuariosCompleto, {
+        usuarios: [{ userId: otroId, nombre: 'Otro Nombre Nuevo' }, { userId: adminId, rol: 'compras' }],
+        token: adminToken,
+      })
+    ).rejects.toThrow(/sin ningún admin activo/);
+
+    const usuarios = await t.query(api.usuarios.listUsuarios, { token: adminToken });
+    expect(usuarios.find((u) => u._id === adminId)?.rol).toBe('admin');
+    expect(usuarios.find((u) => u._id === otroId)?.nombre).not.toBe('Otro Nombre Nuevo'); // el batch entero se revirtió
+  });
+
+  test('SÍ permite cambiar de rol si queda otro admin activo', async () => {
+    const t = convexTest(schema, modules);
+    const { adminToken, adminId } = await setup(t);
+    const segundoAdminId = await crearUsuarioPrueba(t, 'admin'); // segundo admin activo — ahora el cambio es seguro
+    const segundoAdminToken = await crearSesionPrueba(t, segundoAdminId);
+
+    await t.mutation(api.usuarios.updateUsuario, { userId: adminId, rol: 'gerencia', token: adminToken });
+    // Se consulta con el SEGUNDO admin, no con adminToken — adminId ya no
+    // es admin después del cambio, así que su propio token ya no pasa
+    // requireRole(['admin']) (comportamiento correcto, no un bug de este test).
+    const usuarios = await t.query(api.usuarios.listUsuarios, { token: segundoAdminToken });
+    expect(usuarios.find((u) => u._id === adminId)?.rol).toBe('gerencia');
+  });
+});
+
 describe('usuarios: regenerarPassword (tarea 9.1)', () => {
   test('el password viejo deja de servir y el nuevo sí funciona', async () => {
     const t = convexTest(schema, modules);
@@ -165,6 +211,22 @@ describe('usuarios: regenerarPassword (tarea 9.1)', () => {
     await expect(
       t.action(api.usuariosActions.regenerarPassword, { userId: compradorId, token: comprasToken })
     ).rejects.toThrow();
+  });
+
+  test('MAYOR (auditoría de PR 7): invalida las sesiones activas del usuario objetivo — una sesión ya abierta con la contraseña vieja deja de funcionar de inmediato', async () => {
+    const t = convexTest(schema, modules);
+    const { adminToken } = await setup(t);
+    const operadorId = await crearUsuarioPrueba(t, 'operador');
+    await crearSesionPrueba(t, operadorId);
+
+    // La sesión existe y es válida ANTES de regenerar.
+    const antes = await t.run((ctx) => ctx.db.query('sessions').withIndex('by_userId', (q) => q.eq('userId', operadorId)).collect());
+    expect(antes).toHaveLength(1);
+
+    await t.action(api.usuariosActions.regenerarPassword, { userId: operadorId, token: adminToken });
+
+    const despues = await t.run((ctx) => ctx.db.query('sessions').withIndex('by_userId', (q) => q.eq('userId', operadorId)).collect());
+    expect(despues).toHaveLength(0);
   });
 });
 
