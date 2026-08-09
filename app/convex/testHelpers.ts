@@ -11,7 +11,14 @@ export async function crearMaterialPrueba(
     slug: string;
     nombre: string;
     esInterno: boolean;
+    esSustituto: boolean;
     activo: boolean;
+    costoEstandar: number;
+    leadTimeDias: number | null;
+    stockSeguridadDias: number | null;
+    reorderMode: 'auto' | 'manual';
+    reorderManualKg: number | null;
+    cantidadPedirKg: number | null;
   }> = {}
 ) {
   return t.run(async (ctx) => {
@@ -21,13 +28,13 @@ export async function crearMaterialPrueba(
       nombre: overrides.nombre ?? 'Material de prueba',
       variante: 'temporal',
       esInterno: overrides.esInterno ?? false,
-      esSustituto: false,
-      costoEstandar: 1,
-      leadTimeDias: 1,
-      stockSeguridadDias: 1,
-      reorderMode: 'auto',
-      reorderManualKg: null,
-      cantidadPedirKg: null,
+      esSustituto: overrides.esSustituto ?? false,
+      costoEstandar: overrides.costoEstandar ?? 1,
+      leadTimeDias: overrides.leadTimeDias ?? 1,
+      stockSeguridadDias: overrides.stockSeguridadDias ?? 1,
+      reorderMode: overrides.reorderMode ?? 'auto',
+      reorderManualKg: overrides.reorderManualKg ?? null,
+      cantidadPedirKg: overrides.cantidadPedirKg ?? null,
       orden: 999,
       activo: overrides.activo ?? true,
       updatedAt: now,

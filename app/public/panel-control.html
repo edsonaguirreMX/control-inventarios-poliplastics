@@ -207,6 +207,17 @@ button{font-family:inherit;}
 }
 .insight b{color:var(--ink);}
 
+/* Banner inline de error (nunca alert() — congela la automatización de
+   pruebas y es peor UX). Sin la regla [hidden], display:flex del autor le
+   gana al estilo por defecto del navegador y el banner nunca se oculta
+   aunque JS ponga hidden=true (bug real encontrado y corregido en PR3). */
+.field-warn{
+  margin-top:.6rem;padding:.55rem .7rem;border-radius:9px;
+  background:var(--warning-soft);color:var(--warning);font-size:.78rem;line-height:1.4;
+}
+.field-warn.error{background:var(--danger-soft);color:var(--danger);}
+.field-warn[hidden]{display:none;}
+
 /* ---------- existencias ---------- */
 .exist-row{display:grid;grid-template-columns:11rem 1fr 5.5rem 6.5rem 8.5rem;gap:.9rem;align-items:center;padding:.6rem 0;border-bottom:1px solid var(--border);}
 .exist-pedir{text-align:right;}
@@ -429,6 +440,7 @@ footer.page-foot{font-size:.78rem;color:var(--ink-faint);border-top:1px solid va
         <div class="chart-wrap" id="prodL2ChartWrap"></div>
       </div>
     </div>
+    <div class="field-warn error" id="objSaveError" hidden></div>
     <div class="chart-table" id="prodL1Table" hidden></div>
   </section>
 
@@ -553,68 +565,55 @@ footer.page-foot{font-size:.78rem;color:var(--ink-faint);border-top:1px solid va
    que el HTML llama por onclick="" se exponen a window al final
    del archivo — un module normal no las haría globales por sí solo. */
 /* ============================================================
-   DATOS ILUSTRATIVOS
+   SESIÓN (autenticación real — Épica 1) — primero que nada: todo lo
+   demás depende de sessionUser/api ya resueltos.
    ============================================================ */
-const MATERIALS = [
-  {id:'hdpe-r-pel', name:'HDPE reciclado', variant:'peletizado', costo:14.50, leadTime:10, kgPorCarga:25, actual:10800, cantidadPedir:20000},
-  {id:'hdpe-v-pel', name:'HDPE virgen', variant:'peletizado (sustituto)', costo:22.80, leadTime:15, kgPorCarga:0, actual:5100, cantidadPedir:5000, sinBase:true},
-  {id:'hdpe-r-hoj', name:'HDPE reciclado', variant:'en hojuela', costo:11.20, leadTime:8, kgPorCarga:50, actual:35000, cantidadPedir:6000},
-  {id:'hdpe-r-hoj-sl', name:'HDPE reciclado', variant:'hojuela sin lavar', costo:8.40, leadTime:8, kgPorCarga:7.5, actual:6200, cantidadPedir:4000},
-  {id:'caco3', name:'Carbonato de calcio', variant:'peletizado', costo:6.90, leadTime:12, kgPorCarga:50, actual:24500, cantidadPedir:8000},
-  {id:'masterbatch', name:'Masterbatch', variant:'de color', costo:48.00, leadTime:20, kgPorCarga:2.5, actual:2150, cantidadPedir:2000},
-  {id:'aditivo-uv', name:'Aditivo UV', variant:'', costo:65.00, leadTime:25, kgPorCarga:1.5, actual:1500, cantidadPedir:800},
-  {id:'triturado', name:'Triturado', variant:'interno — se valúa en $0', costo:0, leadTime:null, kgPorCarga:12.5, actual:400, interno:true},
-];
-const TOTAL_KG_POR_CARGA = MATERIALS.reduce((s,m)=>s+(m.kgPorCarga||0),0); // = fórmula de Parámetros de Producción y Fórmula
-MATERIALS.forEach(m=>{ m.formulaPct = TOTAL_KG_POR_CARGA>0 ? (m.kgPorCarga||0)/TOTAL_KG_POR_CARGA*100 : 0; });
-const PRODUCCION_TEORICA_PLANTA = 4400; // kg/día, ambas líneas
-const STOCK_SEGURIDAD = 7;
-const KG_POR_METRO = 4;
-const COSTO_ESTANDAR_KG = MATERIALS.reduce((s,m)=>s+(m.formulaPct/100)*m.costo,0);
-const COSTO_ESTANDAR_M = COSTO_ESTANDAR_KG*KG_POR_METRO;
+const LOGIN_URL = '/login-acceso.html';
+const ROLE_LABELS = {compras:'Compras', calidad:'Calidad y Producción', gerencia:'Gerencia y Comercial', admin:'Admin'};
 
-const DATES30 = ['09/07','10/07','11/07','12/07','13/07','14/07','15/07','16/07','17/07','18/07','19/07','20/07','21/07','22/07','23/07','24/07','25/07','26/07','27/07','28/07','29/07','30/07','31/07','01/08','02/08','03/08','04/08','05/08','06/08','07/08'];
-const MERMA_30 = [4.9,5.1,4.8,5.2,5.0,4.7,5.3,4.9,5.1,5.0,4.8,5.2,4.9,5.1,5.0,4.7,5.3,4.9,5.0,5.2,4.8,5.1,5.0,4.9,5.2,5.3,5.5,5.6,5.7,5.8];
-const COSTO_30 = [10.33,10.23,10.46,10.30,10.40,10.20,10.50,10.33,10.27,10.43,10.23,10.53,10.33,10.30,10.40,10.20,10.50,10.33,10.27,10.43,10.23,10.37,10.40,10.30,10.33,10.57,10.73,10.86,10.96,11.04];
-const MERMA_META = 5.0;
+// Operador no tiene vista de Panel de Control (su pantalla es Cierre de
+// Turno) — si de algún modo llega aquí, requireRole lo manda a login, y
+// login-acceso.html ya lo redirige de vuelta a su pantalla correcta.
+const sessionUser = await window.Session.requireRole(['compras', 'calidad', 'gerencia', 'admin']);
+const api = window.api; // expuesto por session.js (bundleado) — ver su comentario
 
-// producción por turno/línea — generador determinístico (mismo patrón que Corrección de Capturas), ilustrativo
-function metrosTurno(dayIdx, linea, turno){
-  const seed = dayIdx*13 + linea*37 + turno*61;
-  const r = ((seed*9301+49297)%233280)/233280; // 0..1
-  const base = turno===1 ? 144 : 150;
-  return Math.round(base + (r-0.5)*20);
+function renderSessionRow(){
+  const row = document.createElement('div');
+  row.className = 'session-row';
+  row.innerHTML = `<span class="role-badge">🔒 ${sessionUser.nombre} · ${ROLE_LABELS[sessionUser.rol] || sessionUser.rol}</span><a class="logout-link" href="#" id="logoutLink">Cerrar sesión</a>`;
+  document.querySelector('.topbar-right').prepend(row);
+  document.getElementById('logoutLink').addEventListener('click', async (e) => {
+    e.preventDefault();
+    await window.Session.logout();
+    window.location.href = LOGIN_URL;
+  });
 }
-function metrosLineaDia(dayIdx, linea){ return metrosTurno(dayIdx,linea,1) + metrosTurno(dayIdx,linea,2); }
-function metrosPlantaDia(dayIdx){ return metrosLineaDia(dayIdx,1) + metrosLineaDia(dayIdx,2); }
-const OBJETIVOS = { turnoL1:150, turnoL2:150, semana:4200, mes:18000 };
+renderSessionRow();
+
+/* ============================================================
+   ESTADO — se llena con datos reales de Convex (cargarTodo, al final
+   del archivo), nunca hardcodeado.
+   ============================================================ */
+let KPI = null;                          // api.dashboard.getKPIsHoy
+let OBJETIVOS = { turnoL1:0, turnoL2:0, semana:0, mes:0 }; // api.dashboard.getObjetivos
+let DATES30 = [];                        // ["DD/MM", ...] × 30, mismo índice que PROD_SERIE/MERMA_30/COSTO_30
+let PROD_SERIE = [];                     // api.dashboard.produccionPorRango({dias:30})
+let MERMA_30 = [];                       // api.dashboard.tendenciaMerma({dias:30}).map(d=>d.pctMerma)
+let COSTO_30 = [];                       // api.dashboard.tendenciaCosto({dias:30}).map(d=>d.costoRealPorKg)
+const MERMA_META = 5.0; // referencia fija — no hay una meta de merma persistida todavía (solo metas de producción, tarea 6.5)
+let prodRangeN = 14;
 
 const fmt = n => Math.round(n).toLocaleString('es-MX');
 const fmtMoney = n => n.toLocaleString('es-MX', {minimumFractionDigits:2, maximumFractionDigits:2});
 const fmtPct = n => (n>0?'+':'') + n.toFixed(1) + '%';
+function isoADisplayCorto(iso){ const [, m, d] = iso.split('-'); return `${d}/${m}`; }
 
-/* ---- cálculos derivados ---- */
-MATERIALS.forEach(m=>{
-  m.consumoDiario = PRODUCCION_TEORICA_PLANTA * m.formulaPct/100;
-  m.sinReorden = m.interno || m.sinBase; // Triturado (interno) y HDPE virgen (sin consumo base fijo, es sustituto ocasional)
-  m.reorden = m.sinReorden ? null : m.consumoDiario * (m.leadTime + STOCK_SEGURIDAD);
-  m.valor = m.actual * m.costo;
-  if(!m.sinReorden){
-    const amberTop = m.reorden*1.15;
-    m.status = m.actual < m.reorden ? 'crit' : (m.actual < amberTop ? 'warn' : 'ok');
-    m.cobertura = m.actual / m.consumoDiario;
-  } else {
-    m.status = 'neutral';
-  }
-});
-
-const totalValor = MATERIALS.reduce((s,m)=>s+m.valor,0);
-const nCrit = MATERIALS.filter(m=>m.status==='crit').length;
-const nWarn = MATERIALS.filter(m=>m.status==='warn').length;
-const mermaHoy = MERMA_30[MERMA_30.length-1];
-const costoRealKg = COSTO_30[COSTO_30.length-1];
-const costoRealM = costoRealKg * KG_POR_METRO;
-const masUrgente = MATERIALS.filter(m=>m.status==='crit').sort((a,b)=>a.cobertura-b.cobertura)[0];
+// Producción por turno/línea — antes un generador determinístico
+// ilustrativo, ahora una simple consulta al arreglo real ya cargado
+// (PROD_SERIE, uno por día en el mismo orden que DATES30/MERMA_30/COSTO_30).
+function metrosTurno(dayIdx, linea, turno){ return PROD_SERIE[dayIdx]?.['linea'+linea+'Turno'+turno] ?? 0; }
+function metrosLineaDia(dayIdx, linea){ return metrosTurno(dayIdx,linea,1) + metrosTurno(dayIdx,linea,2); }
+function metrosPlantaDia(dayIdx){ return metrosLineaDia(dayIdx,1) + metrosLineaDia(dayIdx,2); }
 
 /* ============================================================
    RENDER: KPIs
@@ -634,85 +633,125 @@ function spark(values){
   </svg>`;
 }
 
-document.getElementById('kpiCompras').innerHTML = `
-  <div class="stat-tile">
-    <span class="stat-label">Valor total de inventario</span>
-    <span class="stat-value">$${fmt(totalValor)}<span class="unit">MXN</span></span>
-    <span class="stat-sub">8 materias primas, costo estándar de catálogo</span>
-  </div>
-  <div class="stat-tile">
-    <div class="stat-row"><span class="stat-label">Materiales en alerta</span><span class="stat-delta bad">${nCrit+nWarn} de 7</span></div>
-    <span class="stat-value">${nCrit}<span class="unit">críticos</span></span>
-    <span class="stat-sub">${nWarn} más por vencer su punto de reorden</span>
-  </div>
-  <div class="stat-tile">
-    <span class="stat-label">Más urgente de reordenar</span>
-    <span class="stat-value" style="font-size:1.15rem;">${masUrgente.name} <small style="display:block;font-family:'IBM Plex Sans',sans-serif;font-size:.72rem;color:var(--ink-faint);font-weight:400;">${masUrgente.variant}</small></span>
-    <span class="stat-sub">Cobertura: ${masUrgente.cobertura.toFixed(0)} días · repone en ${masUrgente.leadTime+STOCK_SEGURIDAD} días</span>
-  </div>`;
+// Tendencia de costo de los últimos 5 días vs. los 5 anteriores — cálculo
+// real simple (no una etiqueta fabricada) a partir de COSTO_30 ya cargado.
+function tendenciaCostoTexto(){
+  const ultimos5 = COSTO_30.slice(-5);
+  const anteriores5 = COSTO_30.slice(-10,-5);
+  if(!ultimos5.length) return { texto:'Sin datos', color:'var(--ink-faint)', detalle:'Aún no hay suficiente historial.' };
+  const avg = arr => arr.reduce((a,b)=>a+b,0)/arr.length;
+  const avgUlt = avg(ultimos5);
+  const avgAnt = anteriores5.length ? avg(anteriores5) : avgUlt;
+  const delta = avgUlt - avgAnt;
+  if(Math.abs(delta) < 0.01) return { texto:'Estable', color:'var(--ink)', detalle:'Sin cambio significativo en los últimos 5 días.' };
+  if(delta > 0) return { texto:'Repunte reciente', color:'var(--danger)', detalle:`Costo real subió $${delta.toFixed(2)}/kg en promedio en los últimos 5 días vs. los 5 anteriores.` };
+  return { texto:'Mejora reciente', color:'var(--positive)', detalle:`Costo real bajó $${Math.abs(delta).toFixed(2)}/kg en promedio en los últimos 5 días vs. los 5 anteriores.` };
+}
 
-document.getElementById('kpiCalidad').innerHTML = `
-  <div class="stat-tile">
-    <div class="stat-row"><span class="stat-label">% merma — hoy</span>${spark(MERMA_30.slice(-12))}</div>
-    <span class="stat-value">${mermaHoy.toFixed(1)}<span class="unit">%</span></span>
-    <span class="stat-delta ${mermaHoy>MERMA_META?'bad':'good'}" style="width:fit-content;">${mermaHoy>MERMA_META?'+':''}${(mermaHoy-MERMA_META).toFixed(1)}pp vs. meta ${MERMA_META.toFixed(1)}%</span>
-  </div>
-  <div class="stat-tile">
-    <span class="stat-label">Producción de hoy</span>
-    <span class="stat-value">${fmt(metrosPlantaDia(29))}<span class="unit">m</span></span>
-    <span class="stat-sub">Ambas líneas y turnos · objetivo ${fmt((OBJETIVOS.turnoL1+OBJETIVOS.turnoL2)*2)} m/día en planta</span>
-  </div>
-  <div class="stat-tile">
-    <span class="stat-label">Semana vs. objetivo</span>
-    <span class="stat-value">${fmt(Array.from({length:7},(_,i)=>metrosPlantaDia(23+i)).reduce((a,b)=>a+b,0)/OBJETIVOS.semana*100)}<span class="unit">%</span></span>
-    <span class="stat-sub">Ver detalle en Producción acumulada</span>
-  </div>`;
+function renderKPIs(){
+  const materialesConReorden = KPI.materiales.filter(m=>m.reorderKg!==null);
+  const nCrit = materialesConReorden.filter(m=>m.status==='crit').length;
+  const nWarn = materialesConReorden.filter(m=>m.status==='warn').length;
+  const masUrgente = materialesConReorden.filter(m=>m.status==='crit').sort((a,b)=>(a.coberturaDias??Infinity)-(b.coberturaDias??Infinity))[0];
+  const mermaHoy = KPI.pctMermaHoy;
+  const costoRealKg = KPI.costoRealPorKgHoy;
+  const costoRealM = KPI.costoRealPorMetroHoy;
+  const costoEstandarKg = KPI.costoEstandarPorKg;
+  const costoEstandarM = KPI.costoEstandarPorMetro;
+  const semanaTotal = Array.from({length:7},(_,i)=>metrosPlantaDia(23+i)).reduce((a,b)=>a+b,0);
+  const semanaPct = OBJETIVOS.semana > 0 ? semanaTotal/OBJETIVOS.semana*100 : 0;
+  const tendencia = tendenciaCostoTexto();
 
-document.getElementById('kpiGerencia').innerHTML = `
-  <div class="stat-tile">
-    <div class="stat-row"><span class="stat-label">Costo real / kg — hoy</span>${spark(COSTO_30.slice(-12))}</div>
-    <span class="stat-value">$${fmtMoney(costoRealKg)}</span>
-    <span class="stat-delta ${costoRealKg>COSTO_ESTANDAR_KG?'bad':'good'}" style="width:fit-content;">${fmtPct((costoRealKg/COSTO_ESTANDAR_KG-1)*100)} vs. estándar $${fmtMoney(COSTO_ESTANDAR_KG)}</span>
-  </div>
-  <div class="stat-tile">
-    <span class="stat-label">Costo real / metro — hoy</span>
-    <span class="stat-value">$${fmtMoney(costoRealM)}</span>
-    <span class="stat-delta ${costoRealM>COSTO_ESTANDAR_M?'bad':'good'}" style="width:fit-content;">${fmtPct((costoRealM/COSTO_ESTANDAR_M-1)*100)} vs. estándar $${fmtMoney(COSTO_ESTANDAR_M)}</span>
-  </div>
-  <div class="stat-tile">
-    <span class="stat-label">Tendencia 14 días</span>
-    <span class="stat-value" style="font-size:1.05rem;color:var(--danger);">Repunte reciente</span>
-    <span class="stat-sub">Costo real se separó de estándar en los últimos 5 días — ver gráfica abajo</span>
-  </div>`;
+  document.getElementById('kpiCompras').innerHTML = `
+    <div class="stat-tile">
+      <span class="stat-label">Valor total de inventario</span>
+      <span class="stat-value">$${fmt(KPI.valorInventarioTotal)}<span class="unit">MXN</span></span>
+      <span class="stat-sub">${KPI.materiales.length} materias primas, costo estándar de catálogo</span>
+    </div>
+    <div class="stat-tile">
+      <div class="stat-row"><span class="stat-label">Materiales en alerta</span><span class="stat-delta ${(nCrit+nWarn)>0?'bad':'good'}">${nCrit+nWarn} de ${materialesConReorden.length}</span></div>
+      <span class="stat-value">${nCrit}<span class="unit">críticos</span></span>
+      <span class="stat-sub">${nWarn} más por vencer su punto de reorden</span>
+    </div>
+    <div class="stat-tile">
+      <span class="stat-label">Más urgente de reordenar</span>
+      ${masUrgente ? `
+        <span class="stat-value" style="font-size:1.15rem;">${masUrgente.nombre} <small style="display:block;font-family:'IBM Plex Sans',sans-serif;font-size:.72rem;color:var(--ink-faint);font-weight:400;">${masUrgente.variante}</small></span>
+        <span class="stat-sub">Cobertura: ${masUrgente.coberturaDias.toFixed(0)} días</span>
+      ` : `
+        <span class="stat-value" style="font-size:1.15rem;">— <small style="display:block;font-family:'IBM Plex Sans',sans-serif;font-size:.72rem;color:var(--ink-faint);font-weight:400;">Sin materiales críticos</small></span>
+        <span class="stat-sub">Todo por arriba de su punto de reorden</span>
+      `}
+    </div>`;
+
+  document.getElementById('kpiCalidad').innerHTML = `
+    <div class="stat-tile">
+      <div class="stat-row"><span class="stat-label">% merma — hoy</span>${spark(MERMA_30.slice(-12))}</div>
+      <span class="stat-value">${mermaHoy.toFixed(1)}<span class="unit">%</span></span>
+      <span class="stat-delta ${mermaHoy>MERMA_META?'bad':'good'}" style="width:fit-content;">${mermaHoy>MERMA_META?'+':''}${(mermaHoy-MERMA_META).toFixed(1)}pp vs. meta ${MERMA_META.toFixed(1)}%</span>
+    </div>
+    <div class="stat-tile">
+      <span class="stat-label">Producción de hoy</span>
+      <span class="stat-value">${fmt(KPI.produccionHoyMetros)}<span class="unit">m</span></span>
+      <span class="stat-sub">Ambas líneas y turnos · objetivo ${fmt((OBJETIVOS.turnoL1+OBJETIVOS.turnoL2)*2)} m/día en planta</span>
+    </div>
+    <div class="stat-tile">
+      <span class="stat-label">Semana vs. objetivo</span>
+      <span class="stat-value">${fmt(semanaPct)}<span class="unit">%</span></span>
+      <span class="stat-sub">Ver detalle en Producción acumulada</span>
+    </div>`;
+
+  document.getElementById('kpiGerencia').innerHTML = `
+    <div class="stat-tile">
+      <div class="stat-row"><span class="stat-label">Costo real / kg — hoy</span>${spark(COSTO_30.slice(-12))}</div>
+      <span class="stat-value">$${fmtMoney(costoRealKg)}</span>
+      <span class="stat-delta ${costoEstandarKg>0 && costoRealKg>costoEstandarKg?'bad':'good'}" style="width:fit-content;">${costoEstandarKg>0?fmtPct((costoRealKg/costoEstandarKg-1)*100)+' vs. estándar $'+fmtMoney(costoEstandarKg):'sin estándar configurado'}</span>
+    </div>
+    <div class="stat-tile">
+      <span class="stat-label">Costo real / metro — hoy</span>
+      <span class="stat-value">$${fmtMoney(costoRealM)}</span>
+      <span class="stat-delta ${costoEstandarM>0 && costoRealM>costoEstandarM?'bad':'good'}" style="width:fit-content;">${costoEstandarM>0?fmtPct((costoRealM/costoEstandarM-1)*100)+' vs. estándar $'+fmtMoney(costoEstandarM):'sin estándar configurado'}</span>
+    </div>
+    <div class="stat-tile">
+      <span class="stat-label">Tendencia 5 días</span>
+      <span class="stat-value" style="font-size:1.05rem;color:${tendencia.color};">${tendencia.texto}</span>
+      <span class="stat-sub">${tendencia.detalle}</span>
+    </div>`;
+}
 
 /* ============================================================
    RENDER: Existencias
    ============================================================ */
 const statusLabel = {crit:'Crítico', warn:'Por vencer', ok:'Sano'};
-document.getElementById('existList').innerHTML = MATERIALS.map(m=>{
-  const scaleMax = m.sinReorden ? m.actual*1.4 : Math.max(m.actual, m.reorden*1.3);
-  const fillPct = Math.min(100, (m.actual/scaleMax)*100);
-  const tickPct = m.sinReorden ? null : Math.min(100, (m.reorden/scaleMax)*100);
-  const label = m.interno ? 'Interno' : m.sinBase ? 'Sustituto' : statusLabel[m.status];
-  const pedirHtml = m.cantidadPedir
-    ? `<div class="exist-pedir ${(m.status==='crit'||m.status==='warn')?'':'muted'}"><b>${fmt(m.cantidadPedir)} kg</b><small>a pedir</small></div>`
-    : `<div class="exist-pedir muted"><b>—</b><small>no aplica</small></div>`;
-  return `<div class="exist-row">
-    <div class="exist-name">${m.name}<small>${m.variant}</small></div>
-    <div class="exist-track">
-      <div class="exist-fill ${m.status}" style="width:${fillPct}%"></div>
-      ${tickPct!==null ? `<div class="exist-tick" style="left:${tickPct}%" title="Punto de reorden: ${fmt(m.reorden)} kg"></div>` : ''}
-    </div>
-    <div class="exist-value">${fmt(m.actual)} kg<small>${m.sinReorden ? 'sin reorden fijo' : 'reorden '+fmt(m.reorden)}</small></div>
-    ${pedirHtml}
-    <div class="exist-status ${m.status}"><span class="dot"></span>${label}</div>
-  </div>`;
-}).join('');
+function renderExistencias(){
+  document.getElementById('existList').innerHTML = KPI.materiales.map(m=>{
+    const sinReorden = m.reorderKg===null;
+    const scaleMax = sinReorden ? m.existenciaKg*1.4 : Math.max(m.existenciaKg, m.reorderKg*1.3, 1);
+    const fillPct = Math.min(100, (m.existenciaKg/scaleMax)*100);
+    const tickPct = sinReorden ? null : Math.min(100, (m.reorderKg/scaleMax)*100);
+    const label = m.esInterno ? 'Interno' : m.esSustituto ? 'Sustituto' : statusLabel[m.status];
+    const pedirHtml = m.cantidadPedirKg
+      ? `<div class="exist-pedir ${(m.status==='crit'||m.status==='warn')?'':'muted'}"><b>${fmt(m.cantidadPedirKg)} kg</b><small>a pedir</small></div>`
+      : `<div class="exist-pedir muted"><b>—</b><small>no aplica</small></div>`;
+    return `<div class="exist-row">
+      <div class="exist-name">${m.nombre}<small>${m.variante}</small></div>
+      <div class="exist-track">
+        <div class="exist-fill ${m.status}" style="width:${fillPct}%"></div>
+        ${tickPct!==null ? `<div class="exist-tick" style="left:${tickPct}%" title="Punto de reorden: ${fmt(m.reorderKg)} kg"></div>` : ''}
+      </div>
+      <div class="exist-value">${fmt(m.existenciaKg)} kg<small>${sinReorden ? 'sin reorden fijo' : 'reorden '+fmt(m.reorderKg)}</small></div>
+      ${pedirHtml}
+      <div class="exist-status ${m.status}"><span class="dot"></span>${label}</div>
+    </div>`;
+  }).join('');
 
-document.getElementById('existInsight').innerHTML =
-  `⚠ <b>${MATERIALS.filter(m=>m.status==='crit').map(m=>m.name).join(' y ')}</b> están por debajo de su punto de reorden. ` +
-  MATERIALS.filter(m=>m.status==='crit').map(m=>`${m.name}: ${m.cobertura.toFixed(0)} días de cobertura, repone en ${m.leadTime+STOCK_SEGURIDAD}`).join(' · ') +
-  ` — conviene levantar la orden de compra hoy.`;
+  const criticos = KPI.materiales.filter(m=>m.status==='crit');
+  document.getElementById('existInsight').innerHTML = criticos.length
+    ? `⚠ <b>${criticos.map(m=>m.nombre).join(' y ')}</b> están por debajo de su punto de reorden. ` +
+      criticos.map(m=>`${m.nombre}: ${m.coberturaDias.toFixed(0)} días de cobertura`).join(' · ') +
+      ` — conviene levantar la orden de compra hoy.`
+    : `✓ Ningún material está por debajo de su punto de reorden.`;
+}
 
 /* ============================================================
    PRODUCCIÓN — metros por turno, línea y acumulados
@@ -772,26 +811,24 @@ function renderProdChart(containerId, linea, rangeN){
   }
 }
 
-let prodRangeN = 14;
 function drawProdCharts(){
   renderProdChart('prodL1ChartWrap', 1, prodRangeN);
   renderProdChart('prodL2ChartWrap', 2, prodRangeN);
 }
-drawProdCharts();
 
 function renderMeter(fillId, tickId, valueId, pctId, totalDias){
   const total = Array.from({length: totalDias}, (_,i)=>metrosPlantaDia(30-totalDias+i)).reduce((a,b)=>a+b,0);
   const target = totalDias===7 ? OBJETIVOS.semana : OBJETIVOS.mes;
-  const scaleMax = Math.max(total, target)*1.15;
+  const scaleMax = Math.max(total, target, 1)*1.15;
   const fillPct = Math.min(100, (total/scaleMax)*100);
   const tickPct = Math.min(100, (target/scaleMax)*100);
-  const pct = (total/target*100);
+  const pct = target>0 ? (total/target*100) : 0;
   document.getElementById(fillId).style.width = fillPct+'%';
   document.getElementById(fillId).className = 'exist-fill ' + (pct>=100?'ok':pct>=90?'warn':'crit');
   document.getElementById(tickId).style.left = tickPct+'%';
   document.getElementById(tickId).title = 'Objetivo: '+fmt(target)+' m';
   document.getElementById(valueId).textContent = fmt(total)+' m';
-  document.getElementById(pctId).textContent = pct.toFixed(0)+'% del objetivo ('+fmt(target)+' m)';
+  document.getElementById(pctId).textContent = target>0 ? pct.toFixed(0)+'% del objetivo ('+fmt(target)+' m)' : 'sin objetivo configurado';
 }
 function drawMeters(){
   renderMeter('semanaFill','semanaTick','semanaValue','semanaPct', 7);
@@ -799,31 +836,60 @@ function drawMeters(){
   document.getElementById('semanaRangeLabel').textContent = '· últimos 7 días';
   document.getElementById('mesRangeLabel').textContent = '· últimos 30 días';
 }
-drawMeters();
 
-['objTurnoL1','objTurnoL2'].forEach((id,i)=>{
-  document.getElementById(id).addEventListener('input', e=>{
-    OBJETIVOS['turnoL'+(i+1)] = parseFloat(e.target.value)||0;
-    drawProdCharts();
+/* ============================================================
+   METAS DE PRODUCCIÓN (tarea 6.5) — persistidas en Convex, solo admin
+   puede editarlas (mismo criterio que el resto de la configuración del
+   sistema); Calidad/Gerencia las ven en modo lectura.
+   ============================================================ */
+const objSaveError = document.getElementById('objSaveError');
+async function guardarObjetivos(){
+  if(sessionUser.rol !== 'admin') return;
+  objSaveError.hidden = true;
+  try{
+    await window.Session.call(api.dashboard.updateObjetivos, { ...OBJETIVOS }, 'mutation');
+  }catch(err){
+    objSaveError.hidden = false;
+    objSaveError.textContent = '⚠ No se pudo guardar la meta: ' + (err?.message || String(err));
+  }
+}
+function inicializarCamposObjetivos(){
+  const puedeEditar = sessionUser.rol === 'admin';
+  document.getElementById('objTurnoL1').value = OBJETIVOS.turnoL1;
+  document.getElementById('objTurnoL2').value = OBJETIVOS.turnoL2;
+  document.getElementById('objSemana').value = OBJETIVOS.semana;
+  document.getElementById('objMes').value = OBJETIVOS.mes;
+  ['objTurnoL1','objTurnoL2','objSemana','objMes'].forEach(id=>{ document.getElementById(id).disabled = !puedeEditar; });
+
+  ['objTurnoL1','objTurnoL2'].forEach((id,i)=>{
+    const input = document.getElementById(id);
+    input.addEventListener('input', e=>{ OBJETIVOS['turnoL'+(i+1)] = parseFloat(e.target.value)||0; drawProdCharts(); });
+    input.addEventListener('change', guardarObjetivos);
   });
-});
-document.getElementById('objSemana').addEventListener('input', e=>{ OBJETIVOS.semana = parseFloat(e.target.value)||0; drawMeters(); });
-document.getElementById('objMes').addEventListener('input', e=>{ OBJETIVOS.mes = parseFloat(e.target.value)||0; drawMeters(); });
+  document.getElementById('objSemana').addEventListener('input', e=>{ OBJETIVOS.semana = parseFloat(e.target.value)||0; drawMeters(); });
+  document.getElementById('objSemana').addEventListener('change', guardarObjetivos);
+  document.getElementById('objMes').addEventListener('input', e=>{ OBJETIVOS.mes = parseFloat(e.target.value)||0; drawMeters(); });
+  document.getElementById('objMes').addEventListener('change', guardarObjetivos);
+}
 
 /* ============================================================
    RENDER: Costo real vs estándar — stat pair
    ============================================================ */
-document.getElementById('costoStats').innerHTML = `
-  <div class="stat-tile">
-    <span class="stat-label">Costo real / kg — hoy</span>
-    <div class="stat-row"><span class="stat-value">$${fmtMoney(costoRealKg)}</span><span class="stat-delta ${costoRealKg>COSTO_ESTANDAR_KG?'bad':'good'}">${fmtPct((costoRealKg/COSTO_ESTANDAR_KG-1)*100)}</span></div>
-    <span class="stat-sub">Estándar: $${fmtMoney(COSTO_ESTANDAR_KG)} / kg</span>
-  </div>
-  <div class="stat-tile">
-    <span class="stat-label">Costo real / metro — hoy</span>
-    <div class="stat-row"><span class="stat-value">$${fmtMoney(costoRealM)}</span><span class="stat-delta ${costoRealM>COSTO_ESTANDAR_M?'bad':'good'}">${fmtPct((costoRealM/COSTO_ESTANDAR_M-1)*100)}</span></div>
-    <span class="stat-sub">Estándar: $${fmtMoney(COSTO_ESTANDAR_M)} / m</span>
-  </div>`;
+function renderCostoStats(){
+  const costoRealKg = KPI.costoRealPorKgHoy, costoRealM = KPI.costoRealPorMetroHoy;
+  const costoEstandarKg = KPI.costoEstandarPorKg, costoEstandarM = KPI.costoEstandarPorMetro;
+  document.getElementById('costoStats').innerHTML = `
+    <div class="stat-tile">
+      <span class="stat-label">Costo real / kg — hoy</span>
+      <div class="stat-row"><span class="stat-value">$${fmtMoney(costoRealKg)}</span>${costoEstandarKg>0?`<span class="stat-delta ${costoRealKg>costoEstandarKg?'bad':'good'}">${fmtPct((costoRealKg/costoEstandarKg-1)*100)}</span>`:''}</div>
+      <span class="stat-sub">${costoEstandarKg>0?`Estándar: $${fmtMoney(costoEstandarKg)} / kg`:'Sin estándar configurado'}</span>
+    </div>
+    <div class="stat-tile">
+      <span class="stat-label">Costo real / metro — hoy</span>
+      <div class="stat-row"><span class="stat-value">$${fmtMoney(costoRealM)}</span>${costoEstandarM>0?`<span class="stat-delta ${costoRealM>costoEstandarM?'bad':'good'}">${fmtPct((costoRealM/costoEstandarM-1)*100)}</span>`:''}</div>
+      <span class="stat-sub">${costoEstandarM>0?`Estándar: $${fmtMoney(costoEstandarM)} / m`:'Sin estándar configurado'}</span>
+    </div>`;
+}
 
 /* ============================================================
    LINE CHART — reutilizable para Merma y Costo
@@ -936,16 +1002,18 @@ function drawChart(containerId){
   }
 }
 
-buildChart('mermaChartWrap', {
-  data: MERMA_30, target: MERMA_META, rangeN: 14,
-  fmtY: v=>v.toFixed(1)+'%', targetLabel: `Meta ${MERMA_META.toFixed(1)}%`,
-  ariaLabel: 'Tendencia de porcentaje de merma'
-});
-buildChart('costoChartWrap', {
-  data: COSTO_30, target: COSTO_ESTANDAR_KG, rangeN: 14,
-  fmtY: v=>'$'+v.toFixed(2), targetLabel: `Estándar $${fmtMoney(COSTO_ESTANDAR_KG)}`,
-  ariaLabel: 'Tendencia de costo real por kilogramo'
-});
+function buildLineCharts(){
+  buildChart('mermaChartWrap', {
+    data: MERMA_30, target: MERMA_META, rangeN: 14,
+    fmtY: v=>v.toFixed(1)+'%', targetLabel: `Meta ${MERMA_META.toFixed(1)}%`,
+    ariaLabel: 'Tendencia de porcentaje de merma'
+  });
+  buildChart('costoChartWrap', {
+    data: COSTO_30, target: KPI.costoEstandarPorKg, rangeN: 14,
+    fmtY: v=>'$'+v.toFixed(2), targetLabel: `Estándar $${fmtMoney(KPI.costoEstandarPorKg)}`,
+    ariaLabel: 'Tendencia de costo real por kilogramo'
+  });
+}
 
 function toggleTable(which){
   const tbl = document.getElementById(which+'Table');
@@ -1016,38 +1084,6 @@ document.getElementById('roleSwitch').addEventListener('click', e=>{
 });
 
 /* ============================================================
-   SESIÓN (autenticación real — Épica 1)
-   ============================================================ */
-const LOGIN_URL = '/login-acceso.html';
-const ROLE_LABELS = {compras:'Compras', calidad:'Calidad y Producción', gerencia:'Gerencia y Comercial', admin:'Admin'};
-
-// Operador no tiene vista de Panel de Control (su pantalla es Cierre de
-// Turno) — si de algún modo llega aquí, requireRole lo manda a login, y
-// login-acceso.html ya lo redirige de vuelta a su pantalla correcta.
-const sessionUser = await window.Session.requireRole(['compras', 'calidad', 'gerencia', 'admin']);
-
-function renderSessionRow(){
-  const row = document.createElement('div');
-  row.className = 'session-row';
-  row.innerHTML = `<span class="role-badge">🔒 ${sessionUser.nombre} · ${ROLE_LABELS[sessionUser.rol] || sessionUser.rol}</span><a class="logout-link" href="#" id="logoutLink">Cerrar sesión</a>`;
-  document.querySelector('.topbar-right').prepend(row);
-  document.getElementById('logoutLink').addEventListener('click', async (e) => {
-    e.preventDefault();
-    await window.Session.logout();
-    window.location.href = LOGIN_URL;
-  });
-}
-
-// El selector de rol del mockup (para previsualizar las 4 vistas) solo
-// tiene sentido para admin, que sí ve todo el sistema; el resto de los
-// roles queda fijo en su propia vista real, sin poder cambiarla.
-applyRole(sessionUser.rol === 'admin' ? 'compras' : sessionUser.rol);
-if (sessionUser.rol !== 'admin') {
-  document.getElementById('roleSwitch').style.display = 'none';
-}
-renderSessionRow();
-
-/* ============================================================
    EXPORTAR — Excel (CSV real) y PDF (impresión del navegador)
    ============================================================ */
 function downloadCSV(filename, rows){
@@ -1063,15 +1099,15 @@ function downloadCSV(filename, rows){
   URL.revokeObjectURL(url);
 }
 function statusLabelExport(m){
-  if(m.interno) return 'Interno';
-  if(m.sinBase) return 'Sustituto';
+  if(m.esInterno) return 'Interno';
+  if(m.esSustituto) return 'Sustituto';
   return {crit:'Crítico', warn:'Por vencer', ok:'Sano'}[m.status] || m.status;
 }
 function exportExistenciasCSV(){
   const rows = [['Material','Variante','Existencia (kg)','Punto de reorden (kg)','Estado','Valor ($)','Cantidad a pedir (kg)']];
-  MATERIALS.forEach(m=>{
-    rows.push([m.name, m.variant, Math.round(m.actual), m.reorden!==null?Math.round(m.reorden):'N/A',
-      statusLabelExport(m), Math.round(m.valor), m.cantidadPedir?Math.round(m.cantidadPedir):'N/A']);
+  KPI.materiales.forEach(m=>{
+    rows.push([m.nombre, m.variante, Math.round(m.existenciaKg), m.reorderKg!==null?Math.round(m.reorderKg):'N/A',
+      statusLabelExport(m), Math.round(m.valorKg), m.cantidadPedirKg?Math.round(m.cantidadPedirKg):'N/A']);
   });
   downloadCSV('existencias-tejaflex.csv', rows);
 }
@@ -1099,7 +1135,7 @@ function exportCostoCSV(){
   const dates = DATES30.slice(-n);
   const costo = COSTO_30.slice(-n);
   const rows = [['Fecha','Costo real ($/kg)','Costo estándar ($/kg)']];
-  dates.forEach((d,i)=> rows.push([d, costo[i].toFixed(2), COSTO_ESTANDAR_KG.toFixed(2)]));
+  dates.forEach((d,i)=> rows.push([d, costo[i].toFixed(2), KPI.costoEstandarPorKg.toFixed(2)]));
   downloadCSV('costo-tejaflex.csv', rows);
 }
 function exportPDF(){
@@ -1108,10 +1144,50 @@ function exportPDF(){
 }
 window.addEventListener('afterprint', ()=> document.body.classList.remove('print-all'));
 
-/* Llegando desde Reporte Diario (?autoprint=1) — simula "así se ve el PDF que se envía". */
-if(new URLSearchParams(location.search).get('autoprint')==='1'){
-  setTimeout(exportPDF, 500);
+/* ============================================================
+   CARGA INICIAL — trae todo de Convex y renderiza en el orden correcto:
+   primero los datos (KPIs, series de 30 días, objetivos), luego todo lo
+   que depende de ellos.
+   ============================================================ */
+async function cargarTodo(){
+  const [kpis, prodSerie, mermaSerie, costoSerie, objetivos] = await Promise.all([
+    window.Session.call(api.dashboard.getKPIsHoy, {}, 'query'),
+    window.Session.call(api.dashboard.produccionPorRango, { dias: 30 }, 'query'),
+    window.Session.call(api.dashboard.tendenciaMerma, { dias: 30 }, 'query'),
+    window.Session.call(api.dashboard.tendenciaCosto, { dias: 30 }, 'query'),
+    window.Session.call(api.dashboard.getObjetivos, {}, 'query'),
+  ]);
+  KPI = kpis;
+  DATES30 = prodSerie.map(d => isoADisplayCorto(d.fecha));
+  PROD_SERIE = prodSerie;
+  MERMA_30 = mermaSerie.map(d => d.pctMerma);
+  COSTO_30 = costoSerie.map(d => d.costoRealPorKg);
+  OBJETIVOS = objetivos;
+
+  renderKPIs();
+  renderExistencias();
+  renderCostoStats();
+  drawProdCharts();
+  drawMeters();
+  inicializarCamposObjetivos();
+  buildLineCharts();
+
+  // El selector de rol del mockup (para previsualizar las 4 vistas) solo
+  // tiene sentido para admin, que sí ve todo el sistema; el resto de los
+  // roles queda fijo en su propia vista real, sin poder cambiarla.
+  applyRole(sessionUser.rol === 'admin' ? 'compras' : sessionUser.rol);
+  if (sessionUser.rol !== 'admin') {
+    document.getElementById('roleSwitch').style.display = 'none';
+  }
+
+  // Llegando desde Reporte Diario (?autoprint=1) — simula "así se ve el
+  // PDF que se envía". Se dispara aquí, ya con datos reales renderizados,
+  // no antes (si no, el PDF saldría con los contenedores vacíos).
+  if(new URLSearchParams(location.search).get('autoprint')==='1'){
+    setTimeout(exportPDF, 500);
+  }
 }
+await cargarTodo();
 
 /* El HTML llama estas funciones vía onclick="" — en un <script type="module">
    quedan en el scope del módulo, no globales, así que hay que exponerlas
