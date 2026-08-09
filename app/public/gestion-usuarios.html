@@ -449,9 +449,27 @@ function renderKPI(){
     </div>`;
 }
 
-async function cargarUsuarios(){
+// `opts.preservarCambios`: las acciones de fila (crear/desactivar/reactivar)
+// recargan la tabla para reflejar el cambio que acaban de hacer, pero eso NO
+// debe descartar ediciones de nombre/usuario/rol que el admin ya haya escrito
+// en otras filas y aún no haya guardado con "Guardar cambios" (hallazgo de
+// CodeRabbit: perder trabajo sin confirmación). Guardar y Restablecer sí
+// deben limpiar CAMBIOS de verdad — ahí la llamada por defecto (sin opts).
+async function cargarUsuarios(opts = {}){
   USUARIOS = await window.Session.call(api.usuarios.listUsuarios, {}, 'query');
-  CAMBIOS = {};
+  if(opts.preservarCambios){
+    // Reaplica las ediciones pendientes sobre los datos recién leídos del
+    // servidor. Si la fila editada ya no existe (otra sesión la borró, caso
+    // imposible hoy porque "eliminar" es soft-delete, pero por si acaso) su
+    // cambio pendiente queda huérfano en CAMBIOS sin nada que sobreescribir
+    // — se descarta solo si el admin guarda o restablece explícitamente.
+    for(const [id, cambios] of Object.entries(CAMBIOS)){
+      const u = USUARIOS.find(x=>x._id===id);
+      if(u) Object.assign(u, cambios);
+    }
+  }else{
+    CAMBIOS = {};
+  }
   renderTable();
   renderKPI();
 }
@@ -556,7 +574,7 @@ async function crearUsuarioSubmit(){
   btn.disabled = true; btn.textContent = 'Creando…';
   try{
     const { passwordTemporal } = await window.Session.call(api.usuariosActions.crearUsuario, { nombre, usuario, rol }, 'action');
-    await cargarUsuarios();
+    await cargarUsuarios({ preservarCambios: true });
     mostrarPasswordModal(`${nombre} (${usuario.trim().toLowerCase()})`, passwordTemporal, 'Usuario creado'); // nunca es uno mismo — no puedes crear tu propia cuenta
   }catch(err){
     btn.disabled = false; btn.textContent = 'Crear usuario';
@@ -608,7 +626,7 @@ async function eliminarConfirmado(id){
   cerrarModal();
   try{
     await window.Session.call(api.usuarios.eliminarUsuario, { userId: id }, 'mutation');
-    await cargarUsuarios();
+    await cargarUsuarios({ preservarCambios: true });
   }catch(err){
     mostrarErrorGlobal(err);
   }
@@ -617,7 +635,7 @@ async function eliminarConfirmado(id){
 async function reactivar(id){
   try{
     await window.Session.call(api.usuarios.reactivarUsuario, { userId: id }, 'mutation');
-    await cargarUsuarios();
+    await cargarUsuarios({ preservarCambios: true });
   }catch(err){
     mostrarErrorGlobal(err);
   }
