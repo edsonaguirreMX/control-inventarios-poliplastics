@@ -238,30 +238,39 @@ footer.page-foot{font-size:.78rem;color:var(--ink-faint);border-top:1px solid va
 
 <div class="toast" id="toast">✓ Alertas actualizadas</div>
 
-<script>
+<script src="/config.js"></script>
+<script type="module" src="/js/convex-client.js"></script>
+<script type="module">
 /* ============================================================
-   SESIÓN (recibida por URL desde Login / Panel de Control)
+   SESIÓN (autenticación real — Épica 1). Session.requireRole
+   redirige a /login-acceso.html si no hay sesión o el rol no
+   está permitido; el resto del script de la página solo corre
+   si esta promesa se resuelve.
    ============================================================ */
-(function(){
-  const LOGIN_URL = '/login-acceso.html';
-  const usuarioSesion = new URLSearchParams(location.search).get('usuario') || '';
-  window.usuarioSesion = usuarioSesion;
-  const row = document.getElementById('sessionRow');
-  if(row){
-    row.innerHTML = usuarioSesion
-      ? `<span class="role-badge">🔒 ${usuarioSesion} · Admin</span><a class="logout-link" href="${LOGIN_URL}">Cerrar sesión</a>`
-      : `<span class="role-badge">🔒 Acceso: Admin</span><a class="logout-link" href="${LOGIN_URL}">Iniciar sesión</a>`;
-  }
-  const bc = document.getElementById('breadcrumbLink');
-  if(bc && usuarioSesion){
-    const url = new URL(bc.getAttribute('href'));
-    url.searchParams.set('usuario', usuarioSesion);
-    url.searchParams.set('role', 'admin');
-    bc.setAttribute('href', url.toString());
-  }
-})();
+const ROLE_LABEL = { operador:'Operador', admin:'Admin', gerencia:'Gerencia y Comercial', compras:'Compras', calidad:'Calidad y Producción' };
+// Puerta explícita de autorización: se guarda la promesa en window para que
+// el segundo <script type="module"> de esta página (con la lógica
+// principal) la espere explícitamente en su primera línea, en vez de
+// depender solo del orden de documento entre módulos independientes.
+window.__authReady = window.Session.requireRole(['admin']);
+const user = await window.__authReady;
+window.usuarioSesion = user.nombre;
+window.rolSesion = user.rol;
+const row = document.getElementById('sessionRow');
+if (row) {
+  row.innerHTML = `<span class="role-badge">🔒 ${user.nombre} · ${ROLE_LABEL[user.rol]}</span><a class="logout-link" href="#" id="logoutLink">Cerrar sesión</a>`;
+  document.getElementById('logoutLink').addEventListener('click', async (e) => {
+    e.preventDefault();
+    await window.Session.logout();
+    window.location.href = '/login-acceso.html';
+  });
+}
 </script>
-<script>
+<script type="module">
+// Puerta explícita: este módulo depende del de sesión de arriba, no solo
+// del orden de documento — espera la MISMA promesa que ya se está
+// resolviendo ahí (no dispara un requireRole nuevo).
+await window.__authReady;
 const ROLES = [
   {id:'operador', label:'Operador'},
   {id:'admin', label:'Admin'},
@@ -444,4 +453,11 @@ function resetReglas(){
   document.getElementById('btnSave').disabled = true;
   document.getElementById('btnReset').disabled = true;
 }
+
+/* El HTML llama estas funciones vía onclick="" — en un <script type="module">
+   quedan en el scope del módulo, no globales, así que hay que exponerlas
+   explícitamente para que esos atributos sigan funcionando. */
+window.markAllRead = markAllRead;
+window.saveReglas = saveReglas;
+window.resetReglas = resetReglas;
 </script>

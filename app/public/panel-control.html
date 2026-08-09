@@ -545,7 +545,13 @@ footer.page-foot{font-size:.78rem;color:var(--ink-faint);border-top:1px solid va
 
 </div>
 
-<script>
+<script src="/config.js"></script>
+<script type="module" src="/js/convex-client.js"></script>
+<script type="module">
+/* Este script pasó a type="module" solo para poder usar el
+   top-level await de Session.requireRole (Épica 1). Las funciones
+   que el HTML llama por onclick="" se exponen a window al final
+   del archivo — un module normal no las haría globales por sí solo. */
 /* ============================================================
    DATOS ILUSTRATIVOS
    ============================================================ */
@@ -1010,52 +1016,36 @@ document.getElementById('roleSwitch').addEventListener('click', e=>{
 });
 
 /* ============================================================
-   SESIÓN (recibida por URL desde Login y Selección de Rol)
+   SESIÓN (autenticación real — Épica 1)
    ============================================================ */
 const LOGIN_URL = '/login-acceso.html';
 const ROLE_LABELS = {compras:'Compras', calidad:'Calidad y Producción', gerencia:'Gerencia y Comercial', admin:'Admin'};
-const paramsSesion = new URLSearchParams(location.search);
-const usuarioSesion = paramsSesion.get('usuario') || '';
 
-function renderSessionRow(rolSesion){
+// Operador no tiene vista de Panel de Control (su pantalla es Cierre de
+// Turno) — si de algún modo llega aquí, requireRole lo manda a login, y
+// login-acceso.html ya lo redirige de vuelta a su pantalla correcta.
+const sessionUser = await window.Session.requireRole(['compras', 'calidad', 'gerencia', 'admin']);
+
+function renderSessionRow(){
   const row = document.createElement('div');
   row.className = 'session-row';
-  if(usuarioSesion){
-    row.innerHTML = `<span class="role-badge">🔒 ${usuarioSesion} · ${ROLE_LABELS[rolSesion] || 'Compras'}</span><a class="logout-link" href="${LOGIN_URL}">Cerrar sesión</a>`;
-  } else {
-    row.innerHTML = `<span class="role-badge">🔒 Sesión de demostración · ${ROLE_LABELS[rolSesion] || 'Compras'}</span><a class="logout-link" href="${LOGIN_URL}">Iniciar sesión</a>`;
-  }
+  row.innerHTML = `<span class="role-badge">🔒 ${sessionUser.nombre} · ${ROLE_LABELS[sessionUser.rol] || sessionUser.rol}</span><a class="logout-link" href="#" id="logoutLink">Cerrar sesión</a>`;
   document.querySelector('.topbar-right').prepend(row);
-}
-
-/* Propaga la sesión a las pantallas enlazadas desde aquí, para que también
-   muestren quién entró y puedan mandarlo de regreso al hacer "Cerrar sesión". */
-function propagarSesion(){
-  if(!usuarioSesion) return;
-  document.querySelectorAll('.config-card, .bell-dropdown-foot').forEach(a=>{
-    try{
-      const url = new URL(a.getAttribute('href'));
-      url.searchParams.set('usuario', usuarioSesion);
-      a.setAttribute('href', url.toString());
-    }catch(e){}
+  document.getElementById('logoutLink').addEventListener('click', async (e) => {
+    e.preventDefault();
+    await window.Session.logout();
+    window.location.href = LOGIN_URL;
   });
 }
 
-/* Si se llega desde el Login con ?role=..., ese usuario solo ve su vista —
-   el switcher es una herramienta de esta demo, no algo que un usuario real deba tocar. */
-const ROLES_VALIDOS = ['compras','calidad','gerencia','admin'];
-const rolDesdeLogin = paramsSesion.get('role');
-if(rolDesdeLogin && ROLES_VALIDOS.includes(rolDesdeLogin)){
-  applyRole(rolDesdeLogin);
-  if(rolDesdeLogin !== 'admin'){
-    document.getElementById('roleSwitch').style.display = 'none';
-  }
-  renderSessionRow(rolDesdeLogin);
-} else {
-  applyRole('compras');
-  renderSessionRow('compras');
+// El selector de rol del mockup (para previsualizar las 4 vistas) solo
+// tiene sentido para admin, que sí ve todo el sistema; el resto de los
+// roles queda fijo en su propia vista real, sin poder cambiarla.
+applyRole(sessionUser.rol === 'admin' ? 'compras' : sessionUser.rol);
+if (sessionUser.rol !== 'admin') {
+  document.getElementById('roleSwitch').style.display = 'none';
 }
-propagarSesion();
+renderSessionRow();
 
 /* ============================================================
    EXPORTAR — Excel (CSV real) y PDF (impresión del navegador)
@@ -1122,4 +1112,15 @@ window.addEventListener('afterprint', ()=> document.body.classList.remove('print
 if(new URLSearchParams(location.search).get('autoprint')==='1'){
   setTimeout(exportPDF, 500);
 }
+
+/* El HTML llama estas funciones vía onclick="" — en un <script type="module">
+   quedan en el scope del módulo, no globales, así que hay que exponerlas
+   explícitamente para que esos atributos sigan funcionando. */
+window.toggleBell = toggleBell;
+window.exportPDF = exportPDF;
+window.exportExistenciasCSV = exportExistenciasCSV;
+window.toggleTable = toggleTable;
+window.exportProduccionCSV = exportProduccionCSV;
+window.exportMermaCSV = exportMermaCSV;
+window.exportCostoCSV = exportCostoCSV;
 </script>
