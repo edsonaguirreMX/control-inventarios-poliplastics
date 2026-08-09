@@ -42,11 +42,14 @@ async function actualizarParametrosImpl(
   user: { _id: Id<'users'> },
   args: { cargasPorTurno?: number; turnosPorDia?: number; kgPorMetro?: number }
 ): Promise<void> {
-  if (args.cargasPorTurno !== undefined && args.cargasPorTurno < 0) {
-    throw new Error('actualizarParametros: cargasPorTurno no puede ser negativo.');
+  // > 0, no solo "no negativo": Catálogo deriva consumoDiario y punto de
+  // reorden multiplicando por estos valores — dejarlos en 0 pondría todo
+  // el reorden teórico en 0 y ocultaría necesidades reales de compra.
+  if (args.cargasPorTurno !== undefined && args.cargasPorTurno <= 0) {
+    throw new Error('actualizarParametros: cargasPorTurno debe ser mayor a 0.');
   }
-  if (args.turnosPorDia !== undefined && args.turnosPorDia < 0) {
-    throw new Error('actualizarParametros: turnosPorDia no puede ser negativo.');
+  if (args.turnosPorDia !== undefined && args.turnosPorDia <= 0) {
+    throw new Error('actualizarParametros: turnosPorDia debe ser mayor a 0.');
   }
   if (args.kgPorMetro !== undefined && args.kgPorMetro <= 0) {
     throw new Error('actualizarParametros: kgPorMetro debe ser mayor a 0 (se usa como divisor en cierres/dashboard).');
@@ -91,6 +94,19 @@ async function actualizarFormulaCargaImpl(
   }
 }
 
+// Se llama al FINAL de una transacción que tocó formulaCarga (nunca fila
+// por fila dentro de un loop — un batch legítimo puede pasar por un total
+// intermedio de 0 entre filas antes de terminar). Si el total quedara en 0,
+// Catálogo derivaría %mezcla/consumoDiario/reorden inválidos para TODOS los
+// materiales, no solo el que se editó.
+async function verificarFormulaTotalPositiva(ctx: MutationCtx): Promise<void> {
+  const formula = await ctx.db.query('formulaCarga').collect();
+  const total = formula.reduce((s, f) => s + f.kgPorCarga, 0);
+  if (total <= 0) {
+    throw new Error('La fórmula completa no puede sumar 0 kg por carga — Catálogo derivaría consumos y puntos de reorden inválidos.');
+  }
+}
+
 export const updateParametros = mutation({
   args: {
     cargasPorTurno: v.optional(v.number()),
@@ -115,6 +131,7 @@ export const updateFormulaCarga = mutation({
   handler: async (ctx, args) => {
     await requireRole(ctx, args.token, ['admin']);
     await actualizarFormulaCargaImpl(ctx, args);
+    await verificarFormulaTotalPositiva(ctx);
     return { ok: true };
   },
 });
@@ -150,6 +167,7 @@ export const guardarParametrosCompleto = mutation({
     for (const fila of args.formula) {
       await actualizarFormulaCargaImpl(ctx, fila);
     }
+    await verificarFormulaTotalPositiva(ctx);
     return { ok: true };
   },
 });

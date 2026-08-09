@@ -39,9 +39,20 @@ describe('parametros: getParametros/updateParametros (tarea 2.2)', () => {
     const { adminToken } = await setup(t);
     await expect(
       t.mutation(api.parametros.updateParametros, { cargasPorTurno: -1, token: adminToken })
-    ).rejects.toThrow(/negativo/);
+    ).rejects.toThrow(/mayor a 0/);
     await expect(
       t.mutation(api.parametros.updateParametros, { kgPorMetro: 0, token: adminToken })
+    ).rejects.toThrow(/mayor a 0/);
+  });
+
+  test('BLOQUEADO: cargasPorTurno y turnosPorDia en 0 se rechazan (no solo negativos) — dejarían todo el reorden teórico de Catálogo en 0', async () => {
+    const t = convexTest(schema, modules);
+    const { adminToken } = await setup(t);
+    await expect(
+      t.mutation(api.parametros.updateParametros, { cargasPorTurno: 0, token: adminToken })
+    ).rejects.toThrow(/mayor a 0/);
+    await expect(
+      t.mutation(api.parametros.updateParametros, { turnosPorDia: 0, token: adminToken })
     ).rejects.toThrow(/mayor a 0/);
   });
 });
@@ -121,6 +132,35 @@ describe('parametros: updateFormulaCarga (tarea 2.2) — fuente única de verdad
       t.mutation(api.parametros.updateFormulaCarga, { materialId: matId, kgPorCarga: 10, token: comprasToken })
     ).rejects.toThrow();
   });
+
+  test('BLOQUEADO: dejar la ÚNICA fila de la fórmula en 0 se rechaza — el total de la fórmula no puede sumar 0', async () => {
+    const t = convexTest(schema, modules);
+    const { adminToken } = await setup(t);
+    const matId = await crearMaterialPrueba(t);
+    await t.run((ctx) => ctx.db.insert('formulaCarga', { materialId: matId, kgPorCarga: 30, nota: '', updatedAt: Date.now() }));
+
+    await expect(
+      t.mutation(api.parametros.updateFormulaCarga, { materialId: matId, kgPorCarga: 0, token: adminToken })
+    ).rejects.toThrow(/no puede sumar 0/);
+
+    // No quedó a medias: la fila sigue en su valor original (transacción revertida completa).
+    const params = await t.query(api.parametros.getParametros, { token: adminToken });
+    expect(params.formula.find((f) => f.materialId === matId)?.kgPorCarga).toBe(30);
+  });
+
+  test('permite dejar UN material en 0 si el total de la fórmula sigue siendo > 0 (caso real: HDPE virgen sustituto)', async () => {
+    const t = convexTest(schema, modules);
+    const { adminToken } = await setup(t);
+    const matAId = await crearMaterialPrueba(t);
+    const matBId = await crearMaterialPrueba(t);
+    await t.run((ctx) => ctx.db.insert('formulaCarga', { materialId: matAId, kgPorCarga: 25, nota: '', updatedAt: Date.now() }));
+    await t.run((ctx) => ctx.db.insert('formulaCarga', { materialId: matBId, kgPorCarga: 0, nota: 'sustituto', updatedAt: Date.now() }));
+
+    await t.mutation(api.parametros.updateFormulaCarga, { materialId: matAId, kgPorCarga: 40, token: adminToken });
+
+    const params = await t.query(api.parametros.getParametros, { token: adminToken });
+    expect(params.formula.find((f) => f.materialId === matAId)?.kgPorCarga).toBe(40);
+  });
 });
 
 describe('parametros: guardarParametrosCompleto es atómico', () => {
@@ -158,6 +198,25 @@ describe('parametros: guardarParametrosCompleto es atómico', () => {
 
     const params = await t.query(api.parametros.getParametros, { token: adminToken });
     expect(params.cargasPorTurno).toBe(8); // no quedó en 99 — el default de crearParametrosPrueba
+  });
+
+  test('BLOQUEADO: guardar toda la fórmula en 0 kg se rechaza — Catálogo derivaría consumos/reorden inválidos para todos los materiales', async () => {
+    const t = convexTest(schema, modules);
+    const { adminToken } = await setup(t);
+    const matAId = await crearMaterialPrueba(t);
+    const matBId = await crearMaterialPrueba(t);
+
+    await expect(
+      t.mutation(api.parametros.guardarParametrosCompleto, {
+        cargasPorTurno: 8, turnosPorDia: 2, kgPorMetro: 4,
+        formula: [{ materialId: matAId, kgPorCarga: 0 }, { materialId: matBId, kgPorCarga: 0 }],
+        token: adminToken,
+      })
+    ).rejects.toThrow(/no puede sumar 0/);
+
+    // No quedó a medias: ni siquiera se insertó la fila de formulaCarga (batch revertido por completo).
+    const filaA = await t.run((ctx) => ctx.db.query('formulaCarga').withIndex('by_materialId', (q) => q.eq('materialId', matAId)).unique());
+    expect(filaA).toBeNull();
   });
 
   test('rechaza roles que no sean admin', async () => {
