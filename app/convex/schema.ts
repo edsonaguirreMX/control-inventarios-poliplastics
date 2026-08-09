@@ -264,4 +264,17 @@ export default defineSchema({
     detalleError: v.union(v.string(), v.null()),
     generadoPor: v.union(v.literal("cron"), v.literal("manual")),
   }).index("by_fecha", ["fecha"]),
+
+  // Rate limiting de authActions.login (EDS-70, deuda de la auditoría de
+  // PR1) — por `usuario` (no por IP: Convex actions no exponen la IP real
+  // del cliente sin infraestructura adicional, y el objetivo es frenar
+  // fuerza bruta dirigida a UNA cuenta conocida, no un spray de usuarios).
+  // Ventana deslizante simple: se reinicia sola si el primer intento de la
+  // ventana ya expiró en vez de acumular para siempre.
+  loginIntentos: defineTable({
+    usuario: v.string(), // normalizado igual que users.usuario
+    intentos: v.number(),
+    primerIntentoEn: v.number(),
+    bloqueadoHasta: v.union(v.number(), v.null()),
+  }).index("by_usuario", ["usuario"]),
 });

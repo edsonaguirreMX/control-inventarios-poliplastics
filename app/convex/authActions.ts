@@ -17,17 +17,27 @@ export const login = action({
     remember: v.boolean(),
   },
   handler: async (ctx, { usuario, password, remember }) => {
+    // Rate limit ANTES de tocar la base de usuarios o bcrypt — una cuenta
+    // bloqueada no debe gastar ni una consulta ni un hash de más (EDS-70).
+    const { bloqueado } = await ctx.runQuery(internal.auth.verificarRateLimitLogin, { usuario });
+    if (bloqueado) {
+      throw new Error('Demasiados intentos fallidos. Espera unos minutos antes de volver a intentar.');
+    }
+
     const user = await ctx.runQuery(internal.auth.getUserByUsuario, { usuario });
 
     // Mismo mensaje genérico si el usuario no existe, está inactivo, o la
     // contraseña no coincide — no revelar cuál de las tres cosas falló.
     if (!user || !user.activo) {
+      await ctx.runMutation(internal.auth.registrarIntentoFallidoLogin, { usuario });
       throw new Error('Usuario o contraseña incorrectos.');
     }
     const valido = await bcrypt.compare(password, user.passwordHash);
     if (!valido) {
+      await ctx.runMutation(internal.auth.registrarIntentoFallidoLogin, { usuario });
       throw new Error('Usuario o contraseña incorrectos.');
     }
+    await ctx.runMutation(internal.auth.limpiarIntentosLogin, { usuario });
 
     const { token, expiresAt } = await ctx.runMutation(internal.auth.createSession, {
       userId: user._id,
