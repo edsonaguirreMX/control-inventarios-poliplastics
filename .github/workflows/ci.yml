@@ -1,0 +1,41 @@
+name: CI
+
+# CI mínimo (EDS-72): valida que cada PR y cada push a main realmente
+# compilan y pasan la suite de pruebas en un runner de GitHub, no solo
+# localmente. CodeRabbit (ya configurado en el repo) es revisión de código
+# automática — no ejecuta npm test/build, por eso este workflow es
+# necesario antes de autorizar cualquier merge de los PRs encadenados
+# (PEPS, cierres, correcciones tocan inventario/costeo real).
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      # package.json exige node >=20.6.0 (server.js usa process.loadEnvFile,
+      # disponible desde Node 20.6) — '20' resuelve siempre al último patch
+      # de esa major, que ya la cumple.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: app/package-lock.json
+
+      - run: npm ci
+      # --if-present: PR 1 (base de la cadena) todavía no tiene script
+      # "test" — la suite de pruebas (vitest) se introdujo en PR 2. En PR 2
+      # y PR 3, donde el script sí existe, esto corre la suite real y falla
+      # si algo se rompe; no enmascara nada.
+      - run: npm test --if-present
+      - run: npm run build
+      - run: node --check src/server.js
+      - run: node --check scripts/build-client.mjs
