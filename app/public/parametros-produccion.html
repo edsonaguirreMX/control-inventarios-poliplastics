@@ -165,6 +165,17 @@ table.formula tfoot td{padding:.65rem .7rem;border-top:1.5px solid var(--border)
 .dirty-flag{margin-right:auto;font-size:.8rem;color:var(--warning);font-weight:600;display:none;align-items:center;gap:.4rem;}
 .dirty-flag.show{display:flex;}
 .dirty-flag .dot{width:7px;height:7px;border-radius:50%;background:var(--warning);}
+/* Banner inline de error (nunca alert() — congela la automatización de
+   pruebas y es peor UX). La regla [hidden] es necesaria: sin ella,
+   display:flex del autor le gana al estilo por defecto del navegador y el
+   banner nunca se oculta aunque JS ponga hidden=true. */
+.field-warn{
+  margin:.8rem 0 0;padding:.55rem .7rem;border-radius:9px;
+  background:var(--warning-soft);color:var(--warning);font-size:.78rem;line-height:1.4;
+  display:flex;flex-direction:column;gap:.4rem;
+}
+.field-warn.error{background:var(--danger-soft);color:var(--danger);}
+.field-warn[hidden]{display:none;}
 .btn-ghost{border:1px solid var(--border);background:var(--surface-2);color:var(--ink);border-radius:9px;padding:.6rem 1.1rem;font-size:.85rem;font-weight:600;cursor:pointer;}
 .btn-ghost:disabled{opacity:.4;cursor:not-allowed;}
 .btn-primary{border:none;background:var(--accent);color:var(--accent-ink);border-radius:9px;padding:.6rem 1.3rem;font-size:.85rem;font-weight:700;cursor:pointer;}
@@ -268,10 +279,10 @@ footer.page-foot{font-size:.78rem;color:var(--ink-faint);border-top:1px solid va
 
   <div class="callout">
     <h4>Una sola fuente de verdad para la fórmula</h4>
-    <p>Esta tabla es la misma que usa la pantalla de Cierre de Turno para calcular kg a partir de las cargas preparadas. El <b>Catálogo de Materiales</b> todavía tiene su columna "% meta en mezcla" con valores anteriores (45/10/15/8/12/5/2/3), que ya no coinciden con esta fórmula real.</p>
-    <p>¿Quieres que actualice el Catálogo para que ese % se calcule a partir de esta tabla, en vez de capturarse por separado?</p>
+    <p>Esta tabla es la misma que usa la pantalla de Cierre de Turno para calcular kg a partir de las cargas preparadas, y la que usa el Catálogo de Materiales para su columna "% meta en mezcla" — los tres siempre calculan a partir de estos mismos kg por carga, nunca capturan su propia copia.</p>
   </div>
 
+  <div class="field-warn error" id="saveError" hidden></div>
   <div class="action-bar">
     <span class="dirty-flag" id="dirtyFlag"><span class="dot"></span>Cambios sin guardar</span>
     <button class="btn-ghost" id="btnReset" disabled onclick="resetParams()">Restablecer</button>
@@ -319,56 +330,54 @@ if (row) {
 // del orden de documento — espera la MISMA promesa que ya se está
 // resolviendo ahí (no dispara un requireRole nuevo).
 await window.__authReady;
-const DEFAULTS = {
-  cargas: 8, turnos: 2, kgPorMetro: 4,
-  materiales: [
-    {id:'hdpe-r-pel', name:'HDPE reciclado', variant:'peletizado', kg:25, nota:''},
-    {id:'hdpe-v-pel', name:'HDPE virgen', variant:'peletizado (sustituto)', kg:0, nota:'sustituto — comparte cupo con reciclado', sustituto:true},
-    {id:'hdpe-r-hoj', name:'HDPE reciclado', variant:'en hojuela', kg:50, nota:''},
-    {id:'hdpe-r-hoj-sl', name:'HDPE reciclado', variant:'hojuela sin lavar', kg:7.5, nota:''},
-    {id:'caco3', name:'Carbonato de calcio', variant:'peletizado', kg:50, nota:''},
-    {id:'masterbatch', name:'Masterbatch', variant:'de color', kg:2.5, nota:''},
-    {id:'aditivo-uv', name:'Aditivo UV', variant:'', kg:1.5, nota:''},
-    {id:'triturado', name:'Triturado', variant:'interno', kg:12.5, nota:'aproximado — varía con la merma', approx:true},
-  ],
-};
-let STATE = JSON.parse(JSON.stringify(DEFAULTS));
-let SAVED = JSON.parse(JSON.stringify(DEFAULTS));
+const api = window.api; // expuesto por session.js (bundleado) — ver su comentario
+
+// STATE se llena con datos reales de Convex (cargarParametros, más abajo)
+// — nunca hardcodeado. m.materialId/nombre/variante/kgPorCarga/nota vienen
+// de api.parametros.getParametros(), que ya junta materiales+formulaCarga.
+let STATE = null;
 let dirty = false;
 const fmt = n => Math.round(n).toLocaleString('es-MX');
 const fmtPct = n => n.toFixed(1)+'%';
 
 function rowHtml(m){
-  return `<tr data-id="${m.id}">
-    <td class="mat-cell"><span class="mat-name">${m.name}</span>${m.variant?`<small>${m.variant}</small>`:''}</td>
-    <td><div class="qty-field"><input type="number" step="0.1" value="${m.kg}" data-field="kg"><span class="suf">kg</span></div></td>
+  return `<tr data-id="${m.materialId}">
+    <td class="mat-cell"><span class="mat-name">${m.nombre}</span>${m.variante?`<small>${m.variante}</small>`:''}</td>
+    <td><div class="qty-field"><input type="number" step="0.1" value="${m.kgPorCarga}" data-field="kgPorCarga"><span class="suf">kg</span></div></td>
     <td class="pct-cell" data-pct>0.0%</td>
     <td class="note-cell">${m.nota}</td>
   </tr>`;
 }
 function renderTable(){
-  document.getElementById('formulaBody').innerHTML = STATE.materiales.map(rowHtml).join('');
+  document.getElementById('formulaBody').innerHTML = STATE.formula.map(rowHtml).join('');
 }
-renderTable();
 
 function recalc(){
-  const totalKg = STATE.materiales.reduce((s,m)=>s+(m.kg||0),0);
+  const totalKg = STATE.formula.reduce((s,m)=>s+(m.kgPorCarga||0),0);
   document.querySelectorAll('#formulaBody tr').forEach((tr,i)=>{
-    const m = STATE.materiales[i];
-    const pct = totalKg>0 ? (m.kg||0)/totalKg*100 : 0;
+    const m = STATE.formula[i];
+    const pct = totalKg>0 ? (m.kgPorCarga||0)/totalKg*100 : 0;
     tr.querySelector('[data-pct]').textContent = fmtPct(pct);
   });
   document.getElementById('formulaTotalKg').textContent = fmt(totalKg)+' kg';
   document.getElementById('formulaTotalPct').textContent = '100.0%';
 
-  const porTurno = totalKg * (STATE.cargas||0);
-  const porLineaDia = porTurno * (STATE.turnos||0);
+  const porTurno = totalKg * (STATE.cargasPorTurno||0);
+  const porLineaDia = porTurno * (STATE.turnosPorDia||0);
   document.getElementById('statTurno').innerHTML = fmt(porTurno)+'<span class="unit">kg</span>';
   document.getElementById('statTurnoM').textContent = fmt(porTurno/(STATE.kgPorMetro||1))+' m teóricos';
   document.getElementById('statLineaDia').innerHTML = fmt(porLineaDia)+'<span class="unit">kg</span>';
   document.getElementById('statTotalCarga').innerHTML = fmt(totalKg)+'<span class="unit">kg</span>';
 }
-recalc();
+
+async function cargarParametros(){
+  STATE = await window.Session.call(api.parametros.getParametros, {}, 'query');
+  document.getElementById('pCargas').value = STATE.cargasPorTurno;
+  document.getElementById('pTurnos').value = STATE.turnosPorDia;
+  document.getElementById('pKgPorMetro').value = STATE.kgPorMetro;
+  renderTable();
+  recalc();
+}
 
 function markDirty(){
   dirty = true;
@@ -379,7 +388,7 @@ function markDirty(){
 
 ['pCargas','pTurnos','pKgPorMetro'].forEach(id=>{
   document.getElementById(id).addEventListener('input', e=>{
-    const map = {pCargas:'cargas', pTurnos:'turnos', pKgPorMetro:'kgPorMetro'};
+    const map = {pCargas:'cargasPorTurno', pTurnos:'turnosPorDia', pKgPorMetro:'kgPorMetro'};
     STATE[map[id]] = parseFloat(e.target.value)||0;
     recalc();
     markDirty();
@@ -389,28 +398,42 @@ function markDirty(){
 document.getElementById('formulaBody').addEventListener('input', e=>{
   const field = e.target.dataset.field; if(!field) return;
   const tr = e.target.closest('tr');
-  const m = STATE.materiales.find(x=>x.id===tr.dataset.id);
+  const m = STATE.formula.find(x=>x.materialId===tr.dataset.id);
   m[field] = parseFloat(e.target.value)||0;
   recalc();
   markDirty();
 });
 
-function saveParams(){
-  SAVED = JSON.parse(JSON.stringify(STATE));
-  dirty = false;
-  document.getElementById('dirtyFlag').classList.remove('show');
-  document.getElementById('btnSave').disabled = true;
-  document.getElementById('btnReset').disabled = true;
-  const t = document.getElementById('toast');
-  t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 2400);
+async function saveParams(){
+  const btn = document.getElementById('btnSave');
+  const errorBox = document.getElementById('saveError');
+  errorBox.hidden = true;
+  const textoOriginal = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Guardando…';
+  try{
+    // Una sola mutation atómica para cargasPorTurno/turnosPorDia/
+    // kgPorMetro Y toda la fórmula — nunca un loop de mutations
+    // independientes (guardado parcial si una fallara a la mitad).
+    await window.Session.call(api.parametros.guardarParametrosCompleto, {
+      cargasPorTurno: STATE.cargasPorTurno, turnosPorDia: STATE.turnosPorDia, kgPorMetro: STATE.kgPorMetro,
+      formula: STATE.formula.map(m => ({ materialId: m.materialId, kgPorCarga: m.kgPorCarga, nota: m.nota })),
+    }, 'mutation');
+    dirty = false;
+    document.getElementById('dirtyFlag').classList.remove('show');
+    btn.disabled = true; btn.textContent = textoOriginal;
+    document.getElementById('btnReset').disabled = true;
+    const t = document.getElementById('toast');
+    t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 2400);
+  }catch(err){
+    btn.disabled = false; btn.textContent = textoOriginal;
+    errorBox.hidden = false;
+    errorBox.textContent = '⚠ ' + (err?.message || String(err));
+  }
 }
-function resetParams(){
-  STATE = JSON.parse(JSON.stringify(SAVED));
-  document.getElementById('pCargas').value = STATE.cargas;
-  document.getElementById('pTurnos').value = STATE.turnos;
-  document.getElementById('pKgPorMetro').value = STATE.kgPorMetro;
-  renderTable();
-  recalc();
+async function resetParams(){
+  // Descarta ediciones locales releyendo de Convex — el servidor es la
+  // única fuente de verdad, no una copia "SAVED" en memoria del cliente.
+  await cargarParametros();
   dirty = false;
   document.getElementById('dirtyFlag').classList.remove('show');
   document.getElementById('btnSave').disabled = true;
@@ -422,4 +445,6 @@ function resetParams(){
    explícitamente para que esos atributos sigan funcionando. */
 window.saveParams = saveParams;
 window.resetParams = resetParams;
+
+await cargarParametros();
 </script>
