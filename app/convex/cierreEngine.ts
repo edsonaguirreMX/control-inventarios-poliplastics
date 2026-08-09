@@ -205,6 +205,89 @@ export async function revertirCierreImpl(
   return { ok: true };
 }
 
+// Glue compartida por 4.2 (recierre de un turno ya cerrado) y 5.2
+// (corrección administrativa) — ambos casos son exactamente "revertir lo
+// que había, aplicar los valores nuevos, y dejar auditoría de qué cambió y
+// por qué". Antes de esto, esa secuencia iba a estar duplicada en cierres.ts
+// y correcciones.ts; ahora ambos son wrappers delgados sobre esta función.
+export async function recapturarCierreImpl(
+  ctx: MutationCtx,
+  args: {
+    cierreTurnoId: Id<'cierresTurno'>;
+    cargasPreparadas: number;
+    metrosBuenos: number;
+    caballetes105Pzas: number;
+    caballetes106Pzas: number;
+    consumoPorMaterial: { materialId: Id<'materiales'>; kgConsumido: number }[];
+    motivo: 'recierre_duplicado' | 'correccion_manual';
+    nota: string | null;
+    createdBy: Id<'users'>;
+  }
+): Promise<{
+  kgBuenos: number;
+  mermaTotalKg: number;
+  caballetesKg: number;
+  trituradoKg: number;
+  costoTotalConsumido: number;
+  costoRealPorKg: number;
+  costoRealPorMetro: number;
+}> {
+  if (args.cargasPreparadas < 0) {
+    throw new Error('recapturarCierre: cargasPreparadas no puede ser negativo.');
+  }
+
+  const existente = await ctx.db.get(args.cierreTurnoId);
+  if (!existente) {
+    throw new Error(`recapturarCierre: cierresTurno ${args.cierreTurnoId} no existe.`);
+  }
+  const snapshotAntes = JSON.stringify(existente);
+
+  // revertirCierreImpl es quien decide si esto es seguro (falla explícito
+  // si el Triturado que este cierre generó ya fue consumido por otro
+  // cierre posterior) — recapturarCierreImpl no repite esa lógica, solo la
+  // usa: si revertir falla, este throw también falla y nada se escribe
+  // (atomicidad de la mutation).
+  await revertirCierreImpl(ctx, { cierreTurnoId: args.cierreTurnoId, createdBy: args.createdBy });
+
+  const totales = await aplicarCierreImpl(ctx, {
+    cierreTurnoId: args.cierreTurnoId,
+    metrosBuenos: args.metrosBuenos,
+    caballetes105Pzas: args.caballetes105Pzas,
+    caballetes106Pzas: args.caballetes106Pzas,
+    consumoPorMaterial: args.consumoPorMaterial,
+    createdBy: args.createdBy,
+  });
+
+  const now = Date.now();
+  await ctx.db.patch(args.cierreTurnoId, {
+    cargasPreparadas: args.cargasPreparadas,
+    metrosBuenos: args.metrosBuenos,
+    caballetes105Pzas: args.caballetes105Pzas,
+    caballetes106Pzas: args.caballetes106Pzas,
+    ...totales,
+    editado: true,
+    editadoPor: args.createdBy,
+    editadoEn: now,
+    vecesRecapturado: existente.vecesRecapturado + 1,
+  });
+
+  const actualizado = await ctx.db.get(args.cierreTurnoId);
+  const snapshotDespues = JSON.stringify(actualizado);
+
+  await ctx.db.insert('correccionesHistorial', {
+    entidad: 'cierreTurno',
+    entidadId: String(args.cierreTurnoId),
+    motivo: args.motivo,
+    snapshotAntes,
+    snapshotDespues,
+    nota: args.nota,
+    corregidoPor: args.createdBy,
+    corregidoEn: now,
+  });
+
+  return totales;
+}
+
 // --- Wrappers registrados (invocación aislada: pruebas o desde una action).
 // A propósito internalMutation — 4.2/5.2 importan y llaman los *Impl
 // directamente dentro de su propia transacción, no estos wrappers. ---
@@ -224,4 +307,19 @@ export const aplicarCierre = internalMutation({
 export const revertirCierre = internalMutation({
   args: { cierreTurnoId: v.id('cierresTurno'), createdBy: v.id('users') },
   handler: async (ctx, args) => revertirCierreImpl(ctx, args),
+});
+
+export const recapturarCierre = internalMutation({
+  args: {
+    cierreTurnoId: v.id('cierresTurno'),
+    cargasPreparadas: v.number(),
+    metrosBuenos: v.number(),
+    caballetes105Pzas: v.number(),
+    caballetes106Pzas: v.number(),
+    consumoPorMaterial: v.array(v.object({ materialId: v.id('materiales'), kgConsumido: v.number() })),
+    motivo: v.union(v.literal('recierre_duplicado'), v.literal('correccion_manual')),
+    nota: v.union(v.string(), v.null()),
+    createdBy: v.id('users'),
+  },
+  handler: async (ctx, args) => recapturarCierreImpl(ctx, args),
 });

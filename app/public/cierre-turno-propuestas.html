@@ -216,6 +216,10 @@ button{font-family:inherit;}
   background:var(--warning-soft);color:var(--warning);font-size:.72rem;line-height:1.4;
   display:flex;flex-direction:column;gap:.4rem;
 }
+/* Sin esto, [hidden] pierde contra el display:flex de arriba (misma
+   especificidad, la regla de autor gana sobre el estilo por defecto del
+   navegador) y el banner se queda visible aunque JS ponga hidden=true. */
+.field-warn[hidden]{display:none;}
 .field-warn.error{background:var(--danger-soft);color:var(--danger);}
 .field-warn button{
   align-self:flex-start;border:1px solid currentColor;background:none;color:inherit;
@@ -334,6 +338,7 @@ button{font-family:inherit;}
             </div>
             <div class="wiz-step" data-step="1">
               <div class="wiz-step-body" id="entrResumen"></div>
+              <div class="field-warn error" id="entrSaveError" hidden></div>
               <div class="cta-bar">
                 <button class="btn-save" id="entrSaveBtn" onclick="entrSave()">Guardar entrada de material</button>
               </div>
@@ -420,6 +425,8 @@ button{font-family:inherit;}
 
             <div class="wiz-step" data-step="3">
               <div class="wiz-step-body" id="wizResumen"></div>
+              <div class="field-warn" id="wizRecierreConfirm" hidden></div>
+              <div class="field-warn error" id="wizSaveError" hidden></div>
               <div class="cta-bar">
                 <button class="btn-save" id="wizSaveBtn" onclick="wizSave()">Guardar y cerrar turno</button>
                 <button class="btn-ghost" id="wizBackHomeBtn" hidden onclick="showHome()">Volver al inicio</button>
@@ -463,6 +470,7 @@ button{font-family:inherit;}
 const LOGIN_URL = '/login-acceso.html';
 const ROLE_LABEL = { operador:'Operador de piso', admin:'Admin' };
 const sessionUser = await window.Session.requireRole(['operador', 'admin']);
+const api = window.api; // expuesto por session.js (bundleado) — ver su comentario
 
 function iniciales(nombre){
   return nombre.trim().split(/\s+/).slice(0,2).map(p=>p[0].toUpperCase()).join('');
@@ -483,61 +491,76 @@ function renderSessionBar(){
 }
 renderSessionBar();
 
-const MATERIALS = [
-  {id:'hdpe-r-pel', name:'HDPE reciclado', variant:'peletizado', entrada:500, kgPorCarga:25},
-  {id:'hdpe-v-pel', name:'HDPE virgen', variant:'peletizado (sustituto)', entrada:0, kgPorCarga:0, sustituto:true},
-  {id:'hdpe-r-hoj', name:'HDPE reciclado', variant:'en hojuela', entrada:0, kgPorCarga:50},
-  {id:'hdpe-r-hoj-sl', name:'HDPE reciclado', variant:'hojuela sin lavar', entrada:0, kgPorCarga:7.5},
-  {id:'caco3', name:'Carbonato de calcio', variant:'peletizado', entrada:150, kgPorCarga:50},
-  {id:'masterbatch', name:'Masterbatch', variant:'de color', entrada:0, kgPorCarga:2.5},
-  {id:'aditivo-uv', name:'Aditivo UV', variant:'', entrada:0, kgPorCarga:1.5},
-  {id:'triturado', name:'Triturado', variant:'interno', entrada:0, kgPorCarga:12.5, approx:true},
-];
+// Fuente única de verdad de los datos del formulario: se cargan de Convex,
+// nunca hardcodeados. MATERIALES_ENTRADA (sin Triturado, sin costo) para el
+// flujo de "Entrada de material"; FORMULA (con kgPorCarga/kgEsperado reales
+// de Parámetros de Producción) para el flujo de "Cierre de turno";
+// CIERRES_HOY para el estado de las 4 combinaciones línea×turno.
+let MATERIALES_ENTRADA = [];
+let FORMULA = [];
+let CIERRES_HOY = [];
+
+// KG_POR_METRO/CAB_105_KG/CAB_106_KG solo alimentan la VISTA PREVIA en vivo
+// de merma/caballetes/Triturado mientras el operador captura (misma
+// filosofía que las bandas de tolerancia: ayuda de UX, no regla de
+// negocio) — el cálculo autoritativo real ocurre en el servidor
+// (cierreEngine.aplicarCierreImpl), que sí lee parametrosProduccion real.
 const KG_POR_METRO = 4;
 const CAB_105_KG = 1.250;
 const CAB_106_KG = 1.9;
 const fmt = n => Math.round(n).toLocaleString('es-MX');
+// NUNCA new Date().toISOString() para "hoy" — eso da la fecha en UTC, que
+// en México puede diferir hasta 6-7 horas del reloj local y desalinear
+// duplicados/recierres (bloqueante de auditoría). La "fecha operativa"
+// (con la regla de que Turno 2 cruzando medianoche pertenece al día que
+// empezó, no al día calendario del reloj) la calcula el servidor — este
+// es el ÚNICO lugar del cliente que la pide, todo lo demás la reutiliza.
+async function isoHoy(){ return window.Session.call(api.tiempo.obtenerFechaOperativaHoy, {}, 'query'); }
+function isoADisplayLargo(iso){ const [y,m,d] = iso.split('-'); return `${d}/${m}/${y}`; }
 
 /* ============================================================
-   ESTADO DE CIERRES (línea × turno)
+   ESTADO DE CIERRES (línea × turno) — real, vía estadoCierresDelDia
    ============================================================ */
-const CIERRES = { L1T1:false, L1T2:false, L2T1:false, L2T2:false };
-function renderCierreGrid(){
-  const combos = [['1','1'],['1','2'],['2','1'],['2','2']];
+async function refrescarCierresHoy(){
+  CIERRES_HOY = await window.Session.call(api.cierres.estadoCierresDelDia, { fecha: await isoHoy() }, 'query');
+}
+async function renderCierreGrid(){
+  await refrescarCierresHoy();
+  const combos = [[1,1],[1,2],[2,1],[2,2]];
   document.getElementById('cierreGrid').innerHTML = combos.map(([l,t])=>{
-    const key = 'L'+l+'T'+t;
-    const done = CIERRES[key];
-    const title = done && done.por ? `title="Cerrado por ${done.por} · ${done.hora}"` : '';
-    return `<div class="cierre-cell" ${title}>
+    const info = CIERRES_HOY.find(c=>c.linea===l && c.turno===t);
+    const done = info?.cerrado;
+    return `<div class="cierre-cell">
       <span class="lt">Línea ${l} · Turno ${t}</span>
       <span class="st ${done?'done':'pending'}">${done? '✓ Cerrado':'Pendiente'}</span>
     </div>`;
   }).join('');
 }
-renderCierreGrid();
 
 /* ============================================================
    NAVEGACIÓN: menú y flujos
    ============================================================ */
-function showHome(){
+async function showHome(){
   document.querySelectorAll('#phoneA .wiz-flow').forEach(f=>f.classList.remove('active'));
   document.getElementById('wizHome').classList.add('active');
   document.getElementById('aStatus').textContent = 'Menú';
-  renderCierreGrid();
+  await renderCierreGrid();
 }
-function goEntradas(){
+async function goEntradas(){
   document.querySelectorAll('#phoneA .wiz-flow').forEach(f=>f.classList.remove('active'));
   document.getElementById('flowEntradas').classList.add('active');
   document.getElementById('aStatus').textContent = 'Entrada de material';
-  entrGo(0);
+  MATERIALES_ENTRADA = await window.Session.call(api.entradas.listMaterialesActivos, {}, 'query');
+  document.getElementById('entrList').innerHTML = MATERIALES_ENTRADA.map(m=>buildToggleRow(m)).join('');
+  await entrGo(0);
 }
-function goCierre(){
+async function goCierre(){
   document.querySelectorAll('#phoneA .wiz-flow').forEach(f=>f.classList.remove('active'));
   document.getElementById('flowCierre').classList.add('active');
   document.getElementById('aStatus').textContent = 'Cierre de turno';
-  resetCierreForm();
+  await resetCierreForm();
   cierreGo(0);
-  updateInlineStatus();
+  await updateInlineStatus();
 }
 function renderProgress(barId, total, current){
   document.getElementById(barId).innerHTML = Array.from({length: total}, (_,i)=>{
@@ -550,14 +573,12 @@ function renderProgress(barId, total, current){
    FLUJO: ENTRADA DE MATERIAL (sin línea)
    ============================================================ */
 function buildToggleRow(m){
-  const val = m.entrada;
-  const isOn = val > 0;
-  return `<div class="mat-block" data-mat="${m.id}">
+  return `<div class="mat-block" data-mat="${m._id}">
     <div class="mat-row">
-      <div class="mat-toggle ${isOn?'on':''}" onclick="toggleMat(this)"></div>
-      <div class="mat-name">${m.name}${m.variant?`<small>${m.variant}</small>`:''}</div>
-      <div class="qty-plain" style="${!isOn ? 'visibility:hidden' : ''}">
-        <input type="number" inputmode="decimal" value="${val}" class="tnum" oninput="checkEntradaWarning('${m.id}')">
+      <div class="mat-toggle" onclick="toggleMat(this)"></div>
+      <div class="mat-name">${m.nombre}${m.variante?`<small>${m.variante}</small>`:''}</div>
+      <div class="qty-plain" style="visibility:hidden">
+        <input type="number" inputmode="decimal" value="0" class="tnum" oninput="checkEntradaWarning('${m._id}')">
         <span class="unit">kg</span>
       </div>
     </div>
@@ -570,85 +591,114 @@ function toggleMat(el){
   qty.style.visibility = el.classList.contains('on') ? 'visible' : 'hidden';
   checkEntradaWarning(el.closest('.mat-block').dataset.mat);
 }
-document.getElementById('entrList').innerHTML = MATERIALS.map(m=>buildToggleRow(m)).join('');
 
-function entrGo(step){
+async function entrGo(step){
   document.querySelectorAll('#flowEntradas .wiz-step').forEach(s=>s.classList.toggle('active', +s.dataset.step===step));
   renderProgress('entrProgress', 2, step);
-  if(step===1) renderEntrResumen();
+  if(step===1) await renderEntrResumen();
   document.querySelector('#flowEntradas .wiz-step.active .wiz-step-body').scrollTop = 0;
 }
-function renderEntrResumen(){
-  const rows = MATERIALS.map((m,i)=>{
-    const row = document.querySelectorAll('#entrList .mat-row')[i];
-    if(!row.querySelector('.mat-toggle').classList.contains('on')) return null;
-    const qty = row.querySelector('input').value;
+async function renderEntrResumen(){
+  const rows = MATERIALES_ENTRADA.map((m)=>{
+    const block = document.querySelector(`#entrList .mat-block[data-mat="${m._id}"]`);
+    if(!block || !block.querySelector('.mat-toggle').classList.contains('on')) return null;
+    const qty = block.querySelector('.qty-plain input').value;
     return {m, qty};
   }).filter(Boolean);
   const total = rows.reduce((s,r)=>s+(parseFloat(r.qty)||0),0);
   const rowsHtml = rows.length
-    ? rows.map(r=>`<div class="summary-line"><span>${r.m.name}</span><b class="tnum">${fmt(r.qty)} kg</b></div>`).join('')
+    ? rows.map(r=>`<div class="summary-line"><span>${r.m.nombre}</span><b class="tnum">${fmt(r.qty)} kg</b></div>`).join('')
     : `<div class="summary-line"><span>Sin materiales marcados</span><b>—</b></div>`;
   document.getElementById('entrResumen').innerHTML = `
     <div class="wiz-step-title"><div class="k">Entrada de material · Paso 2 de 2</div><h3>Revisa antes de guardar</h3></div>
-    <div class="summary-line" style="border-top:none;"><span>Fecha</span><b>07/08/2026</b></div>
+    <div class="summary-line" style="border-top:none;"><span>Fecha</span><b>${isoADisplayLargo(await isoHoy())}</b></div>
     <div class="summary-line"><span>Destino</span><b>Almacén general — sin línea</b></div>
     <div class="summary-group"><h4>Materiales recibidos</h4>${rowsHtml}</div>
     <div class="summary-line"><span>Total recibido</span><b class="tnum">${fmt(total)} kg</b></div>`;
 }
-function entrSave(){
+async function entrSave(){
   const btn = document.getElementById('entrSaveBtn');
-  btn.textContent = '✓ Entrada guardada'; btn.classList.add('done'); btn.disabled = true;
-  const t = document.getElementById('entrToast');
-  const quien = sessionUser.nombre ? ` — registrada por ${sessionUser.nombre}` : '';
-  t.textContent = `✓ Entrada registrada — va directo a inventario general, sin línea asignada${quien}`;
-  t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 2400);
+  const errorBox = document.getElementById('entrSaveError');
+  errorBox.hidden = true;
+
+  const filas = MATERIALES_ENTRADA.map((m)=>{
+    const block = document.querySelector(`#entrList .mat-block[data-mat="${m._id}"]`);
+    const on = block?.querySelector('.mat-toggle').classList.contains('on');
+    const qty = parseFloat(block?.querySelector('.qty-plain input')?.value) || 0;
+    return { materialId: m._id, on, qty };
+  }).filter(f=>f.on && f.qty > 0);
+
+  if(filas.length === 0){
+    errorBox.hidden = false;
+    errorBox.textContent = '⚠ Marca al menos un material con una cantidad mayor a 0.';
+    return;
+  }
+
+  const textoOriginal = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Guardando…';
+  try{
+    // Una sola mutation atómica para todos los materiales marcados — nunca
+    // un loop de mutations independientes: si el material 3 de 5 fallara
+    // su validación, con el loop anterior los 2 primeros ya habrían
+    // quedado guardados aunque la UI mostrara error (guardado parcial,
+    // mayor de la auditoría). Con el batch, o se guardan todos o ninguno.
+    await window.Session.call(api.entradas.crearEntradasBatch, {
+      fecha: await isoHoy(),
+      materiales: filas.map(f=>({ materialId: f.materialId, cantidadKg: f.qty })),
+    }, 'mutation');
+    btn.textContent = '✓ Entrada guardada'; btn.classList.add('done');
+    const t = document.getElementById('entrToast');
+    t.textContent = `✓ Entrada registrada — va directo a inventario general, sin línea asignada — registrada por ${sessionUser.nombre}`;
+    t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 2400);
+  }catch(err){
+    btn.disabled = false; btn.textContent = textoOriginal;
+    errorBox.hidden = false;
+    errorBox.textContent = '⚠ ' + (err?.message || String(err));
+  }
 }
 
 /* ============================================================
    FLUJO: CIERRE DE TURNO (por línea)
    ============================================================ */
-const wizState = { linea:'1', turno:'2' };
+const wizState = { linea:1, turno:2 };
+let confirmandoRecierre = false;
 
-document.getElementById('wizLinea').addEventListener('click', e=>{
+document.getElementById('wizLinea').addEventListener('click', async e=>{
   const b = e.target.closest('button'); if(!b) return;
   [...b.parentElement.children].forEach(c=>c.classList.remove('sel'));
-  b.classList.add('sel'); wizState.linea = b.dataset.v;
-  updateInlineStatus();
+  b.classList.add('sel'); wizState.linea = Number(b.dataset.v);
+  confirmandoRecierre = false;
+  await updateInlineStatus();
 });
-document.getElementById('wizTurno').addEventListener('click', e=>{
+document.getElementById('wizTurno').addEventListener('click', async e=>{
   const b = e.target.closest('button'); if(!b) return;
   [...b.parentElement.children].forEach(c=>c.classList.remove('sel'));
-  b.classList.add('sel'); wizState.turno = b.dataset.v;
-  updateInlineStatus();
+  b.classList.add('sel'); wizState.turno = Number(b.dataset.v);
+  confirmandoRecierre = false;
+  await updateInlineStatus();
 });
-function updateInlineStatus(){
-  const key = 'L'+wizState.linea+'T'+wizState.turno;
-  const done = CIERRES[key];
+async function updateInlineStatus(){
+  await refrescarCierresHoy();
+  const info = CIERRES_HOY.find(c=>c.linea===wizState.linea && c.turno===wizState.turno);
+  const done = info?.cerrado;
   const el = document.getElementById('cierreInlineStatus');
   el.className = 'cierre-inline-status ' + (done ? 'warn' : 'ok');
   el.textContent = done
-    ? `⚠ Línea ${wizState.linea} · Turno ${wizState.turno} ya se cerró hoy. Puedes continuar, pero se registrará como un cierre adicional.`
+    ? `⚠ Línea ${wizState.linea} · Turno ${wizState.turno} ya se cerró hoy. Puedes continuar, pero se registrará como una corrección (recierre).`
     : `Línea ${wizState.linea} · Turno ${wizState.turno} — pendiente de cierre.`;
 }
 
-function computeDefaultConsumo(cargas){
-  const vals = {};
-  MATERIALS.forEach(m=>{
-    vals[m.id] = m.sustituto ? 0 : +(cargas * m.kgPorCarga).toFixed(2);
-  });
-  return vals;
-}
-function buildConsumoRow(m, val, cargas){
+function buildConsumoRow(m, cargas){
   let hint;
-  if(m.sustituto) hint = 'sustituto — comparte cupo de 25 kg/carga con HDPE reciclado';
-  else if(m.approx) hint = `≈ ${fmt(cargas)} cargas × ${m.kgPorCarga} kg — puede variar`;
+  if(m.esSustituto) hint = 'sustituto — comparte cupo de 25 kg/carga con HDPE reciclado';
+  else if(m.esInterno) hint = `≈ ${fmt(cargas)} cargas × ${m.kgPorCarga} kg — puede variar`;
   else hint = `${fmt(cargas)} cargas × ${m.kgPorCarga} kg`;
-  return `<div class="mat-block" data-mat="${m.id}">
+  const val = m.esSustituto ? 0 : +m.kgEsperado.toFixed(2);
+  return `<div class="mat-block" data-mat="${m.materialId}">
     <div class="mat-row">
-      <div class="mat-name">${m.name}${m.variant?`<small>${m.variant}</small>`:''}</div>
+      <div class="mat-name">${m.nombre}${m.variante?`<small>${m.variante}</small>`:''}</div>
       <div class="qty-plain">
-        <input type="number" inputmode="decimal" value="${val}" class="tnum" data-consumo="${m.id}" oninput="checkConsumoWarning('${m.id}')">
+        <input type="number" inputmode="decimal" value="${val}" class="tnum" data-consumo="${m.materialId}" oninput="checkConsumoWarning('${m.materialId}')">
         <span class="unit">kg</span>
       </div>
     </div>
@@ -656,10 +706,10 @@ function buildConsumoRow(m, val, cargas){
     <div class="field-warn" hidden></div>
   </div>`;
 }
-function renderConsumo(){
+async function renderConsumo(){
   const cargas = parseFloat(document.getElementById('wizCargas').value)||0;
-  const defaults = computeDefaultConsumo(cargas);
-  document.getElementById('wizConsumo').innerHTML = MATERIALS.map(m=>buildConsumoRow(m, defaults[m.id], cargas)).join('');
+  FORMULA = await window.Session.call(api.cierres.consumoEsperado, { cargasPreparadas: cargas }, 'query');
+  document.getElementById('wizConsumo').innerHTML = FORMULA.map(m=>buildConsumoRow(m, cargas)).join('');
   calcMermaA();
   checkCargasWarn();
 }
@@ -699,23 +749,23 @@ function checkEntradaWarning(materialId){
     el.hidden = true; el.dataset.state = '';
   }
 }
-function tryAdvanceEntrada(){
+async function tryAdvanceEntrada(){
   // cada fila ya se valida sola al tocar/editar (toggleMat, oninput) — aquí solo se
   // revisa lo que ya está en pantalla, para no revivir una advertencia ya confirmada.
   if(hasWarnings('#entrList')){ showValidationToast(); return; }
-  entrGo(1);
+  await entrGo(1);
 }
 
 function consumoBand(m, cargas){
-  if(m.sustituto) return null; // el sustituto es inherentemente variable, no se valida contra una banda fija
+  if(m.esSustituto) return null; // el sustituto es inherentemente variable, no se valida contra una banda fija
   const expected = cargas * m.kgPorCarga;
   if(expected <= 0) return null;
-  const factor = m.approx ? 0.7 : 0.5; // Triturado varía más, banda más ancha
+  const factor = m.esInterno ? 0.7 : 0.5; // Triturado varía más, banda más ancha
   return { min: expected*(1-factor), max: expected*(1+factor), expected };
 }
 function checkConsumoWarning(materialId){
   const cargas = parseFloat(document.getElementById('wizCargas').value)||0;
-  const m = MATERIALS.find(x=>x.id===materialId);
+  const m = FORMULA.find(x=>x.materialId===materialId);
   const block = document.querySelector(`#wizConsumo .mat-block[data-mat="${materialId}"]`);
   if(!block) return;
   const el = block.querySelector('.field-warn');
@@ -812,9 +862,9 @@ function cierreGo(step){
 function renderWizResumen(){
   const m = calcMermaA();
   const cargas = document.getElementById('wizCargas').value;
-  const consumoHtml = MATERIALS.map(mt=>{
-    const input = document.querySelector(`#wizConsumo input[data-consumo="${mt.id}"]`);
-    return `<div class="summary-line"><span>${mt.name}</span><b class="tnum">${fmt(input.value)} kg</b></div>`;
+  const consumoHtml = FORMULA.map(mt=>{
+    const input = document.querySelector(`#wizConsumo input[data-consumo="${mt.materialId}"]`);
+    return `<div class="summary-line"><span>${mt.nombre}</span><b class="tnum">${fmt(input.value)} kg</b></div>`;
   }).join('');
   document.getElementById('wizResumen').innerHTML = `
     <div class="wiz-step-title"><div class="k">Cierre de turno · Paso 4 de 4</div><h3>Revisa antes de guardar</h3></div>
@@ -830,27 +880,76 @@ function renderWizResumen(){
     </div>`;
 }
 
-function wizSave(){
+async function wizSave(){
   const btn = document.getElementById('wizSaveBtn');
-  btn.textContent = '✓ Turno cerrado'; btn.classList.add('done'); btn.disabled = true;
-  const key = 'L'+wizState.linea+'T'+wizState.turno;
-  const hora = new Date().toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'});
-  CIERRES[key] = sessionUser.nombre ? {por:sessionUser.nombre, hora} : true;
-  renderCierreGrid();
-  const t = document.getElementById('wizToast');
-  const quien = sessionUser.nombre ? ` · Cerrado por ${sessionUser.nombre}` : '';
-  t.textContent = `✓ Turno cerrado — Línea ${wizState.linea} · Turno ${wizState.turno} · 07/08/2026${quien}`;
-  t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 2400);
-  document.getElementById('wizBackHomeBtn').hidden = false;
+  const errorBox = document.getElementById('wizSaveError');
+  const confirmBox = document.getElementById('wizRecierreConfirm');
+  errorBox.hidden = true;
+
+  const cargasPreparadas = parseFloat(document.getElementById('wizCargas').value)||0;
+  const metrosBuenos = parseFloat(document.getElementById('wizMetros').value)||0;
+  const caballetes105Pzas = parseFloat(document.getElementById('wizCab105').value)||0;
+  const caballetes106Pzas = parseFloat(document.getElementById('wizCab106').value)||0;
+  const consumoPorMaterial = FORMULA.map(mt=>{
+    const input = document.querySelector(`#wizConsumo input[data-consumo="${mt.materialId}"]`);
+    return { materialId: mt.materialId, kgConsumido: parseFloat(input.value)||0 };
+  });
+
+  const textoOriginal = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Guardando…';
+  try{
+    // Una sola lectura de la fecha operativa, reutilizada para el guardado
+    // y para el toast — evita dos round-trips que en teoría podrían caer
+    // en lados distintos de la medianoche operativa.
+    const fechaHoy = await isoHoy();
+    const r = await window.Session.call(api.cierres.crearCierreTurno, {
+      fecha: fechaHoy, linea: wizState.linea, turno: wizState.turno,
+      cargasPreparadas, metrosBuenos, caballetes105Pzas, caballetes106Pzas,
+      consumoPorMaterial, confirmarRecierre: confirmandoRecierre,
+    }, 'mutation');
+
+    if(r.yaExistia && !r.recierreAplicado){
+      // Ya existe un cierre para esta línea/turno/día y todavía no se
+      // confirmó el recierre — pedimos confirmación con un banner propio
+      // (nunca window.confirm(), congela la automatización y es mala UX).
+      btn.disabled = false; btn.textContent = textoOriginal;
+      confirmBox.hidden = false;
+      confirmBox.className = 'field-warn';
+      confirmBox.innerHTML = `⚠ Línea ${wizState.linea} · Turno ${wizState.turno} ya se cerró hoy. Guardar de nuevo se registrará como una corrección (recierre), revirtiendo el consumo anterior y aplicando estos valores nuevos. <button type="button" onclick="confirmarYGuardarRecierre()">Sí, recerrar este turno</button>`;
+      return;
+    }
+
+    confirmBox.hidden = true;
+    confirmandoRecierre = false;
+    btn.textContent = '✓ Turno cerrado'; btn.classList.add('done');
+    const t = document.getElementById('wizToast');
+    const quien = sessionUser.nombre ? ` · Cerrado por ${sessionUser.nombre}` : '';
+    const etiqueta = r.recierreAplicado ? 'Turno recerrado (corrección)' : 'Turno cerrado';
+    t.textContent = `✓ ${etiqueta} — Línea ${wizState.linea} · Turno ${wizState.turno} · ${isoADisplayLargo(fechaHoy)}${quien}`;
+    t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 2400);
+    document.getElementById('wizBackHomeBtn').hidden = false;
+    await refrescarCierresHoy();
+  }catch(err){
+    btn.disabled = false; btn.textContent = textoOriginal;
+    errorBox.hidden = false;
+    errorBox.textContent = '⚠ ' + (err?.message || String(err));
+  }
+}
+function confirmarYGuardarRecierre(){
+  confirmandoRecierre = true;
+  wizSave();
 }
 
-function resetCierreForm(){
+async function resetCierreForm(){
   document.getElementById('wizCargas').value = 14;
   document.getElementById('wizMetros').value = 505;
   document.getElementById('wizCab105').value = 12;
   document.getElementById('wizCab106').value = 8;
   document.getElementById('wizConsumo').innerHTML = '';
-  renderConsumo();
+  document.getElementById('wizRecierreConfirm').hidden = true;
+  document.getElementById('wizSaveError').hidden = true;
+  confirmandoRecierre = false;
+  await renderConsumo();
   checkMetrosWarn();
   checkCaballetesWarn();
   const btn = document.getElementById('wizSaveBtn');
@@ -859,7 +958,7 @@ function resetCierreForm(){
 }
 
 /* estado inicial */
-renderConsumo();
+await showHome();
 
 /* El HTML llama estas funciones vía onclick="" — en un <script type="module">
    quedan en el scope del módulo, no globales, así que hay que exponerlas
@@ -872,6 +971,14 @@ window.entrSave = entrSave;
 window.cierreGo = cierreGo;
 window.tryAdvance = tryAdvance;
 window.wizSave = wizSave;
+window.confirmarYGuardarRecierre = confirmarYGuardarRecierre;
 window.toggleMat = toggleMat;
 window.ackWarning = ackWarning;
+window.checkEntradaWarning = checkEntradaWarning;
+window.checkConsumoWarning = checkConsumoWarning;
+window.calcMermaA = calcMermaA;
+window.renderConsumo = renderConsumo;
+window.checkCargasWarn = checkCargasWarn;
+window.checkMetrosWarn = checkMetrosWarn;
+window.checkCaballetesWarn = checkCaballetesWarn;
 </script>

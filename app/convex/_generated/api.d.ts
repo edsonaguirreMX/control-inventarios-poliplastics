@@ -11,12 +11,16 @@
 import type * as auth from "../auth.js";
 import type * as authActions from "../authActions.js";
 import type * as cierreEngine from "../cierreEngine.js";
+import type * as cierres from "../cierres.js";
+import type * as correcciones from "../correcciones.js";
 import type * as entradas from "../entradas.js";
 import type * as lib_auth from "../lib/auth.js";
+import type * as lib_fechaOperativa from "../lib/fechaOperativa.js";
 import type * as peps from "../peps.js";
 import type * as seed from "../seed.js";
 import type * as seedData from "../seedData.js";
 import type * as testHelpers from "../testHelpers.js";
+import type * as tiempo from "../tiempo.js";
 
 import type {
   ApiFromModules,
@@ -28,12 +32,16 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   authActions: typeof authActions;
   cierreEngine: typeof cierreEngine;
+  cierres: typeof cierres;
+  correcciones: typeof correcciones;
   entradas: typeof entradas;
   "lib/auth": typeof lib_auth;
+  "lib/fechaOperativa": typeof lib_fechaOperativa;
   peps: typeof peps;
   seed: typeof seed;
   seedData: typeof seedData;
   testHelpers: typeof testHelpers;
+  tiempo: typeof tiempo;
 }>;
 
 /**
