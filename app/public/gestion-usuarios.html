@@ -308,6 +308,10 @@ window.__authReady = window.Session.requireRole(['admin']);
 const user = await window.__authReady;
 window.usuarioSesion = user.nombre;
 window.rolSesion = user.rol;
+// Login (campo `usuario`) de la sesión actual — usado más abajo para
+// detectar cuándo un admin está regenerando SU PROPIA contraseña y avisarle
+// que eso cierra su sesión de inmediato (ver regenerarPwd/mostrarPasswordModal).
+window.usuarioSesionLogin = user.usuario;
 const row = document.getElementById('sessionRow');
 if (row) {
   row.innerHTML = `<span class="role-badge">🔒 ${user.nombre} · ${ROLE_LABEL[user.rol]}</span><a class="logout-link" href="#" id="logoutLink">Cerrar sesión</a>`;
@@ -345,27 +349,41 @@ let dirty = false;
 
 function roleLabel(id){ return (ROLES.find(r=>r.id===id)||{}).label || id; }
 
+// Hallazgo de CodeRabbit en PR7: nombre/usuario/_id se interpolaban sin
+// escapar en HTML armado a mano (innerHTML) — un nombre con `"` o `<`
+// rompía el atributo/tag e inyectaba markup/atributos arbitrarios. Un solo
+// helper, usado en TODO punto donde un valor que viene de la BD (no un
+// literal fijo de este archivo) se interpola en una plantilla HTML.
+function escapeHtml(str){
+  return String(str ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+}
+
 function rowHtml(u){
+  const id = escapeHtml(u._id);
+  const nombre = escapeHtml(u.nombre);
+  const usuario = escapeHtml(u.usuario);
   if(!u.activo){
-    return `<tr class="inactivo" data-id="${u._id}">
-      <td><div class="field nombre"><input type="text" value="${u.nombre}" disabled></div></td>
-      <td><div class="field usuario"><input type="text" value="${u.usuario}" disabled></div></td>
+    return `<tr class="inactivo" data-id="${id}">
+      <td><div class="field nombre"><input type="text" value="${nombre}" disabled></div></td>
+      <td><div class="field usuario"><input type="text" value="${usuario}" disabled></div></td>
       <td><span class="inactivo-badge">Desactivado</span></td>
       <td><div class="field rol"><select disabled>${ROLES.map(r=>`<option value="${r.id}" ${r.id===u.rol?'selected':''}>${r.label}</option>`).join('')}</select></div></td>
-      <td><button class="btn-reactivar" onclick="reactivar('${u._id}')" title="Reactivar usuario">↺ Reactivar</button></td>
+      <td><button class="btn-reactivar" onclick="reactivar('${id}')" title="Reactivar usuario">↺ Reactivar</button></td>
     </tr>`;
   }
-  return `<tr data-id="${u._id}">
-    <td><div class="field nombre"><input type="text" value="${u.nombre}" data-field="nombre" placeholder="Nombre completo"></div></td>
-    <td><div class="field usuario"><input type="text" value="${u.usuario}" data-field="usuario" placeholder="usuario"></div></td>
+  return `<tr data-id="${id}">
+    <td><div class="field nombre"><input type="text" value="${nombre}" data-field="nombre" placeholder="Nombre completo"></div></td>
+    <td><div class="field usuario"><input type="text" value="${usuario}" data-field="usuario" placeholder="usuario"></div></td>
     <td>
       <div class="field password">
         <input type="text" value="" placeholder="sin cambios" disabled>
-        <button class="icon-btn" onclick="regenerarPwd('${u._id}')" title="Generar nueva contraseña">🎲</button>
+        <button class="icon-btn" onclick="regenerarPwd('${id}')" title="Generar nueva contraseña">🎲</button>
       </div>
     </td>
     <td><div class="field rol"><select data-field="rol">${ROLES.map(r=>`<option value="${r.id}" ${r.id===u.rol?'selected':''}>${r.label}</option>`).join('')}</select></div></td>
-    <td><button class="btn-delete" onclick="confirmarEliminar('${u._id}')" title="Desactivar usuario">🗑</button></td>
+    <td><button class="btn-delete" onclick="confirmarEliminar('${id}')" title="Desactivar usuario">🗑</button></td>
   </tr>`;
 }
 
@@ -472,17 +490,36 @@ function mostrarErrorGlobal(err){
 // El password en claro solo existe en la respuesta de esta llamada — nunca
 // se guarda ni se vuelve a poder consultar. Este modal es la única
 // oportunidad de copiarlo; no se cierra solo ni al hacer clic afuera.
-function mostrarPasswordModal(quien, password, accion){
+// `opts.esPropia`: true cuando el admin acaba de regenerar SU PROPIA
+// contraseña — actualizarPasswordImpl (backend) borra las sesiones del
+// usuario objetivo sin excepción, así que el token de esta misma pestaña
+// ya quedó inválido. En ese caso el botón de cierre no solo cierra el
+// modal: cierra sesión en el cliente y manda a login (si no, la próxima
+// llamada a Convex con el token viejo fallaría con un error confuso de
+// "no autorizado" en vez de explicar lo que realmente pasó).
+function mostrarPasswordModal(quien, password, accion, opts = {}){
+  const esPropia = !!opts.esPropia;
   abrirModal(`
-    <h3>✓ ${accion}</h3>
-    <p style="font-size:.85rem;color:var(--ink-muted);">Contraseña de <b>${quien}</b> — cópiala ahora, no se volverá a mostrar en ningún lado:</p>
-    <div class="modal-password-display" id="modalPasswordText">${password}</div>
+    <h3>✓ ${escapeHtml(accion)}</h3>
+    <p style="font-size:.85rem;color:var(--ink-muted);">Contraseña de <b>${escapeHtml(quien)}</b> — cópiala ahora, no se volverá a mostrar en ningún lado:</p>
+    <div class="modal-password-display" id="modalPasswordText">${escapeHtml(password)}</div>
     <div class="modal-warn">⚠ Esta es la única vez que verás esta contraseña. Compártela ahora por un canal seguro.</div>
+    ${esPropia ? '<div class="modal-warn">🔒 Es tu propia contraseña — tu sesión actual ya se cerró. Al continuar volverás a la pantalla de inicio de sesión.</div>' : ''}
     <div class="modal-actions">
       <button class="btn-ghost" onclick="copiarPassword()">📋 Copiar</button>
-      <button class="btn-primary" onclick="cerrarModal()">Listo, ya la copié</button>
+      <button class="btn-primary" onclick="${esPropia ? 'cerrarModalYRelogin()' : 'cerrarModal()'}">Listo, ya la copié</button>
     </div>
   `);
+}
+// Cierra el modal y termina la sesión del lado del cliente — la sesión ya
+// no existe del lado del servidor (regenerarPassword la borró), así que
+// esto solo limpia el token local guardado y redirige; Session.logout()
+// ya tolera que la mutation de logout falle (sesión ya no existe) sin
+// bloquear el flujo.
+async function cerrarModalYRelogin(){
+  cerrarModal();
+  await window.Session.logout();
+  window.location.href = '/login-acceso.html';
 }
 function copiarPassword(){
   const text = document.getElementById('modalPasswordText').textContent;
@@ -515,7 +552,7 @@ async function crearUsuarioSubmit(){
   try{
     const { passwordTemporal } = await window.Session.call(api.usuariosActions.crearUsuario, { nombre, usuario, rol }, 'action');
     await cargarUsuarios();
-    mostrarPasswordModal(`${nombre} (${usuario.trim().toLowerCase()})`, passwordTemporal, 'Usuario creado');
+    mostrarPasswordModal(`${nombre} (${usuario.trim().toLowerCase()})`, passwordTemporal, 'Usuario creado'); // nunca es uno mismo — no puedes crear tu propia cuenta
   }catch(err){
     btn.disabled = false; btn.textContent = 'Crear usuario';
     errorBox.hidden = false;
@@ -525,9 +562,14 @@ async function crearUsuarioSubmit(){
 
 function regenerarPwd(id){
   const u = USUARIOS.find(x=>x._id===id);
+  // El backend invalida TODAS las sesiones del usuario objetivo al
+  // regenerar su password (incluida la propia, si el admin se apunta a sí
+  // mismo) — avisar aquí antes de confirmar, no dejar que se entere por un
+  // error confuso después.
+  const esPropia = u.usuario === window.usuarioSesionLogin;
   abrirModal(`
     <h3>¿Generar nueva contraseña?</h3>
-    <p style="font-size:.85rem;color:var(--ink-muted);">La contraseña actual de <b>${u.nombre}</b> dejará de funcionar de inmediato.</p>
+    <p style="font-size:.85rem;color:var(--ink-muted);">La contraseña actual de <b>${escapeHtml(u.nombre)}</b> dejará de funcionar de inmediato.${esPropia ? ' Es tu propio usuario — tu sesión actual se cerrará y tendrás que volver a iniciar sesión con la contraseña nueva.' : ''}</p>
     <div class="modal-actions">
       <button class="btn-ghost" onclick="cerrarModal()">Cancelar</button>
       <button class="btn-primary" onclick="regenerarPwdConfirmado('${id}')">Sí, generar</button>
@@ -536,9 +578,10 @@ function regenerarPwd(id){
 }
 async function regenerarPwdConfirmado(id){
   const u = USUARIOS.find(x=>x._id===id);
+  const esPropia = u.usuario === window.usuarioSesionLogin;
   try{
     const { passwordTemporal } = await window.Session.call(api.usuariosActions.regenerarPassword, { userId: id }, 'action');
-    mostrarPasswordModal(`${u.nombre} (${u.usuario})`, passwordTemporal, 'Contraseña actualizada');
+    mostrarPasswordModal(`${u.nombre} (${u.usuario})`, passwordTemporal, 'Contraseña actualizada', { esPropia });
   }catch(err){
     cerrarModal();
     mostrarErrorGlobal(err);
@@ -548,7 +591,7 @@ async function regenerarPwdConfirmado(id){
 function confirmarEliminar(id){
   const u = USUARIOS.find(x=>x._id===id);
   abrirModal(`
-    <h3>¿Desactivar a ${u.nombre || 'este usuario'}?</h3>
+    <h3>¿Desactivar a ${escapeHtml(u.nombre) || 'este usuario'}?</h3>
     <p style="font-size:.85rem;color:var(--ink-muted);">Ya no podrá iniciar sesión. Puedes reactivarlo después desde esta misma tabla.</p>
     <div class="modal-actions">
       <button class="btn-ghost" onclick="cerrarModal()">Cancelar</button>
@@ -624,6 +667,7 @@ window.eliminarConfirmado = eliminarConfirmado;
 window.reactivar = reactivar;
 window.copiarPassword = copiarPassword;
 window.cerrarModal = cerrarModal;
+window.cerrarModalYRelogin = cerrarModalYRelogin;
 window.saveUsers = saveUsers;
 window.resetUsers = resetUsers;
 

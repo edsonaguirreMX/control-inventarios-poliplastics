@@ -10,6 +10,7 @@ import { v } from 'convex/values';
 import { action } from './_generated/server';
 import { internal } from './_generated/api';
 import bcrypt from 'bcryptjs';
+import { randomInt } from 'node:crypto';
 
 const ROL_VALUE = v.union(
   v.literal('operador'), v.literal('admin'), v.literal('gerencia'), v.literal('compras'), v.literal('calidad')
@@ -17,11 +18,16 @@ const ROL_VALUE = v.union(
 
 // Mismo alfabeto sin caracteres ambiguos (0/O, 1/l/I) que usa seed.ts para
 // el password temporal del admin inicial — para que un humano pueda
-// copiarlo/leerlo en voz alta sin confusiones.
+// copiarlo/leerlo en voz alta sin confusiones. randomInt (node:crypto,
+// CSPRNG) en vez de Math.random() (hallazgo de CodeRabbit en PR7: un
+// password de un solo uso generado con un PRNG no criptográfico es
+// teóricamente predecible) — este archivo ya corre en runtime Node
+// ('use node' arriba), así que node:crypto está disponible sin dependencia
+// nueva.
 function generarPasswordTemporal(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
   let s = '';
-  for (let i = 0; i < 10; i++) s += chars[Math.floor(Math.random() * chars.length)];
+  for (let i = 0; i < 10; i++) s += chars[randomInt(chars.length)];
   return s + '!';
 }
 
