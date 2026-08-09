@@ -51,7 +51,11 @@ export const me = query({
     if (!token) return null;
     try {
       const user = await requireUser(ctx, token);
-      return { nombre: user.nombre, usuario: user.usuario, rol: user.rol };
+      // _id (inmutable) incluido junto a los campos editables — gestion-usuarios.html
+      // lo usa para detectar "esta fila es mi propia cuenta" de forma estable aunque
+      // yo mismo me haya renombrado el `usuario` en la misma sesión (hallazgo de
+      // CodeRabbit en PR7: comparar por `usuario` se rompe si cambia a medio camino).
+      return { _id: user._id, nombre: user.nombre, usuario: user.usuario, rol: user.rol };
     } catch {
       return null;
     }

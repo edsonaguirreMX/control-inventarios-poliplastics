@@ -308,10 +308,15 @@ window.__authReady = window.Session.requireRole(['admin']);
 const user = await window.__authReady;
 window.usuarioSesion = user.nombre;
 window.rolSesion = user.rol;
-// Login (campo `usuario`) de la sesión actual — usado más abajo para
-// detectar cuándo un admin está regenerando SU PROPIA contraseña y avisarle
-// que eso cierra su sesión de inmediato (ver regenerarPwd/mostrarPasswordModal).
-window.usuarioSesionLogin = user.usuario;
+// _id (inmutable) de la sesión actual — usado más abajo para detectar cuándo
+// un admin está regenerando SU PROPIA contraseña y avisarle que eso cierra
+// su sesión de inmediato (ver regenerarPwd/mostrarPasswordModal). Comparar
+// por `_id` en vez de por `usuario`: el `usuario` es editable en esta misma
+// pantalla (batch de arriba), así que compararlo se rompía si el admin se
+// renombraba a sí mismo antes de regenerar su password (hallazgo de
+// CodeRabbit sobre el fix anterior — un guard de "soy yo" tiene que anclarse
+// a algo que no cambia con la propia edición que se está protegiendo).
+window.miUsuarioId = user._id;
 const row = document.getElementById('sessionRow');
 if (row) {
   row.innerHTML = `<span class="role-badge">🔒 ${user.nombre} · ${ROLE_LABEL[user.rol]}</span><a class="logout-link" href="#" id="logoutLink">Cerrar sesión</a>`;
@@ -565,8 +570,8 @@ function regenerarPwd(id){
   // El backend invalida TODAS las sesiones del usuario objetivo al
   // regenerar su password (incluida la propia, si el admin se apunta a sí
   // mismo) — avisar aquí antes de confirmar, no dejar que se entere por un
-  // error confuso después.
-  const esPropia = u.usuario === window.usuarioSesionLogin;
+  // error confuso después. Comparación por _id (inmutable), no por usuario.
+  const esPropia = u._id === window.miUsuarioId;
   abrirModal(`
     <h3>¿Generar nueva contraseña?</h3>
     <p style="font-size:.85rem;color:var(--ink-muted);">La contraseña actual de <b>${escapeHtml(u.nombre)}</b> dejará de funcionar de inmediato.${esPropia ? ' Es tu propio usuario — tu sesión actual se cerrará y tendrás que volver a iniciar sesión con la contraseña nueva.' : ''}</p>
@@ -578,7 +583,7 @@ function regenerarPwd(id){
 }
 async function regenerarPwdConfirmado(id){
   const u = USUARIOS.find(x=>x._id===id);
-  const esPropia = u.usuario === window.usuarioSesionLogin;
+  const esPropia = u._id === window.miUsuarioId;
   try{
     const { passwordTemporal } = await window.Session.call(api.usuariosActions.regenerarPassword, { userId: id }, 'action');
     mostrarPasswordModal(`${u.nombre} (${u.usuario})`, passwordTemporal, 'Contraseña actualizada', { esPropia });
