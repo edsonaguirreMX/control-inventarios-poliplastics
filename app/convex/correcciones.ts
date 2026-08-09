@@ -240,4 +240,3 @@ export const actualizarEntradasBatch = mutation({
     return { ok: true };
   },
 });
-
