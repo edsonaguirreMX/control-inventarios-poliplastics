@@ -87,6 +87,21 @@ describe('reporteDiario: generarReporteAhora (tarea 8.1)', () => {
     const historial = await t.query(api.reporteDiario.listHistorial, { token: adminToken });
     expect(historial[0].destinatariosCount).toBe(3);
   });
+
+  test('BLOQUEANTE (auditoría PR6): también crea una notificación in-app en la campana, no solo el registro de historial', async () => {
+    const t = convexTest(schema, modules);
+    const { adminToken, comprasToken } = await setup(t);
+    await t.mutation(api.reporteDiario.generarReporteAhora, { token: adminToken });
+
+    // Visible como no leída para un rol destinatario real (Compras, uno de
+    // ROLES_DASHBOARD) — sin esto, el reporte quedaba "invisible" salvo que
+    // alguien entrara a mano al historial de Reporte Diario.
+    const noLeidas = await t.query(api.alertas.noLeidasParaMi, { token: comprasToken });
+    const notif = noLeidas.find((n) => n.reglaSlug === 'reporte-diario-generado');
+    expect(notif).toBeDefined();
+    expect(notif?.nombreRegla).toBe('Reporte diario generado');
+    expect(notif?.detalle).toMatch(/vista de impresión/);
+  });
 });
 
 describe('reporteDiario: generarReporteDiario — cron (tarea 8.2)', () => {
@@ -129,6 +144,29 @@ describe('reporteDiario: generarReporteDiario — cron (tarea 8.2)', () => {
     const historial = await t.run((ctx) => ctx.db.query('reporteDiarioHistorial').collect());
     expect(historial.filter((h) => h.generadoPor === 'cron')).toHaveLength(1);
     expect(historial[0].destinatariosCount).toBe(1);
+  });
+
+  test('BLOQUEANTE (auditoría PR6): el cron también crea UNA notificación in-app no leída visible para el rol destinatario, sin duplicar en corridas repetidas', async () => {
+    const t = convexTest(schema, modules);
+    // La hora falsa se fija ANTES de crear las sesiones — si no, expiresAt
+    // (calculado con la hora real) quedaría en el pasado en cuanto
+    // adelantamos el reloj, y las queries/mutations fallarían por "sesión
+    // expirada" en vez de probar lo que este test busca probar.
+    const fakeNow = horaLocalAInstante('2026-08-11', '14:05', ZONA);
+    vi.useFakeTimers();
+    vi.setSystemTime(fakeNow);
+
+    const { adminToken, comprasToken } = await setup(t);
+    await t.mutation(api.reporteDiario.guardarConfig, { hora: '14:00', activo: true, correos: [], whatsapp: [], token: adminToken });
+
+    await t.mutation(internal.reporteDiario.generarReporteDiario, {});
+    await t.mutation(internal.reporteDiario.generarReporteDiario, {}); // repetido — no debe duplicar la notificación
+
+    const notificaciones = await t.run((ctx) => ctx.db.query('alertasHistorial').collect());
+    expect(notificaciones.filter((n) => n.reglaSlug === 'reporte-diario-generado')).toHaveLength(1);
+
+    const noLeidas = await t.query(api.alertas.noLeidasParaMi, { token: comprasToken });
+    expect(noLeidas.find((n) => n.reglaSlug === 'reporte-diario-generado')).toBeDefined();
   });
 
   test('un envío "manual" el mismo día NO bloquea que el cron siga generando el suyo', async () => {

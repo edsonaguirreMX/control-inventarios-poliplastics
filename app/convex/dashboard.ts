@@ -7,7 +7,12 @@ import { fechaOperativa, sumarDiasISO } from './lib/fechaOperativa';
 // Roles que ven Panel de Control (mismo criterio que el guard de la
 // página en panel-control.html) — operador no tiene esta pantalla, su
 // captura vive en Cierre de Turno.
-const ROLES_DASHBOARD = ['compras', 'calidad', 'gerencia', 'admin'] as const;
+// Exportado: reporteDiario.ts lo reutiliza como destinatarios de la
+// notificación in-app "reporte generado" — son los mismos roles que
+// pueden ver Panel de Control, así no hace falta un selector de roles
+// aparte en reporteDiarioConfig ni arriesgar que diverja de quién
+// realmente consume el dashboard.
+export const ROLES_DASHBOARD = ['compras', 'calidad', 'gerencia', 'admin'] as const;
 
 // Ventana para "consumo diario promedio" — alimenta el punto de reorden
 // (regla 4 del spec: consumo diario promedio × (lead time + stock de

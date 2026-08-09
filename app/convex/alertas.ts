@@ -18,6 +18,14 @@ const CUALQUIER_ROL: Rol[] = ['operador', 'admin', 'gerencia', 'compras', 'calid
 // documenta aquí para que ambos números se muevan juntos si algún día cambia.
 const META_MERMA_PCT = 5.0;
 
+// Nombres legibles para reglaSlug que NO vienen de alertasReglas (no son
+// una de las 7 reglas configurables) — hoy solo la notificación de Reporte
+// Diario (reporteDiario.ts), que reutiliza este mismo mecanismo de
+// alertasHistorial en vez de inventar una tabla de notificaciones aparte.
+const NOMBRES_SISTEMA: Record<string, string> = {
+  'reporte-diario-generado': 'Reporte diario generado',
+};
+
 /* ============================================================
    7.1 — CRUD de alertasReglas (admin-only) + lecturas por usuario
    ============================================================ */
@@ -166,7 +174,8 @@ export const noLeidasParaMi = query({
     return noLeidas
       .sort((a, b) => b.fecha - a.fecha)
       .map((h) => ({
-        _id: h._id, reglaSlug: h.reglaSlug, nombreRegla: nombrePorSlug.get(h.reglaSlug) ?? h.reglaSlug,
+        _id: h._id, reglaSlug: h.reglaSlug,
+        nombreRegla: nombrePorSlug.get(h.reglaSlug) ?? NOMBRES_SISTEMA[h.reglaSlug] ?? h.reglaSlug,
         fecha: h.fecha, detalle: h.detalle, canales: h.canales,
       }));
   },
@@ -180,6 +189,8 @@ export const listHistorial = query({
     const user = await requireRole(ctx, args.token, ['admin']);
     const limite = args.limite ?? 40;
     const historial = await ctx.db.query('alertasHistorial').order('desc').take(limite);
+    const reglas = await ctx.db.query('alertasReglas').collect();
+    const nombrePorSlug = new Map(reglas.map((r) => [r.slug, r.nombre]));
     const resultado = [];
     for (const h of historial) {
       const leida = await ctx.db
@@ -187,7 +198,9 @@ export const listHistorial = query({
         .withIndex('by_alerta_user', (q) => q.eq('alertaId', h._id).eq('userId', user._id))
         .unique();
       resultado.push({
-        _id: h._id, reglaSlug: h.reglaSlug, fecha: h.fecha, detalle: h.detalle,
+        _id: h._id, reglaSlug: h.reglaSlug,
+        nombreRegla: nombrePorSlug.get(h.reglaSlug) ?? NOMBRES_SISTEMA[h.reglaSlug] ?? h.reglaSlug,
+        fecha: h.fecha, detalle: h.detalle,
         destinatariosRoles: h.destinatariosRoles, canales: h.canales, leida: !!leida,
       });
     }

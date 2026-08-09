@@ -1054,6 +1054,11 @@ document.getElementById('rangePick').addEventListener('click', e=>{
    previsualizar su vista.
    ============================================================ */
 let NO_LEIDAS = [];
+// reglaSlug sintético que reporteDiario.ts inserta en alertasHistorial
+// (no es una de las 7 reglas configurables) — la campana lo reconoce para
+// ofrecer el enlace directo a la vista de impresión, en vez de solo
+// marcarlo como leído como al resto de las alertas.
+const REGLA_SLUG_REPORTE = 'reporte-diario-generado';
 function fmtFechaBell(ms){
   return new Date(ms).toLocaleString('es-MX', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit', hour12:false });
 }
@@ -1061,12 +1066,15 @@ function renderBell(){
   const badge = document.getElementById('bellBadge');
   badge.hidden = NO_LEIDAS.length===0;
   badge.textContent = NO_LEIDAS.length;
-  document.getElementById('bellList').innerHTML = NO_LEIDAS.length ? NO_LEIDAS.map(a=>`
-    <div class="bell-item unread" data-id="${a._id}" title="Clic para marcar como leída">
-      <div class="n">${a.nombreRegla}</div>
+  document.getElementById('bellList').innerHTML = NO_LEIDAS.length ? NO_LEIDAS.map(a=>{
+    const esReporte = a.reglaSlug === REGLA_SLUG_REPORTE;
+    const tip = esReporte ? 'Clic para abrir la vista de impresión y marcar como leída' : 'Clic para marcar como leída';
+    return `<div class="bell-item unread" data-id="${a._id}" data-slug="${a.reglaSlug}" title="${tip}">
+      <div class="n">${a.nombreRegla}${esReporte?' 🖨️':''}</div>
       <div class="d">${a.detalle}</div>
       <div class="f">${fmtFechaBell(a.fecha)}</div>
-    </div>`).join('') : '<div class="bell-empty">Sin alertas sin leer.</div>';
+    </div>`;
+  }).join('') : '<div class="bell-empty">Sin alertas sin leer.</div>';
 }
 async function cargarAlertas(){
   NO_LEIDAS = await window.Session.call(api.alertas.noLeidasParaMi, {}, 'query');
@@ -1075,9 +1083,13 @@ async function cargarAlertas(){
 document.getElementById('bellList').addEventListener('click', async e=>{
   const item = e.target.closest('.bell-item[data-id]'); if(!item) return;
   const id = item.dataset.id;
+  const slug = item.dataset.slug;
   await window.Session.call(api.alertas.marcarAlertaLeida, { alertaId: id }, 'mutation');
   NO_LEIDAS = NO_LEIDAS.filter(a=>a._id!==id);
   renderBell();
+  if(slug === REGLA_SLUG_REPORTE){
+    window.open('/panel-control.html?autoprint=1', '_blank');
+  }
 });
 function toggleBell(){
   document.getElementById('bellDropdown').hidden = !document.getElementById('bellDropdown').hidden;

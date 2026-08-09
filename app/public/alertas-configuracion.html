@@ -391,11 +391,10 @@ function renderKPI(){
 
 function renderHistorial(){
   document.getElementById('historialList').innerHTML = HISTORIAL.map((h)=>{
-    const regla = REGLAS.find(r=>r.slug===h.reglaSlug);
     return `<div class="hist-row ${h.leida?'':'unread'}" data-id="${h._id}">
       <div class="hist-fecha">${fmtFechaHist(h.fecha)}</div>
       <div>
-        <div class="hist-nombre">${h.leida?'':'<span class="unread-dot"></span>'}${regla?.nombre || h.reglaSlug}</div>
+        <div class="hist-nombre">${h.leida?'':'<span class="unread-dot"></span>'}${h.nombreRegla}</div>
         <div class="hist-detalle">${h.detalle}</div>
         <div class="hist-meta">${h.canales.map(c=>`<span class="hist-canal-pill">${roleLabelCanal(c)}</span>`).join('')}</div>
       </div>
