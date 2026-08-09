@@ -677,7 +677,7 @@ function renderKPIs(){
       <span class="stat-label">Más urgente de reordenar</span>
       ${masUrgente ? `
         <span class="stat-value" style="font-size:1.15rem;">${masUrgente.nombre} <small style="display:block;font-family:'IBM Plex Sans',sans-serif;font-size:.72rem;color:var(--ink-faint);font-weight:400;">${masUrgente.variante}</small></span>
-        <span class="stat-sub">Cobertura: ${masUrgente.coberturaDias.toFixed(0)} días</span>
+        <span class="stat-sub">${masUrgente.coberturaDias!==null ? `Cobertura: ${masUrgente.coberturaDias.toFixed(0)} días` : 'Sin historial de consumo todavía'}</span>
       ` : `
         <span class="stat-value" style="font-size:1.15rem;">— <small style="display:block;font-family:'IBM Plex Sans',sans-serif;font-size:.72rem;color:var(--ink-faint);font-weight:400;">Sin materiales críticos</small></span>
         <span class="stat-sub">Todo por arriba de su punto de reorden</span>
@@ -726,7 +726,11 @@ const statusLabel = {crit:'Crítico', warn:'Por vencer', ok:'Sano'};
 function renderExistencias(){
   document.getElementById('existList').innerHTML = KPI.materiales.map(m=>{
     const sinReorden = m.reorderKg===null;
-    const scaleMax = sinReorden ? m.existenciaKg*1.4 : Math.max(m.existenciaKg, m.reorderKg*1.3, 1);
+    // Piso de 1 también aquí — un material sin existencia todavía (recién
+    // sembrado, capa en 0) no debe dejar scaleMax en 0 y volver NaN el
+    // ancho de la barra (mismo bloqueante de auditoría que el gráfico de
+    // producción, aplicado de forma preventiva a este otro cálculo).
+    const scaleMax = sinReorden ? Math.max(m.existenciaKg*1.4, 1) : Math.max(m.existenciaKg, m.reorderKg*1.3, 1);
     const fillPct = Math.min(100, (m.existenciaKg/scaleMax)*100);
     const tickPct = sinReorden ? null : Math.min(100, (m.reorderKg/scaleMax)*100);
     const label = m.esInterno ? 'Interno' : m.esSustituto ? 'Sustituto' : statusLabel[m.status];
@@ -748,7 +752,7 @@ function renderExistencias(){
   const criticos = KPI.materiales.filter(m=>m.status==='crit');
   document.getElementById('existInsight').innerHTML = criticos.length
     ? `⚠ <b>${criticos.map(m=>m.nombre).join(' y ')}</b> están por debajo de su punto de reorden. ` +
-      criticos.map(m=>`${m.nombre}: ${m.coberturaDias.toFixed(0)} días de cobertura`).join(' · ') +
+      criticos.map(m=>`${m.nombre}: ${m.coberturaDias!==null ? m.coberturaDias.toFixed(0)+' días de cobertura' : 'sin historial de consumo'}`).join(' · ') +
       ` — conviene levantar la orden de compra hoy.`
     : `✓ Ningún material está por debajo de su punto de reorden.`;
 }
@@ -773,7 +777,11 @@ function renderProdChart(containerId, linea, rangeN){
   const W=460, H=190, padL=32, padR=14, padT=14, padB=24;
   const plotW=W-padL-padR, plotH=H-padT-padB;
   const vMin = 0; // los columnas siempre parten de cero — nunca truncar el eje de un bar chart
-  const vMax = Math.max(...t1, ...t2, target) * 1.15;
+  // Piso de 1 — sin esto, un sistema recién sembrado (sin cierres) con
+  // objetivo también en 0 deja vMax=0, y yAt() más abajo divide entre
+  // cero (v/vMax) produciendo NaN en cada coordenada del SVG (bloqueante
+  // de auditoría de PR 4).
+  const vMax = Math.max(...t1, ...t2, target, 1) * 1.15;
   const slot = plotW/dates.length;
   const barW = Math.max(1.5, Math.min(11, slot*0.36));
   const gapHalf = 1; // 2px de separación entre las dos barras del par

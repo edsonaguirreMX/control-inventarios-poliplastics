@@ -6,8 +6,17 @@ import { crearCapaImpl } from './peps';
 import {
   crearMaterialPrueba, crearUsuarioPrueba, crearSesionPrueba, crearParametrosPrueba,
 } from './testHelpers';
+import { fechaOperativa } from './lib/fechaOperativa';
 
 const modules = import.meta.glob('./**/*.ts');
+
+// "Hoy" tiene que calcularse igual que dashboard.ts lo calcula (fecha
+// operativa real, no un literal fijo) — de lo contrario estos tests solo
+// pasan por coincidencia mientras corran el mismo día calendario que se
+// escribieron, y fallan (o dejan de probar "hoy" de verdad) cualquier otro
+// día o en otro huso horario (mayor de la auditoría de PR 4). Mismos
+// horaInicioTurno1/zonaHoraria que crearParametrosPrueba().
+const HOY = fechaOperativa(Date.now(), 'America/Mexico_City', '06:00');
 
 async function setup(t: Awaited<ReturnType<typeof convexTest>>) {
   await crearParametrosPrueba(t, 4);
@@ -97,7 +106,7 @@ describe('dashboard: getKPIsHoy (tarea 6.1)', () => {
 
     // Primer cierre: consume 1400 kg (queda vigente:false tras el recierre).
     await t.mutation(api.cierres.crearCierreTurno, {
-      fecha: '2026-08-08', linea: 1, turno: 1, cargasPreparadas: 1, metrosBuenos: 0,
+      fecha: HOY, linea: 1, turno: 1, cargasPreparadas: 1, metrosBuenos: 0,
       caballetes105Pzas: 0, caballetes106Pzas: 0,
       consumoPorMaterial: [{ materialId: matId, kgConsumido: 1400 }],
       token: operadorToken,
@@ -105,7 +114,7 @@ describe('dashboard: getKPIsHoy (tarea 6.1)', () => {
     // Recierre del MISMO turno: consume solo 14 kg — el registro de 1400kg
     // queda vigente:false, el de 14kg queda vigente:true.
     await t.mutation(api.cierres.crearCierreTurno, {
-      fecha: '2026-08-08', linea: 1, turno: 1, cargasPreparadas: 1, metrosBuenos: 0,
+      fecha: HOY, linea: 1, turno: 1, cargasPreparadas: 1, metrosBuenos: 0,
       caballetes105Pzas: 0, caballetes106Pzas: 0,
       consumoPorMaterial: [{ materialId: matId, kgConsumido: 14 }],
       confirmarRecierre: true, token: operadorToken,
@@ -136,7 +145,7 @@ describe('dashboard: getKPIsHoy (tarea 6.1)', () => {
       })
     );
     await t.mutation(api.cierres.crearCierreTurno, {
-      fecha: '2026-08-08', linea: 1, turno: 1, cargasPreparadas: 1, metrosBuenos: 25,
+      fecha: HOY, linea: 1, turno: 1, cargasPreparadas: 1, metrosBuenos: 25,
       caballetes105Pzas: 0, caballetes106Pzas: 0,
       consumoPorMaterial: [{ materialId: matId, kgConsumido: 120 }], // kgBuenos=100, merma=20
       token: operadorToken,
@@ -164,7 +173,7 @@ describe('dashboard: series históricas (tarea 6.2)', () => {
       })
     );
     await t.mutation(api.cierres.crearCierreTurno, {
-      fecha: '2026-08-08', linea: 1, turno: 2, cargasPreparadas: 1, metrosBuenos: 44,
+      fecha: HOY, linea: 1, turno: 2, cargasPreparadas: 1, metrosBuenos: 44,
       caballetes105Pzas: 0, caballetes106Pzas: 0,
       consumoPorMaterial: [{ materialId: matId, kgConsumido: 44 }],
       token: operadorToken,
@@ -172,7 +181,7 @@ describe('dashboard: series históricas (tarea 6.2)', () => {
 
     const serie = await t.query(api.dashboard.produccionPorRango, { dias: 14, token: comprasToken });
     expect(serie).toHaveLength(14);
-    const hoy = serie.find((d) => d.fecha === '2026-08-08');
+    const hoy = serie.find((d) => d.fecha === HOY);
     expect(hoy?.linea1Turno2).toBe(44);
     expect(hoy?.linea1Turno1).toBe(0);
   });
@@ -189,7 +198,7 @@ describe('dashboard: series históricas (tarea 6.2)', () => {
       })
     );
     await t.mutation(api.cierres.crearCierreTurno, {
-      fecha: '2026-08-08', linea: 2, turno: 1, cargasPreparadas: 1, metrosBuenos: 20,
+      fecha: HOY, linea: 2, turno: 1, cargasPreparadas: 1, metrosBuenos: 20,
       caballetes105Pzas: 0, caballetes106Pzas: 0,
       consumoPorMaterial: [{ materialId: matId, kgConsumido: 100 }], // kgBuenos=80, merma=20
       token: operadorToken,
@@ -199,8 +208,8 @@ describe('dashboard: series históricas (tarea 6.2)', () => {
     const costo = await t.query(api.dashboard.tendenciaCosto, { dias: 7, token: comprasToken });
     expect(merma).toHaveLength(7);
     expect(costo).toHaveLength(7);
-    const mermaHoy = merma.find((d) => d.fecha === '2026-08-08');
-    const costoHoy = costo.find((d) => d.fecha === '2026-08-08');
+    const mermaHoy = merma.find((d) => d.fecha === HOY);
+    const costoHoy = costo.find((d) => d.fecha === HOY);
     expect(mermaHoy?.pctMerma).toBeCloseTo(20, 5); // 20/100*100
     expect(costoHoy?.costoRealPorKg).toBeCloseTo(300 / 80, 5); // 100kg*$3 / 80kg buenos
   });
