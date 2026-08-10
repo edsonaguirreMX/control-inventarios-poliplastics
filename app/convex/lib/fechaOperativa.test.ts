@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { fechaOperativa, sumarDiasISO } from './fechaOperativa';
+import { fechaOperativa, sumarDiasISO, horaLocalAInstante, nombreDiaSemana } from './fechaOperativa';
 
 const ZONA = 'America/Mexico_City';
 const T1 = '06:00';
@@ -53,5 +53,34 @@ describe('sumarDiasISO', () => {
   });
   test('dias:0 devuelve la misma fecha', () => {
     expect(sumarDiasISO('2026-08-08', 0)).toBe('2026-08-08');
+  });
+});
+
+describe('horaLocalAInstante — inversa de fechaOperativa, usada por el motor de alertas (7.2)', () => {
+  test('18:00 local en México (CST, UTC-6) es 00:00 UTC del mismo día calendario', () => {
+    expect(horaLocalAInstante('2026-08-08', '18:00', ZONA)).toBe(utcISO('2026-08-09', '00:00'));
+  });
+  test('06:00 local en México es 12:00 UTC del mismo día', () => {
+    expect(horaLocalAInstante('2026-08-08', '06:00', ZONA)).toBe(utcISO('2026-08-08', '12:00'));
+  });
+  test('ida y vuelta: fechaOperativa(horaLocalAInstante(f, h, z), z, T1) reproduce el mismo instante de reloj local', () => {
+    const instante = horaLocalAInstante('2026-08-08', '20:30', ZONA);
+    // 20:30 cae después de horaInicioTurno1 (06:00), así que sigue siendo el mismo día operativo.
+    expect(fechaOperativa(instante, ZONA, T1)).toBe('2026-08-08');
+  });
+  test('zona sin offset (UTC) es la identidad', () => {
+    expect(horaLocalAInstante('2026-08-08', '14:00', 'UTC')).toBe(utcISO('2026-08-08', '14:00'));
+  });
+});
+
+describe('nombreDiaSemana', () => {
+  test('2026-08-08 es sábado — sin acento, para coincidir con la convención de diasLaborales del seed', () => {
+    expect(nombreDiaSemana('2026-08-08')).toBe('sabado');
+  });
+  test('2026-08-10 es lunes', () => {
+    expect(nombreDiaSemana('2026-08-10')).toBe('lunes');
+  });
+  test('coincide literalmente con parametrosProduccion.diasLaborales del seed (miercoles sin acento)', () => {
+    expect(nombreDiaSemana('2026-08-12')).toBe('miercoles');
   });
 });
