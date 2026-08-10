@@ -1,4 +1,4 @@
-import { v } from 'convex/values';
+import { v, ConvexError } from 'convex/values';
 import { mutation, query } from './_generated/server';
 import { requireRole } from './lib/auth';
 import { aplicarCierreImpl, recapturarCierreImpl } from './cierreEngine';
@@ -80,7 +80,7 @@ export const crearCierreTurno = mutation({
     const user = await requireRole(ctx, args.token, ['operador', 'admin']);
 
     if (args.cargasPreparadas < 0) {
-      throw new Error('crearCierreTurno: cargasPreparadas no puede ser negativo.');
+      throw new ConvexError('crearCierreTurno: cargasPreparadas no puede ser negativo.');
     }
 
     const existente = await ctx.db

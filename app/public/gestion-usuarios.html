@@ -520,7 +520,7 @@ function cerrarModal(){
 function mostrarErrorGlobal(err){
   const errorBox = document.getElementById('saveError');
   errorBox.hidden = false;
-  errorBox.textContent = '⚠ ' + (err?.message || String(err));
+  errorBox.textContent = '⚠ ' + window.Session.mensajeError(err);
 }
 
 // El password en claro solo existe en la respuesta de esta llamada — nunca
@@ -592,7 +592,7 @@ async function crearUsuarioSubmit(){
   }catch(err){
     btn.disabled = false; btn.textContent = 'Crear usuario';
     errorBox.hidden = false;
-    errorBox.textContent = '⚠ ' + (err?.message || String(err));
+    errorBox.textContent = '⚠ ' + window.Session.mensajeError(err);
   }
 }
 

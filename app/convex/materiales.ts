@@ -1,4 +1,4 @@
-import { v } from 'convex/values';
+import { v, ConvexError } from 'convex/values';
 import { mutation, query } from './_generated/server';
 import type { MutationCtx } from './_generated/server';
 import type { Id } from './_generated/dataModel';
@@ -88,28 +88,28 @@ type ActualizarMaterialArgs = {
 async function actualizarMaterialImpl(ctx: MutationCtx, user: { _id: Id<'users'> }, args: ActualizarMaterialArgs): Promise<void> {
   const material = await ctx.db.get(args.materialId);
   if (!material) {
-    throw new Error('updateMaterial: el material no existe.');
+    throw new ConvexError('updateMaterial: el material no existe.');
   }
 
   // Regla de negocio no negociable (spec, regla 2): Triturado reingresa
   // a inventario valuado en $0 — nunca editable, ni por admin.
   if (material.esInterno && args.costoEstandar !== undefined && args.costoEstandar !== 0) {
-    throw new Error('El costo de Triturado (material interno) siempre es $0 — no se puede editar.');
+    throw new ConvexError('El costo de Triturado (material interno) siempre es $0 — no se puede editar.');
   }
   if (args.costoEstandar !== undefined && args.costoEstandar < 0) {
-    throw new Error('updateMaterial: costoEstandar no puede ser negativo.');
+    throw new ConvexError('updateMaterial: costoEstandar no puede ser negativo.');
   }
   if (args.leadTimeDias != null && args.leadTimeDias < 0) {
-    throw new Error('updateMaterial: leadTimeDias no puede ser negativo.');
+    throw new ConvexError('updateMaterial: leadTimeDias no puede ser negativo.');
   }
   if (args.stockSeguridadDias != null && args.stockSeguridadDias < 0) {
-    throw new Error('updateMaterial: stockSeguridadDias no puede ser negativo.');
+    throw new ConvexError('updateMaterial: stockSeguridadDias no puede ser negativo.');
   }
   if (args.reorderManualKg != null && args.reorderManualKg < 0) {
-    throw new Error('updateMaterial: reorderManualKg no puede ser negativo.');
+    throw new ConvexError('updateMaterial: reorderManualKg no puede ser negativo.');
   }
   if (args.cantidadPedirKg != null && args.cantidadPedirKg < 0) {
-    throw new Error('updateMaterial: cantidadPedirKg no puede ser negativo.');
+    throw new ConvexError('updateMaterial: cantidadPedirKg no puede ser negativo.');
   }
 
   const patch: Record<string, unknown> = { updatedAt: Date.now(), updatedBy: user._id };
@@ -162,7 +162,7 @@ export const guardarCatalogoCompleto = mutation({
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, args.token, ['admin']);
     if (args.materiales.length === 0) {
-      throw new Error('guardarCatalogoCompleto: se necesita al menos un material.');
+      throw new ConvexError('guardarCatalogoCompleto: se necesita al menos un material.');
     }
     for (const fila of args.materiales) {
       await actualizarMaterialImpl(ctx, user, fila);

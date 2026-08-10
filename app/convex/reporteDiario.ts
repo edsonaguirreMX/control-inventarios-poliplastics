@@ -1,4 +1,4 @@
-import { v } from 'convex/values';
+import { v, ConvexError } from 'convex/values';
 import { mutation, query, internalMutation } from './_generated/server';
 import type { MutationCtx } from './_generated/server';
 import { requireRole } from './lib/auth';
@@ -57,11 +57,11 @@ export const guardarConfig = mutation({
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, args.token, ['admin']);
     if (!HORA_REGEX.test(args.hora)) {
-      throw new Error('guardarConfig: hora inválida — formato esperado HH:MM.');
+      throw new ConvexError('guardarConfig: hora inválida — formato esperado HH:MM.');
     }
     for (const correo of args.correos) {
       if (!CORREO_REGEX.test(correo)) {
-        throw new Error(`guardarConfig: "${correo}" no parece un correo válido.`);
+        throw new ConvexError(`guardarConfig: "${correo}" no parece un correo válido.`);
       }
     }
     const now = Date.now();

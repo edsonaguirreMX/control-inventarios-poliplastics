@@ -1,3 +1,4 @@
+import { ConvexError } from 'convex/values';
 import type { QueryCtx, MutationCtx } from '../_generated/server';
 import type { Doc } from '../_generated/dataModel';
 
@@ -15,26 +16,33 @@ export type Rol = 'operador' | 'admin' | 'gerencia' | 'compras' | 'calidad';
  * estos helpers).
  */
 
+// EDS-73: ConvexError, no Error, en las 5 salidas de este archivo — se usan
+// desde CADA función protegida del backend, así que cualquier sesión que
+// expira o cualquier navegación a una pantalla fuera del rol del usuario
+// pasa por aquí. Un Error normal llega al cliente como "Server Error"
+// genérico en producción (Convex redacta el mensaje salvo que sea
+// ConvexError); con ConvexError el mensaje real ("vuelve a iniciar
+// sesión", "no autorizado") llega íntegro.
 export async function requireUser(
   ctx: QueryCtx | MutationCtx,
   token: string | null | undefined
 ): Promise<Doc<'users'>> {
   if (!token) {
-    throw new Error('No autenticado: falta el token de sesión.');
+    throw new ConvexError('No autenticado: falta el token de sesión.');
   }
   const session = await ctx.db
     .query('sessions')
     .withIndex('by_token', (q) => q.eq('token', token))
     .unique();
   if (!session) {
-    throw new Error('No autenticado: sesión inválida.');
+    throw new ConvexError('No autenticado: sesión inválida.');
   }
   if (session.expiresAt < Date.now()) {
-    throw new Error('No autenticado: sesión expirada, vuelve a iniciar sesión.');
+    throw new ConvexError('No autenticado: sesión expirada, vuelve a iniciar sesión.');
   }
   const user = await ctx.db.get(session.userId);
   if (!user || !user.activo) {
-    throw new Error('No autenticado: usuario inválido o inactivo.');
+    throw new ConvexError('No autenticado: usuario inválido o inactivo.');
   }
   return user;
 }
@@ -46,7 +54,7 @@ export async function requireRole(
 ): Promise<Doc<'users'>> {
   const user = await requireUser(ctx, token);
   if (!roles.includes(user.rol as Rol)) {
-    throw new Error(
+    throw new ConvexError(
       `No autorizado: se requiere rol ${roles.join(' o ')} (rol actual: ${user.rol}).`
     );
   }

@@ -1,4 +1,4 @@
-import { v } from 'convex/values';
+import { v, ConvexError } from 'convex/values';
 import { mutation, query } from './_generated/server';
 import type { MutationCtx } from './_generated/server';
 import type { Id } from './_generated/dataModel';
@@ -111,12 +111,12 @@ async function actualizarEntradaImpl(
   args: { entradaId: Id<'entradas'>; cantidadKg: number; proveedor?: string; folio?: string; nota?: string }
 ): Promise<void> {
   if (args.cantidadKg <= 0) {
-    throw new Error('actualizarEntrada: cantidadKg debe ser mayor a 0.');
+    throw new ConvexError('actualizarEntrada: cantidadKg debe ser mayor a 0.');
   }
 
   const entrada = await ctx.db.get(args.entradaId);
   if (!entrada) {
-    throw new Error('actualizarEntrada: la entrada no existe.');
+    throw new ConvexError('actualizarEntrada: la entrada no existe.');
   }
 
   const snapshotAntes = JSON.stringify(entrada);
@@ -148,7 +148,9 @@ async function actualizarEntradaImpl(
     }, 0);
 
     if (args.cantidadKg < kgYaConsumido) {
-      throw new Error(
+      // EDS-73: ConvexError — regla de negocio real, con la acción exacta
+      // que el admin necesita tomar.
+      throw new ConvexError(
         `No se puede reducir a ${args.cantidadKg}kg: ya se consumieron ${kgYaConsumido}kg de esta entrada en cierres posteriores — revierte esos cierres primero desde Corrección de Capturas.`
       );
     }
@@ -232,7 +234,7 @@ export const actualizarEntradasBatch = mutation({
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, args.token, ['compras', 'admin']);
     if (args.entradas.length === 0) {
-      throw new Error('actualizarEntradasBatch: se necesita al menos una entrada.');
+      throw new ConvexError('actualizarEntradasBatch: se necesita al menos una entrada.');
     }
     for (const e of args.entradas) {
       await actualizarEntradaImpl(ctx, user, { entradaId: e.entradaId, cantidadKg: e.cantidadKg, nota: args.nota });

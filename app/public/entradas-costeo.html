@@ -380,7 +380,7 @@ function toast(msg){
 function mostrarErrorGlobal(err){
   const errorBox = document.getElementById('connError');
   errorBox.hidden = false;
-  errorBox.textContent = '⚠ ' + (err?.message || String(err));
+  errorBox.textContent = '⚠ ' + window.Session.mensajeError(err);
 }
 
 async function cargarTodo(){

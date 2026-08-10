@@ -1,4 +1,4 @@
-import { v } from 'convex/values';
+import { v, ConvexError } from 'convex/values';
 import { mutation, query } from './_generated/server';
 import type { QueryCtx } from './_generated/server';
 import { requireRole } from './lib/auth';
@@ -178,7 +178,7 @@ export const produccionPorRango = query({
   args: { dias: v.number(), token: v.string() },
   handler: async (ctx, { dias, token }) => {
     await requireRole(ctx, token, ROLES_DASHBOARD);
-    if (dias <= 0) throw new Error('produccionPorRango: dias debe ser mayor a 0.');
+    if (dias <= 0) throw new ConvexError('produccionPorRango: dias debe ser mayor a 0.');
     const { fechas, cierres } = await cierresEnRango(ctx, dias);
     return fechas.map((fecha) => {
       const delDia = cierres.filter((c) => c.fecha === fecha);
@@ -196,7 +196,7 @@ export const tendenciaMerma = query({
   args: { dias: v.number(), token: v.string() },
   handler: async (ctx, { dias, token }) => {
     await requireRole(ctx, token, ROLES_DASHBOARD);
-    if (dias <= 0) throw new Error('tendenciaMerma: dias debe ser mayor a 0.');
+    if (dias <= 0) throw new ConvexError('tendenciaMerma: dias debe ser mayor a 0.');
     const { fechas, cierres } = await cierresEnRango(ctx, dias);
     return fechas.map((fecha) => {
       const delDia = cierres.filter((c) => c.fecha === fecha);
@@ -212,7 +212,7 @@ export const tendenciaCosto = query({
   args: { dias: v.number(), token: v.string() },
   handler: async (ctx, { dias, token }) => {
     await requireRole(ctx, token, ROLES_DASHBOARD);
-    if (dias <= 0) throw new Error('tendenciaCosto: dias debe ser mayor a 0.');
+    if (dias <= 0) throw new ConvexError('tendenciaCosto: dias debe ser mayor a 0.');
     const { fechas, cierres } = await cierresEnRango(ctx, dias);
     return fechas.map((fecha) => {
       const delDia = cierres.filter((c) => c.fecha === fecha);
@@ -244,7 +244,7 @@ export const updateObjetivos = mutation({
   handler: async (ctx, args) => {
     await requireRole(ctx, args.token, ['admin']);
     if (args.turnoL1 < 0 || args.turnoL2 < 0 || args.semana < 0 || args.mes < 0) {
-      throw new Error('updateObjetivos: las metas no pueden ser negativas.');
+      throw new ConvexError('updateObjetivos: las metas no pueden ser negativas.');
     }
     const existente = await ctx.db.query('objetivosProduccion').first();
     const now = Date.now();

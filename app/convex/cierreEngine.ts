@@ -1,4 +1,4 @@
-import { v } from 'convex/values';
+import { v, ConvexError } from 'convex/values';
 import { internalMutation } from './_generated/server';
 import type { MutationCtx } from './_generated/server';
 import type { Id } from './_generated/dataModel';
@@ -45,18 +45,20 @@ export async function aplicarCierreImpl(
 }> {
   // Ningún dato capturado puede ser negativo — un cierre con metros o
   // consumo negativo alteraría merma/costo real sin que nada lo detecte.
+  // EDS-73: ConvexError — estos valores vienen directo del formulario del
+  // operador, así que sí son alcanzables por un input real, no solo un bug.
   if (args.metrosBuenos < 0) {
-    throw new Error('aplicarCierre: metrosBuenos no puede ser negativo.');
+    throw new ConvexError('aplicarCierre: metrosBuenos no puede ser negativo.');
   }
   if (args.caballetes105Pzas < 0) {
-    throw new Error('aplicarCierre: caballetes105Pzas no puede ser negativo.');
+    throw new ConvexError('aplicarCierre: caballetes105Pzas no puede ser negativo.');
   }
   if (args.caballetes106Pzas < 0) {
-    throw new Error('aplicarCierre: caballetes106Pzas no puede ser negativo.');
+    throw new ConvexError('aplicarCierre: caballetes106Pzas no puede ser negativo.');
   }
   for (const c of args.consumoPorMaterial) {
     if (c.kgConsumido < 0) {
-      throw new Error(`aplicarCierre: kgConsumido no puede ser negativo (material ${c.materialId}).`);
+      throw new ConvexError(`aplicarCierre: kgConsumido no puede ser negativo (material ${c.materialId}).`);
     }
   }
 
@@ -192,7 +194,9 @@ export async function revertirCierreImpl(
     }, 0);
 
     if (consumoNeto > 0) {
-      throw new Error(
+      // EDS-73: ConvexError — regla de negocio real que un admin puede
+      // topar al intentar recapturar/corregir un cierre fuera de orden.
+      throw new ConvexError(
         `Este cierre no se puede revertir: el Triturado que generó tiene ${consumoNeto}kg consumidos (netos) por un cierre posterior — revierte ese cierre primero.`
       );
     }
@@ -242,12 +246,15 @@ export async function recapturarCierreImpl(
   costoRealPorMetro: number;
 }> {
   if (args.cargasPreparadas < 0) {
-    throw new Error('recapturarCierre: cargasPreparadas no puede ser negativo.');
+    throw new ConvexError('recapturarCierre: cargasPreparadas no puede ser negativo.');
   }
 
   const existente = await ctx.db.get(args.cierreTurnoId);
   if (!existente) {
-    throw new Error(`recapturarCierre: cierresTurno ${args.cierreTurnoId} no existe.`);
+    // ConvexError — alcanzable en la práctica: dos pestañas del mismo
+    // admin, o el cierre se corrigió/borró en otra sesión mientras esta
+    // seguía abierta.
+    throw new ConvexError(`recapturarCierre: cierresTurno ${args.cierreTurnoId} no existe.`);
   }
   const snapshotAntes = JSON.stringify(existente);
 

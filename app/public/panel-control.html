@@ -870,7 +870,7 @@ async function guardarObjetivos(){
     await window.Session.call(api.dashboard.updateObjetivos, { ...OBJETIVOS }, 'mutation');
   }catch(err){
     objSaveError.hidden = false;
-    objSaveError.textContent = '⚠ No se pudo guardar la meta: ' + (err?.message || String(err));
+    objSaveError.textContent = '⚠ No se pudo guardar la meta: ' + window.Session.mensajeError(err);
   }
 }
 function inicializarCamposObjetivos(){

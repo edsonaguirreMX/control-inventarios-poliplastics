@@ -5,7 +5,7 @@
 // definir mutations/queries normales en un archivo con esa directiva). Esta
 // action no toca ctx.db directamente: delega en las internal functions de
 // auth.ts vía ctx.runQuery/ctx.runMutation.
-import { v } from 'convex/values';
+import { v, ConvexError } from 'convex/values';
 import { action } from './_generated/server';
 import { internal } from './_generated/api';
 import bcrypt from 'bcryptjs';
@@ -24,7 +24,12 @@ export const login = action({
     // admitirIntentoLogin para el detalle completo).
     const { admitido } = await ctx.runMutation(internal.auth.admitirIntentoLogin, { usuario });
     if (!admitido) {
-      throw new Error('Demasiados intentos fallidos. Espera unos minutos antes de volver a intentar.');
+      // EDS-73: ConvexError, no Error — un Error normal llega al cliente
+      // como "Server Error" genérico en producción (Convex redacta el
+      // mensaje de cualquier throw que no sea ConvexError antes de
+      // mandarlo al navegador; solo en dev o por CLI se ve completo). Este
+      // mensaje es precisamente lo que el operador necesita leer.
+      throw new ConvexError('Demasiados intentos fallidos. Espera unos minutos antes de volver a intentar.');
     }
 
     const user = await ctx.runQuery(internal.auth.getUserByUsuario, { usuario });
@@ -34,11 +39,11 @@ export const login = action({
     // intento ya quedó contado por admitirIntentoLogin arriba — no hace
     // falta un registro aparte aquí.
     if (!user || !user.activo) {
-      throw new Error('Usuario o contraseña incorrectos.');
+      throw new ConvexError('Usuario o contraseña incorrectos.');
     }
     const valido = await bcrypt.compare(password, user.passwordHash);
     if (!valido) {
-      throw new Error('Usuario o contraseña incorrectos.');
+      throw new ConvexError('Usuario o contraseña incorrectos.');
     }
     // Login exitoso: deshace la reserva de admitirIntentoLogin — un login
     // correcto es la señal más confiable de que la cuenta no está bajo

@@ -5,6 +5,7 @@
 // generado, nunca este directamente, porque el import "convex/browser" solo
 // se resuelve dentro del bundle, no en un <script type="module"> plano.
 import { ConvexClient } from 'convex/browser';
+import { ConvexError } from 'convex/values';
 import { api } from '../../convex/_generated/api';
 
 const TOKEN_KEY = 'tejaflex_token';
@@ -116,7 +117,33 @@ async function call(fnRef, args = {}, kind = 'query') {
   return client.query(fnRef, fullArgs);
 }
 
-window.Session = { login, getUser, logout, requireRole, call };
+// EDS-73: extrae un mensaje legible de un error de Convex. Los errores de
+// negocio del backend se lanzan como `ConvexError('mensaje')` precisamente
+// para que su `.data` (el mensaje original, íntegro) SÍ llegue al cliente
+// — Convex redacta el `.message` de cualquier `Error` normal en producción
+// antes de mandarlo al navegador (se ve completo solo en dev o por CLI),
+// así que `err.message` a secas ya no basta para mostrar el mensaje real.
+// Con ConvexError, `.data` es justo lo que el backend pasó al construirlo
+// — en este proyecto siempre un string, pero se cubre el caso objeto por
+// si algún día se pasa `{ code, message }` en vez de un string plano.
+function mensajeError(err) {
+  if (err instanceof ConvexError) {
+    return typeof err.data === 'string' ? err.data : JSON.stringify(err.data);
+  }
+  return err?.message || String(err);
+}
+
+// true si `err` es un ConvexError — es decir, el backend lo lanzó a
+// propósito como mensaje de negocio seguro de mostrar tal cual (ver nota
+// de mensajeError arriba). false para cualquier error inesperado/técnico
+// (red caída, bug interno, etc.), que nunca debe mostrarse crudo al
+// usuario. Reemplaza el patrón viejo y frágil de "checar por regex si
+// err.message se parece a un mensaje conocido" (EDS-73).
+function esErrorDeNegocio(err) {
+  return err instanceof ConvexError;
+}
+
+window.Session = { login, getUser, logout, requireRole, call, mensajeError, esErrorDeNegocio };
 window.__convexClient = client;
 // Las páginas HTML normales no pasan por esbuild (solo este archivo lo
 // hace) — no pueden hacer `import { api } from '.../_generated/api'` ellas
