@@ -1,5 +1,6 @@
 import { v } from 'convex/values';
 import { mutation, query, internalMutation, internalQuery } from './_generated/server';
+import { internal } from './_generated/api';
 import { requireUser } from './lib/auth';
 
 // Runtime normal (no "use node") — necesario porque logout/me hacen
@@ -80,27 +81,57 @@ export const admitirIntentoLogin = internalMutation({
 // falló un login deja una fila que nunca se borra sola, aunque su ventana
 // ya haya expirado hace tiempo (mayor de la auditoría de PR8). `.take(200)`
 // por corrida evita que una tabla ya grande vuelva lenta esta limpieza
-// misma; corre cada hora, así que sobrantes de una corrida se limpian en
-// la siguiente sin acumular indefinidamente.
+// misma.
+//
+// Endurecido (mayor de la re-review de CodeRabbit sobre el commit
+// ae8d49b): un atacante que manda >200 usuarios distintos por hora crea
+// filas más rápido de lo que el cron horario las limpia — el rezago podría
+// crecer sin límite igual. Continuación: si este lote salió lleno (había
+// ≥200 filas expiradas esperando), se reprograma para correr de inmediato
+// en vez de esperar la próxima hora, así la limpieza le sigue el paso a un
+// flood mientras dure, en vez de quedar fija en 200/hora. (No sustituye un
+// throttling por IP/cliente — esta app no tiene esa señal por diseño, ver
+// nota arriba; el flood en sí sigue siendo posible, esto solo evita que su
+// rezago se acumule indefinidamente.)
 export const limpiarLoginIntentosExpirados = internalMutation({
   args: {},
   handler: async (ctx) => {
+    const LOTE = 200;
     const now = Date.now();
     const expirados = await ctx.db
       .query('loginIntentos')
       .withIndex('by_expiresAt', (q) => q.lt('expiresAt', now))
-      .take(200);
+      .take(LOTE);
     for (const registro of expirados) {
       await ctx.db.delete(registro._id);
+    }
+    if (expirados.length === LOTE) {
+      await ctx.scheduler.runAfter(0, internal.auth.limpiarLoginIntentosExpirados, {});
     }
     return { borrados: expirados.length };
   },
 });
 
-// Llamado tras un login exitoso — un login correcto es la señal más
-// confiable de que la cuenta no está bajo ataque, así que limpia el
-// contador en vez de dejarlo acumulado para el siguiente intento fallido
-// legítimo (usuario que se equivoca de tecla una vez, meses después).
+// Llamado tras un login exitoso.
+//
+// Endurecido (mayor de la re-review de CodeRabbit sobre el commit
+// ae8d49b, mismo punto que ya había pedido en la ronda anterior): la
+// versión previa borraba la fila COMPLETA de loginIntentos al primer
+// login exitoso. Bajo intentos concurrentes eso es un problema real: si
+// un login legítimo (o del propio atacante adivinando bien al final)
+// resuelve mientras OTROS intentos fallidos del mismo usuario siguen en
+// vuelo (ya admitidos por admitirIntentoLogin, contados en `intentos`,
+// pero su bcrypt todavía no resuelve), borrar toda la fila también borra
+// las reservas de esos otros intentos — el atacante recupera un cupo
+// completo de 5 intentos nuevos de la nada.
+//
+// Fix: decrementar en 1 (deshacer SOLO la reserva propia de este login
+// exitoso), no borrar todo. Si el contador llega a 0 (nadie más tiene una
+// reserva en vuelo), ahí sí se borra la fila entera — mismo resultado que
+// antes para el caso común (un solo login exitoso sin nada concurrente).
+// Si el contador ya cruzó el umbral y quedó bloqueado (bloqueadoHasta
+// seteado) por los OTROS intentos, ese bloqueo se deja intacto: es una
+// ventana de tiempo, no algo que un login exitoso concurrente deba anular.
 export const limpiarIntentosLogin = internalMutation({
   args: { usuario: v.string() },
   handler: async (ctx, { usuario }) => {
@@ -109,7 +140,12 @@ export const limpiarIntentosLogin = internalMutation({
       .query('loginIntentos')
       .withIndex('by_usuario', (q) => q.eq('usuario', key))
       .unique();
-    if (registro) await ctx.db.delete(registro._id);
+    if (!registro) return;
+    if (registro.intentos <= 1) {
+      await ctx.db.delete(registro._id);
+      return;
+    }
+    await ctx.db.patch(registro._id, { intentos: registro.intentos - 1 });
   },
 });
 

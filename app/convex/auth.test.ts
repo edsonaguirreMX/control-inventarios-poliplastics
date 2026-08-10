@@ -40,7 +40,15 @@ describe('authActions.login: rate limiting (EDS-70)', () => {
     ).rejects.toThrow(/Demasiados intentos fallidos/);
   });
 
-  test('un login exitoso limpia el contador — intentos fallidos previos no se acumulan después', async () => {
+  // Actualizado en la re-review de PR8 (commit posterior a ae8d49b):
+  // limpiarIntentosLogin ya NO borra toda la fila al primer éxito — solo
+  // deshace la reserva propia de ese login exitoso (ver
+  // "limpiarIntentosLogin no debe borrar reservas ajenas en vuelo" más
+  // abajo). Consecuencia intencional: fallos previos ya resueltos NO se
+  // olvidan por completo con un solo éxito, solo se descuenta uno. Es el
+  // trade-off aceptado a cambio de que un login exitoso concurrente no
+  // pueda borrarle al atacante sus intentos fallidos todavía en vuelo.
+  test('un login exitoso limpia SOLO su propia reserva — los fallos previos ya resueltos siguen contando', async () => {
     const t = convexTest(schema, modules);
     const { passwordTemporal } = await crearAdminYUsuarioObjetivo(t);
 
@@ -52,14 +60,19 @@ describe('authActions.login: rate limiting (EDS-70)', () => {
     }
     await t.action(api.authActions.login, { usuario: 'objetivo.prueba', password: passwordTemporal, remember: false });
 
-    // Si el contador NO se limpió, estos 4 fallos (3 previos + 4) ya
-    // pasarían de 5 y bloquearían antes de tiempo. Deben seguir siendo
-    // rechazos por credenciales, no por rate limit.
-    for (let i = 0; i < 4; i++) {
+    // La propia reserva del login exitoso también incrementó `intentos`
+    // (3 → 4) antes de saberse que iba a tener éxito; limpiarIntentosLogin
+    // solo descuenta esa reserva propia (4 → 3) — quedan los 3 fallos
+    // previos intactos, ya NO se resetea a 0. Con eso hacen falta solo 2
+    // fallos más (no 5) para llegar al umbral de bloqueo.
+    for (let i = 0; i < 2; i++) {
       await expect(
         t.action(api.authActions.login, { usuario: 'objetivo.prueba', password: 'incorrecta', remember: false })
       ).rejects.toThrow(/Usuario o contraseña incorrectos/);
     }
+    await expect(
+      t.action(api.authActions.login, { usuario: 'objetivo.prueba', password: passwordTemporal, remember: false })
+    ).rejects.toThrow(/Demasiados intentos fallidos/);
   });
 
   test('el bloqueo es por usuario — atacar a "objetivo.prueba" no bloquea el login de otra cuenta', async () => {
@@ -169,6 +182,68 @@ describe('authActions.login: rate limiting (EDS-70)', () => {
   });
 });
 
+// Mayor (re-review de CodeRabbit sobre el commit ae8d49b, mismo punto que
+// ya había señalado en la ronda anterior): limpiarIntentosLogin borraba la
+// fila COMPLETA de loginIntentos al primer login exitoso — bajo intentos
+// concurrentes, eso también borraba las reservas de OTROS intentos del
+// mismo usuario que seguían en vuelo (ya admitidos por admitirIntentoLogin,
+// pendientes de que su bcrypt resuelva), dándole al atacante un cupo nuevo
+// de 5 intentos gratis. El fix decrementa en 1 (deshace solo la reserva
+// propia) en vez de borrar todo.
+describe('auth: limpiarIntentosLogin no debe borrar reservas ajenas en vuelo (mayor de la re-review de PR8)', () => {
+  test('un login exitoso concurrente decrementa su propia reserva, no resetea el contador de otros intentos en vuelo', async () => {
+    const t = convexTest(schema, modules);
+    const usuario = 'objetivo.concurrente';
+
+    // 4 intentos del atacante, ya admitidos (reservados) por
+    // admitirIntentoLogin — simulan requests fallidos todavía en vuelo
+    // (su bcrypt aún no resuelve).
+    for (let i = 0; i < 4; i++) {
+      const { admitido } = await t.mutation(internal.auth.admitirIntentoLogin, { usuario });
+      expect(admitido).toBe(true);
+    }
+
+    // Un 5º intento CONCURRENTE — este es el que va a resultar exitoso
+    // (password correcto) — también se reserva primero, como cualquier
+    // otro (admitirIntentoLogin no sabe todavía si va a fallar o no).
+    const quinto = await t.mutation(internal.auth.admitirIntentoLogin, { usuario });
+    expect(quinto.admitido).toBe(true);
+
+    // Ese 5º intento resuelve como éxito y limpia SU reserva.
+    await t.mutation(internal.auth.limpiarIntentosLogin, { usuario });
+
+    // La fila sigue existiendo con el conteo de los 4 intentos del
+    // atacante que seguían en vuelo — NO se resetea a 0.
+    const registro = await t.run((ctx) =>
+      ctx.db.query('loginIntentos').withIndex('by_usuario', (q) => q.eq('usuario', usuario)).unique()
+    );
+    expect(registro).not.toBeNull();
+    expect(registro!.intentos).toBe(4);
+
+    // El atacante manda 2 intentos más: el 5º real del atacante (permitido,
+    // completa el límite de 5) y el 6º (debe quedar bloqueado). Si el paso
+    // anterior hubiera reseteado el contador a 0, ambos se habrían admitido
+    // de más.
+    const sextoGlobal = await t.mutation(internal.auth.admitirIntentoLogin, { usuario });
+    expect(sextoGlobal.admitido).toBe(true);
+    const septimoGlobal = await t.mutation(internal.auth.admitirIntentoLogin, { usuario });
+    expect(septimoGlobal.admitido).toBe(false);
+  });
+
+  test('cuando nadie más tiene una reserva en vuelo, limpiarIntentosLogin sí borra la fila completa (caso común)', async () => {
+    const t = convexTest(schema, modules);
+    const usuario = 'objetivo.solo';
+
+    await t.mutation(internal.auth.admitirIntentoLogin, { usuario });
+    await t.mutation(internal.auth.limpiarIntentosLogin, { usuario });
+
+    const registro = await t.run((ctx) =>
+      ctx.db.query('loginIntentos').withIndex('by_usuario', (q) => q.eq('usuario', usuario)).unique()
+    );
+    expect(registro).toBeNull();
+  });
+});
+
 // Mayor (auditoría de PR8): loginIntentos no tenía expiración ni limpieza
 // — cada usuario (real o inventado por un atacante probando muchos
 // nombres) que alguna vez falló un login dejaba una fila para siempre.
@@ -198,5 +273,42 @@ describe('auth: limpiarLoginIntentosExpirados (mayor de la auditoría de PR8)', 
     const restantes = await t.run((ctx) => ctx.db.query('loginIntentos').collect());
     expect(restantes).toHaveLength(1);
     expect(restantes[0].usuario).toBe('reciente.atacado');
+  });
+
+  // Mayor (re-review de CodeRabbit sobre el commit ae8d49b): un atacante
+  // que manda >200 usuarios distintos por hora crea filas expiradas más
+  // rápido de lo que el cron horario (`.take(200)` por corrida) las
+  // limpiaba — el rezago podía crecer sin límite igual. Fix: si un lote
+  // sale lleno, la mutation se reprograma a sí misma para correr de
+  // inmediato (continuación), en vez de esperar la próxima hora.
+  test('flood de >200 usuarios únicos expirados: el lote lleno se reprograma solo hasta vaciar el rezago', async () => {
+    const t = convexTest(schema, modules);
+    vi.useFakeTimers();
+    const ahora = Date.now();
+    const totalFilas = 250; // > LOTE (200), fuerza al menos una continuación
+
+    await t.run(async (ctx) => {
+      for (let i = 0; i < totalFilas; i++) {
+        await ctx.db.insert('loginIntentos', {
+          usuario: `flood.usuario.${i}`,
+          intentos: 1,
+          primerIntentoEn: ahora - 60 * 60 * 1000,
+          bloqueadoHasta: null,
+          expiresAt: ahora - 1000, // ya expirado
+        });
+      }
+    });
+
+    const primerLote = await t.mutation(internal.auth.limpiarLoginIntentosExpirados, {});
+    // Salió lleno (200 de 250) — debe haberse reprogramado sola.
+    expect(primerLote.borrados).toBe(200);
+
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+    // Sin la continuación, 50 filas del flood se habrían quedado esperando
+    // hasta la próxima hora del cron. Con el fix, la reprogramación las
+    // termina de limpiar en la misma corrida lógica.
+    const restantes = await t.run((ctx) => ctx.db.query('loginIntentos').collect());
+    expect(restantes).toHaveLength(0);
   });
 });
