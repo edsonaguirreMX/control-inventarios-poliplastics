@@ -87,7 +87,7 @@
 | 5.8 | Se puede eliminar pendiente sin capa | ✅ Pass (cobertura existente) | `entradas.test.ts` |
 | 5.9 | Proveedor/folio opcionales | ✅ Pass (cobertura existente) | `entradas.test.ts` |
 | 5.10 | Validaciones: kg≤0, costo negativo, fecha inválida, material inactivo, material interno (Triturado) | ✅ Pass (cobertura existente, + `ConvexError` verificado) | `entradas.test.ts`; kg≤0 es además uno de los 11 tests de `erroresNegocio.test.ts` (EDS-73) |
-| 5.11 | CSV de entradas | ⏳ | Pendiente — se agrupa con Sección 16 (exportaciones), próxima pasada |
+| 5.11 | CSV de entradas | ✅ | Ver 16.2 — mismo patrón `downloadCSV` confirmado, botón "Excel (CSV)" presente en `entradas-costeo.html` |
 | 5.12 | Estados loading/empty/error | ✅ Pass (cobertura existente) | EDS-65 (10.1) — try/catch + banner de error agregado a las 10 páginas, incluida `entradas-costeo.html` (commit `b2890f8`) |
 
 ## 6. Motor PEPS/FIFO
