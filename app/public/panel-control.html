@@ -579,10 +579,20 @@ const ROLE_LABELS = {compras:'Compras', calidad:'Calidad y Producción', gerenci
 const sessionUser = await window.Session.requireRole(['compras', 'calidad', 'gerencia', 'admin']);
 const api = window.api; // expuesto por session.js (bundleado) — ver su comentario
 
+// Hallazgo de la auditoría manual de PR6 (2026-08-10): sessionUser.nombre
+// se interpola en innerHTML sin escapar — mismo patrón sin escapar que en
+// catalogo-materiales.html/parametros-produccion.html, presente en el
+// badge de sesión de TODA página conectada (el fix de XSS de PR7 solo
+// cubrió tablas/modales, nunca este bloque).
+function escapeHtmlSesion(str){
+  return String(str ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+}
 function renderSessionRow(){
   const row = document.createElement('div');
   row.className = 'session-row';
-  row.innerHTML = `<span class="role-badge">🔒 ${sessionUser.nombre} · ${ROLE_LABELS[sessionUser.rol] || sessionUser.rol}</span><a class="logout-link" href="#" id="logoutLink">Cerrar sesión</a>`;
+  row.innerHTML = `<span class="role-badge">🔒 ${escapeHtmlSesion(sessionUser.nombre)} · ${ROLE_LABELS[sessionUser.rol] || sessionUser.rol}</span><a class="logout-link" href="#" id="logoutLink">Cerrar sesión</a>`;
   document.querySelector('.topbar-right').prepend(row);
   document.getElementById('logoutLink').addEventListener('click', async (e) => {
     e.preventDefault();

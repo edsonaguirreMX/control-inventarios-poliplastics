@@ -322,6 +322,16 @@ footer.page-foot{font-size:.78rem;color:var(--ink-faint);border-top:1px solid va
    si esta promesa se resuelve.
    ============================================================ */
 const ROLE_LABEL = { operador:'Operador', admin:'Admin', gerencia:'Gerencia y Comercial', compras:'Compras', calidad:'Calidad y Producción' };
+// Este módulo es independiente del segundo <script> de la página — se
+// duplica un escape mínimo aquí. Hallazgo de la auditoría manual de PR6
+// (2026-08-10): user.nombre se interpola en innerHTML sin escapar en el
+// badge de sesión de TODA página conectada (el fix de XSS de PR7 solo
+// cubrió tablas/modales, nunca este bloque).
+function escapeHtmlSesion(str){
+  return String(str ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+}
 // Puerta explícita de autorización: se guarda la promesa en window para que
 // el segundo <script type="module"> de esta página (con la lógica
 // principal) la espere explícitamente en su primera línea, en vez de
@@ -332,7 +342,7 @@ window.usuarioSesion = user.nombre;
 window.rolSesion = user.rol;
 const row = document.getElementById('sessionRow');
 if (row) {
-  row.innerHTML = `<span class="role-badge">🔒 ${user.nombre} · ${ROLE_LABEL[user.rol]}</span><a class="logout-link" href="#" id="logoutLink">Cerrar sesión</a>`;
+  row.innerHTML = `<span class="role-badge">🔒 ${escapeHtmlSesion(user.nombre)} · ${ROLE_LABEL[user.rol]}</span><a class="logout-link" href="#" id="logoutLink">Cerrar sesión</a>`;
   document.getElementById('logoutLink').addEventListener('click', async (e) => {
     e.preventDefault();
     await window.Session.logout();
