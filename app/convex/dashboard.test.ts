@@ -160,6 +160,24 @@ describe('dashboard: getKPIsHoy (tarea 6.1)', () => {
   });
 });
 
+// EDS-66 (auditoría final de PR8): produccionPorRango/tendenciaMerma/
+// tendenciaCosto/getObjetivos llaman requireRole(ctx, token, ROLES_DASHBOARD)
+// exactamente igual que getKPIsHoy (revisado línea por línea en dashboard.ts)
+// — pero solo getKPIsHoy tenía un test explícito de rechazo. Mismo patrón de
+// código no es excusa para dejar sin regresión automática las otras 4
+// funciones: si alguna llegara a perder esa línea en un refactor futuro,
+// nada lo detectaría hasta que alguien probara manualmente.
+describe('dashboard: rechazo de rol — produccionPorRango/tendenciaMerma/tendenciaCosto/getObjetivos (EDS-66)', () => {
+  test('operador (sin vista de Panel de Control) es rechazado por las 4 funciones', async () => {
+    const t = convexTest(schema, modules);
+    const { operadorToken } = await setup(t);
+    await expect(t.query(api.dashboard.produccionPorRango, { dias: 7, token: operadorToken })).rejects.toThrow();
+    await expect(t.query(api.dashboard.tendenciaMerma, { dias: 7, token: operadorToken })).rejects.toThrow();
+    await expect(t.query(api.dashboard.tendenciaCosto, { dias: 7, token: operadorToken })).rejects.toThrow();
+    await expect(t.query(api.dashboard.getObjetivos, { token: operadorToken })).rejects.toThrow();
+  });
+});
+
 describe('dashboard: series históricas (tarea 6.2)', () => {
   test('produccionPorRango devuelve el largo correcto y agrupa por línea/turno', async () => {
     const t = convexTest(schema, modules);

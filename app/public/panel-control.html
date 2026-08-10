@@ -368,6 +368,8 @@ footer.page-foot{font-size:.78rem;color:var(--ink-faint);border-top:1px solid va
     </div>
   </header>
 
+  <div class="field-warn error" id="connError" hidden></div>
+
   <div class="filter-row">
     <span class="filter-label">Tendencias</span>
     <div class="range-pick" id="rangePick">
@@ -577,10 +579,20 @@ const ROLE_LABELS = {compras:'Compras', calidad:'Calidad y Producción', gerenci
 const sessionUser = await window.Session.requireRole(['compras', 'calidad', 'gerencia', 'admin']);
 const api = window.api; // expuesto por session.js (bundleado) — ver su comentario
 
+// Hallazgo de la auditoría manual de PR6 (2026-08-10): sessionUser.nombre
+// se interpola en innerHTML sin escapar — mismo patrón sin escapar que en
+// catalogo-materiales.html/parametros-produccion.html, presente en el
+// badge de sesión de TODA página conectada (el fix de XSS de PR7 solo
+// cubrió tablas/modales, nunca este bloque).
+function escapeHtmlSesion(str){
+  return String(str ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+}
 function renderSessionRow(){
   const row = document.createElement('div');
   row.className = 'session-row';
-  row.innerHTML = `<span class="role-badge">🔒 ${sessionUser.nombre} · ${ROLE_LABELS[sessionUser.rol] || sessionUser.rol}</span><a class="logout-link" href="#" id="logoutLink">Cerrar sesión</a>`;
+  row.innerHTML = `<span class="role-badge">🔒 ${escapeHtmlSesion(sessionUser.nombre)} · ${ROLE_LABELS[sessionUser.rol] || sessionUser.rol}</span><a class="logout-link" href="#" id="logoutLink">Cerrar sesión</a>`;
   document.querySelector('.topbar-right').prepend(row);
   document.getElementById('logoutLink').addEventListener('click', async (e) => {
     e.preventDefault();
@@ -1218,7 +1230,18 @@ async function cargarTodo(){
     setTimeout(exportPDF, 500);
   }
 }
-await cargarTodo();
+
+// EDS-65 (10.1): la carga inicial no tenía try/catch — si Convex no
+// respondía, la pantalla quedaba vacía sin explicación en vez de mostrar
+// un error controlado.
+try {
+  await cargarTodo();
+} catch (err) {
+  console.error('[panel-control] Error al cargar datos iniciales:', err);
+  const errorBox = document.getElementById('connError');
+  errorBox.hidden = false;
+  errorBox.textContent = '⚠ No se pudo conectar con el servidor. Verifica tu conexión y recarga la página.';
+}
 
 /* El HTML llama estas funciones vía onclick="" — en un <script type="module">
    quedan en el scope del módulo, no globales, así que hay que exponerlas

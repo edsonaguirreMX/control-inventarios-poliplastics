@@ -556,5 +556,22 @@ async function resetCatalog(){
 window.saveCatalog = saveCatalog;
 window.resetCatalog = resetCatalog;
 
-await cargarCatalogo();
+// EDS-65 (10.1): la carga inicial no tenía try/catch — si Convex no
+// respondía, la pantalla quedaba vacía sin explicación en vez de mostrar
+// un error controlado.
+try {
+  await cargarCatalogo();
+} catch (err) {
+  console.error('[catalogo-materiales] Error al cargar datos iniciales:', err);
+  const errorBox = document.getElementById('saveError');
+  errorBox.hidden = false;
+  errorBox.textContent = '⚠ No se pudo conectar con el servidor. Verifica tu conexión y recarga la página.';
+  // Sin esto, el resumen de arriba se queda con el texto de ejemplo del
+  // mockup original ("149kg", "$15.69/kg") — números que parecen reales
+  // junto a un banner que dice "no se pudo conectar", una contradicción
+  // visual confusa (encontrado al verificar esta misma pantalla en vivo).
+  document.getElementById('totalPorCarga').innerHTML = '—';
+  document.getElementById('costoMezclaKg').innerHTML = '—';
+  document.getElementById('costoMezclaM').textContent = '';
+}
 </script>

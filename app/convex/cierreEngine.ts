@@ -144,62 +144,71 @@ export async function revertirCierreImpl(
 
   // Capa de Triturado que este cierre generó. Un recierre previo puede
   // haber dejado capas de rondas anteriores ya voided (agotada:true) con
-  // el mismo cierreTurnoId — la relevante es siempre la más recientemente
-  // creada (la de la aplicación actual), SIN filtrar por agotada: si esa
-  // capa fue consumida al 100% por un cierre posterior, también queda
-  // agotada:true, y filtrarla por error la hacía invisible para el chequeo
-  // de bloqueo de abajo (bug real encontrado en auditoría — una capa
-  // totalmente consumida dejaba "revertir" sin bloquear).
+  // el mismo cierreTurnoId — hay que encontrar la que sigue "viva" (sin
+  // revertir todavía).
+  //
+  // EDS-71 (auditoría de PR2): la versión original elegía "la más
+  // reciente" comparando `createdAt` (Date.now() propio de la app) — un
+  // auditor señaló que dos operaciones en el mismo milisegundo podrían
+  // empatar y elegir la capa equivocada. Se reemplaza por selección
+  // explícita: la capa viva es, por construcción, la ÚNICA que todavía no
+  // tiene un movimiento `reversa_generacion` en su ledger (cada recaptura
+  // revierte la capa vieja ANTES de crear la nueva — ver
+  // recapturarCierreImpl más abajo). No depende de ningún orden temporal.
+  // Si por algún motivo aparece más de una capa viva a la vez, es una
+  // violación real de esa invariante — se falla explícito en vez de
+  // adivinar cuál usar.
   const capasTriturado = await ctx.db
     .query('capasCosto')
     .withIndex('by_cierreTurnoId_origen', (q) => q.eq('cierreTurnoId', args.cierreTurnoId).eq('origen', 'triturado'))
     .collect();
-  const capaTriturado =
-    capasTriturado.length === 0
-      ? null
-      : capasTriturado.reduce((masReciente, c) => (c.createdAt > masReciente.createdAt ? c : masReciente));
+  const candidatos = await Promise.all(
+    capasTriturado.map(async (capa) => {
+      const movimientos = await ctx.db
+        .query('capaMovimientos')
+        .withIndex('by_capaId', (q) => q.eq('capaId', capa._id))
+        .collect();
+      return { capa, movimientos, voided: movimientos.some((m) => m.tipo === 'reversa_generacion') };
+    })
+  );
+  const vivas = candidatos.filter((c) => !c.voided);
+  if (vivas.length > 1) {
+    throw new Error(
+      `revertirCierre: hay más de una capa de Triturado sin revertir para el cierre ${args.cierreTurnoId} — estado inconsistente, requiere revisión manual.`
+    );
+  }
+  const capaViva = vivas[0] ?? null;
 
-  if (capaTriturado) {
-    const movimientos = await ctx.db
-      .query('capaMovimientos')
-      .withIndex('by_capaId', (q) => q.eq('capaId', capaTriturado._id))
-      .collect();
+  if (capaViva) {
+    // Consumo NETO, no solo "¿existe algún movimiento tipo consumo?" —
+    // nada se borra en este sistema, así que un consumo ya revertido
+    // sigue viéndose en el historial para siempre. Sin descontar la
+    // reversa, un cierre posterior que consumió y luego revirtió esta
+    // capa dejaría bloqueada la reversión de ESTE cierre para siempre.
+    const consumoNeto = capaViva.movimientos.reduce((neto, m) => {
+      if (m.tipo === 'consumo') return neto + m.kg;
+      if (m.tipo === 'reversa_consumo') return neto - m.kg;
+      return neto;
+    }, 0);
 
-    // Si un recierre anterior ya voided esta misma capa, no volver a
-    // hacerlo (idempotente) — de lo contrario se duplicaría la
-    // reversa_generacion y la reconciliación del ledger dejaría de cuadrar.
-    const yaVoided = movimientos.some((m) => m.tipo === 'reversa_generacion');
-    if (!yaVoided) {
-      // Consumo NETO, no solo "¿existe algún movimiento tipo consumo?" —
-      // nada se borra en este sistema, así que un consumo ya revertido
-      // sigue viéndose en el historial para siempre. Sin descontar la
-      // reversa, un cierre posterior que consumió y luego revirtió esta
-      // capa dejaría bloqueada la reversión de ESTE cierre para siempre.
-      const consumoNeto = movimientos.reduce((neto, m) => {
-        if (m.tipo === 'consumo') return neto + m.kg;
-        if (m.tipo === 'reversa_consumo') return neto - m.kg;
-        return neto;
-      }, 0);
-
-      if (consumoNeto > 0) {
-        throw new Error(
-          `Este cierre no se puede revertir: el Triturado que generó tiene ${consumoNeto}kg consumidos (netos) por un cierre posterior — revierte ese cierre primero.`
-        );
-      }
-
-      await ctx.db.patch(capaTriturado._id, { kgRestante: 0, agotada: true });
-      await ctx.db.insert('capaMovimientos', {
-        capaId: capaTriturado._id,
-        materialId: capaTriturado.materialId,
-        tipo: 'reversa_generacion',
-        kg: capaTriturado.kgOriginal,
-        costoUnitario: capaTriturado.costoUnitario,
-        origenTipo: 'correccion',
-        origenId: String(args.cierreTurnoId),
-        createdAt: Date.now(),
-        createdBy: args.createdBy,
-      });
+    if (consumoNeto > 0) {
+      throw new Error(
+        `Este cierre no se puede revertir: el Triturado que generó tiene ${consumoNeto}kg consumidos (netos) por un cierre posterior — revierte ese cierre primero.`
+      );
     }
+
+    await ctx.db.patch(capaViva.capa._id, { kgRestante: 0, agotada: true });
+    await ctx.db.insert('capaMovimientos', {
+      capaId: capaViva.capa._id,
+      materialId: capaViva.capa.materialId,
+      tipo: 'reversa_generacion',
+      kg: capaViva.capa.kgOriginal,
+      costoUnitario: capaViva.capa.costoUnitario,
+      origenTipo: 'correccion',
+      origenId: String(args.cierreTurnoId),
+      createdAt: Date.now(),
+      createdBy: args.createdBy,
+    });
   }
 
   return { ok: true };

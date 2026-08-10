@@ -14,4 +14,12 @@ crons.interval('evaluar alertas', { minutes: 20 }, internal.alertas.evaluarAlert
 // día operativo actual, así que correr seguido tampoco duplica nada.
 crons.interval('generar reporte diario', { minutes: 15 }, internal.reporteDiario.generarReporteDiario, {});
 
+// Cada hora — mayor de la auditoría de PR8: loginIntentos crecía sin
+// límite (una fila por cada usuario, real o inventado, que alguna vez
+// falló un login, nunca borrada sola). Acotado a 200 filas por corrida
+// (ver auth.ts) para que la limpieza misma no se vuelva pesada si la
+// tabla ya creció mucho; lo que sobre en una corrida se limpia en la
+// siguiente.
+crons.interval('limpiar intentos de login expirados', { hours: 1 }, internal.auth.limpiarLoginIntentosExpirados, {});
+
 export default crons;

@@ -291,6 +291,8 @@ button{font-family:inherit;}
     </div>
   </header>
 
+  <div class="field-warn error" id="connError" hidden></div>
+
   <div class="stage">
     <div class="phone-wrap">
       <div class="phone">
@@ -475,12 +477,22 @@ const api = window.api; // expuesto por session.js (bundleado) — ver su coment
 function iniciales(nombre){
   return nombre.trim().split(/\s+/).slice(0,2).map(p=>p[0].toUpperCase()).join('');
 }
+// Hallazgo de la auditoría manual de PR6 (2026-08-10): sessionUser.nombre
+// se interpolaba en innerHTML sin escapar — mismo patrón sin escapar que
+// en catalogo-materiales.html/parametros-produccion.html, presente en el
+// bloque de sesión de TODA página conectada (el fix de XSS de PR7 solo
+// cubrió tablas/modales, nunca este bloque).
+function escapeHtmlSesion(str){
+  return String(str ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+}
 function renderSessionBar(){
   const el = document.getElementById('sessionBar');
   el.innerHTML = `
     <div class="who">
-      <span class="avatar">${iniciales(sessionUser.nombre)}</span>
-      <span>${sessionUser.nombre}<small>${ROLE_LABEL[sessionUser.rol] || sessionUser.rol}</small></span>
+      <span class="avatar">${escapeHtmlSesion(iniciales(sessionUser.nombre))}</span>
+      <span>${escapeHtmlSesion(sessionUser.nombre)}<small>${ROLE_LABEL[sessionUser.rol] || sessionUser.rol}</small></span>
     </div>
     <a class="logout-link" href="#" id="logoutLink">Cerrar sesión</a>`;
   document.getElementById('logoutLink').addEventListener('click', async (e) => {
@@ -958,7 +970,16 @@ async function resetCierreForm(){
 }
 
 /* estado inicial */
-await showHome();
+// EDS-65 (10.1): sin try/catch, si Convex no respondía el menú se quedaba
+// a medio construir sin ninguna explicación.
+try {
+  await showHome();
+} catch (err) {
+  console.error('[cierre-turno-propuestas] Error al cargar datos iniciales:', err);
+  const errorBox = document.getElementById('connError');
+  errorBox.hidden = false;
+  errorBox.textContent = '⚠ No se pudo conectar con el servidor. Verifica tu conexión y recarga la página.';
+}
 
 /* El HTML llama estas funciones vía onclick="" — en un <script type="module">
    quedan en el scope del módulo, no globales, así que hay que exponerlas

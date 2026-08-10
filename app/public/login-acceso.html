@@ -287,7 +287,15 @@ async function login(kind) {
   } catch (err) {
     btn.disabled = false;
     btn.textContent = textoOriginal;
-    errorBox.textContent = 'Usuario o contraseña incorrectos.';
+    // EDS-65 (10.1): antes esto siempre decía "credenciales incorrectas",
+    // incluso cuando el problema real era que Convex no respondía — un
+    // mensaje confuso que manda a revisar la contraseña cuando el
+    // problema es de conexión. Los mensajes que sí vienen del backend
+    // (credenciales, rate limit de EDS-70) se muestran tal cual;
+    // cualquier otro error se explica como lo que es.
+    const msg = err?.message || String(err);
+    const esErrorConocido = /incorrectos|Demasiados intentos/.test(msg);
+    errorBox.textContent = esErrorConocido ? msg : 'No se pudo conectar con el servidor. Verifica tu conexión e intenta de nuevo.';
     errorBox.style.display = 'block';
   }
 }

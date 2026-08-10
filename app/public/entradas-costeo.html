@@ -225,6 +225,14 @@ footer.page-foot{font-size:.78rem;color:var(--ink-faint);border-top:1px solid va
   .field{background:none !important;border:none !important;}
   .field input, .field select{background:none !important;color:#111 !important;}
 }
+
+.field-warn{
+  margin:.8rem 0 0;padding:.55rem .7rem;border-radius:9px;
+  background:var(--warning-soft);color:var(--warning);font-size:.78rem;line-height:1.4;
+  display:flex;flex-direction:column;gap:.4rem;
+}
+.field-warn.error{background:var(--danger-soft);color:var(--danger);}
+.field-warn[hidden]{display:none;}
 </style>
 
 <div class="page">
@@ -243,6 +251,8 @@ footer.page-foot{font-size:.78rem;color:var(--ink-faint);border-top:1px solid va
       </div>
     </header>
   </div>
+
+  <div class="field-warn error" id="connError" hidden></div>
 
   <div class="kpi-row" id="kpiRow"></div>
 
@@ -312,6 +322,16 @@ footer.page-foot{font-size:.78rem;color:var(--ink-faint);border-top:1px solid va
    si esta promesa se resuelve.
    ============================================================ */
 const ROLE_LABEL = { operador:'Operador', admin:'Admin', gerencia:'Gerencia y Comercial', compras:'Compras', calidad:'Calidad y Producción' };
+// Este módulo es independiente del segundo <script> de la página — se
+// duplica un escape mínimo aquí. Hallazgo de la auditoría manual de PR6
+// (2026-08-10): user.nombre se interpola en innerHTML sin escapar en el
+// badge de sesión de TODA página conectada (el fix de XSS de PR7 solo
+// cubrió tablas/modales, nunca este bloque).
+function escapeHtmlSesion(str){
+  return String(str ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+}
 // Puerta explícita de autorización: se guarda la promesa en window para que
 // el segundo <script type="module"> de esta página (con la lógica
 // principal) la espere explícitamente en su primera línea, en vez de
@@ -322,7 +342,7 @@ window.usuarioSesion = user.nombre;
 window.rolSesion = user.rol;
 const row = document.getElementById('sessionRow');
 if (row) {
-  row.innerHTML = `<span class="role-badge">🔒 ${user.nombre} · ${ROLE_LABEL[user.rol]}</span><a class="logout-link" href="#" id="logoutLink">Cerrar sesión</a>`;
+  row.innerHTML = `<span class="role-badge">🔒 ${escapeHtmlSesion(user.nombre)} · ${ROLE_LABEL[user.rol]}</span><a class="logout-link" href="#" id="logoutLink">Cerrar sesión</a>`;
   document.getElementById('logoutLink').addEventListener('click', async (e) => {
     e.preventDefault();
     await window.Session.logout();
@@ -356,6 +376,11 @@ function toast(msg){
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 2600);
+}
+function mostrarErrorGlobal(err){
+  const errorBox = document.getElementById('connError');
+  errorBox.hidden = false;
+  errorBox.textContent = '⚠ ' + (err?.message || String(err));
 }
 
 async function cargarTodo(){
@@ -513,21 +538,38 @@ document.getElementById('entradasBody').addEventListener('click', async (e)=>{
       toast('✓ Entrada costeada — capa PEPS creada');
       await cargarTodo();
     } catch (err){
-      alert(err.message || String(err));
+      mostrarErrorGlobal(err);
       e.target.disabled = false;
     }
   } else if (eliminarId){
-    if (!confirm('¿Eliminar esta entrada pendiente? Se perderá su registro.')) return;
+    // Confirmación de 2 clics en el mismo botón — nunca confirm() nativo
+    // (rompe la automatización de Chrome-MCP y no matchea el lenguaje
+    // visual del resto del proyecto, ya establecido desde PR3).
+    if (e.target.dataset.armado !== '1'){
+      e.target.dataset.armado = '1';
+      e.target.textContent = '¿Seguro?';
+      e.target.style.background = 'var(--danger-soft)';
+      e.target.style.color = 'var(--danger)';
+      setTimeout(()=>{
+        if (e.target.dataset.armado === '1'){
+          e.target.dataset.armado = '0';
+          e.target.textContent = '🗑';
+          e.target.style.background = '';
+          e.target.style.color = '';
+        }
+      }, 4000);
+      return;
+    }
     try {
       await window.Session.call(api.entradas.eliminarEntradaPendiente, { entradaId: eliminarId }, 'mutation');
       toast('Entrada eliminada');
       await cargarTodo();
-    } catch (err){ alert(err.message || String(err)); }
+    } catch (err){ mostrarErrorGlobal(err); }
   } else if (guardarDraft){
     const draft = draftRows.find(d=>String(d.draftId)===guardarDraft);
     if (!draft) return;
     if (!draft.materialId || !(draft.cantidadKg > 0)){
-      alert('Selecciona material y captura una cantidad mayor a 0.');
+      mostrarErrorGlobal(new Error('Selecciona material y captura una cantidad mayor a 0.'));
       return;
     }
     try {
@@ -539,7 +581,7 @@ document.getElementById('entradasBody').addEventListener('click', async (e)=>{
       draftRows = draftRows.filter(d=>d.draftId!==draft.draftId);
       toast('✓ Entrada registrada');
       await cargarTodo();
-    } catch (err){ alert(err.message || String(err)); }
+    } catch (err){ mostrarErrorGlobal(err); }
   } else if (cancelarDraft){
     draftRows = draftRows.filter(d=>String(d.draftId)!==cancelarDraft);
     renderTable();
@@ -594,7 +636,15 @@ function exportCapasCSV(){
 }
 function exportPDF(){ window.print(); }
 
-await cargarTodo();
+// EDS-65 (10.1): la carga inicial no tenía try/catch — si Convex no
+// respondía, la pantalla quedaba vacía sin explicación en vez de mostrar
+// un error controlado.
+try {
+  await cargarTodo();
+} catch (err) {
+  console.error('[entradas-costeo] Error al cargar datos iniciales:', err);
+  mostrarErrorGlobal(new Error('No se pudo conectar con el servidor. Verifica tu conexión y recarga la página.'));
+}
 
 /* El HTML llama estas funciones vía onclick="" — en un <script type="module">
    quedan en el scope del módulo, no globales, así que hay que exponerlas
