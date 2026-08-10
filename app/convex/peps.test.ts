@@ -1,8 +1,9 @@
 import { convexTest } from 'convex-test';
 import { describe, expect, test } from 'vitest';
 import schema from './schema';
+import { api } from './_generated/api';
 import { crearCapaImpl, consumirFIFOImpl, revertirConsumoImpl } from './peps';
-import { crearMaterialPrueba, crearUsuarioPrueba, getCapa } from './testHelpers';
+import { crearMaterialPrueba, crearUsuarioPrueba, crearSesionPrueba, getCapa } from './testHelpers';
 
 const modules = import.meta.glob('./**/*.ts');
 
@@ -200,5 +201,79 @@ describe('peps: motor PEPS/FIFO (tarea 3.1)', () => {
     const capa = await getCapa(t, capaId);
     expect(neto).toBe(capa?.kgRestante);
     expect(neto).toBe(60);
+  });
+});
+
+// EDS-66 (auditoría final de PR8): existenciaMaterial/valorInventarioMaterial
+// no tenían NINGUNA cobertura de prueba en todo el repo, pese a ser queries
+// públicas que exponen datos financieros y están gateadas por rol — no las
+// llama ninguna pantalla hoy (dashboard.ts calcula lo mismo en bulk para su
+// propio uso), pero siguen siendo superficie real de la API pública de
+// Convex: cualquiera con una sesión válida del rol correcto puede llamarlas
+// directo, sin pasar por el frontend. "Nadie las usa desde la UI" no es lo
+// mismo que "no hace falta que rechacen roles indebidos".
+describe('peps: existenciaMaterial / valorInventarioMaterial — autorización server-side (EDS-66)', () => {
+  async function setup(t: Awaited<ReturnType<typeof convexTest>>) {
+    const matId = await crearMaterialPrueba(t, { esInterno: false });
+    const adminId = await crearUsuarioPrueba(t, 'admin');
+    const comprasId = await crearUsuarioPrueba(t, 'compras');
+    const calidadId = await crearUsuarioPrueba(t, 'calidad');
+    const gerenciaId = await crearUsuarioPrueba(t, 'gerencia');
+    const operadorId = await crearUsuarioPrueba(t, 'operador');
+    const adminToken = await crearSesionPrueba(t, adminId);
+    const comprasToken = await crearSesionPrueba(t, comprasId);
+    const calidadToken = await crearSesionPrueba(t, calidadId);
+    const gerenciaToken = await crearSesionPrueba(t, gerenciaId);
+    const operadorToken = await crearSesionPrueba(t, operadorId);
+    await t.run((ctx) =>
+      crearCapaImpl(ctx, {
+        materialId: matId, kgOriginal: 100, costoUnitario: 10, fechaEntrada: 1000,
+        origen: 'entrada', entradaId: null, cierreTurnoId: null,
+        origenTipo: 'entrada', origenId: 'x', createdBy: adminId,
+      })
+    );
+    return { matId, adminToken, comprasToken, calidadToken, gerenciaToken, operadorToken };
+  }
+
+  test('existenciaMaterial: operador (rol no permitido) es rechazado', async () => {
+    const t = convexTest(schema, modules);
+    const { matId, operadorToken } = await setup(t);
+    await expect(
+      t.query(api.peps.existenciaMaterial, { materialId: matId, token: operadorToken })
+    ).rejects.toThrow();
+  });
+
+  test('existenciaMaterial: compras/calidad/gerencia/admin sí pueden leerla y el valor es correcto', async () => {
+    const t = convexTest(schema, modules);
+    const { matId, comprasToken, calidadToken, gerenciaToken, adminToken } = await setup(t);
+    for (const token of [comprasToken, calidadToken, gerenciaToken, adminToken]) {
+      const existencia = await t.query(api.peps.existenciaMaterial, { materialId: matId, token });
+      expect(existencia).toBe(100);
+    }
+  });
+
+  test('valorInventarioMaterial: operador (rol no permitido) es rechazado', async () => {
+    const t = convexTest(schema, modules);
+    const { matId, operadorToken } = await setup(t);
+    await expect(
+      t.query(api.peps.valorInventarioMaterial, { materialId: matId, token: operadorToken })
+    ).rejects.toThrow();
+  });
+
+  test('valorInventarioMaterial: calidad (rol no permitido — esta query sí expone costo) es rechazado', async () => {
+    const t = convexTest(schema, modules);
+    const { matId, calidadToken } = await setup(t);
+    await expect(
+      t.query(api.peps.valorInventarioMaterial, { materialId: matId, token: calidadToken })
+    ).rejects.toThrow();
+  });
+
+  test('valorInventarioMaterial: compras/gerencia/admin sí pueden leerla y el valor es correcto', async () => {
+    const t = convexTest(schema, modules);
+    const { matId, comprasToken, gerenciaToken, adminToken } = await setup(t);
+    for (const token of [comprasToken, gerenciaToken, adminToken]) {
+      const valor = await t.query(api.peps.valorInventarioMaterial, { materialId: matId, token });
+      expect(valor).toBe(100 * 10);
+    }
   });
 });
