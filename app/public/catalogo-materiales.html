@@ -157,17 +157,6 @@ table.catalog tbody tr.interno{background:var(--surface-2);}
 .field.locked input{cursor:not-allowed;}
 .dash-cell{color:var(--ink-faint);font-size:.82rem;}
 
-.costo-cell{display:flex;flex-direction:column;gap:.35rem;}
-.cost-suggestion{display:flex;align-items:center;gap:.35rem;flex-wrap:wrap;font-size:.71rem;color:var(--ink-faint);max-width:13rem;}
-.cost-suggestion b{color:var(--ink-muted);}
-.cost-suggestion .up{color:var(--warning);font-weight:700;}
-.cost-suggestion .down{color:var(--positive);font-weight:700;}
-.sugg-apply{
-  border:1px solid var(--accent);background:none;color:var(--accent-strong);
-  border-radius:6px;padding:.1rem .45rem;font-size:.68rem;font-weight:700;cursor:pointer;white-space:nowrap;
-}
-.sugg-apply:hover{background:var(--accent-soft);}
-
 .reorder-cell{display:flex;flex-direction:column;gap:.35rem;min-width:11rem;}
 .mode-toggle{display:inline-flex;background:var(--surface-2);border:1px solid var(--border);border-radius:7px;padding:2px;width:fit-content;}
 .mode-toggle button{border:none;background:none;padding:.2rem .55rem;border-radius:5px;font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--ink-muted);cursor:pointer;}
@@ -201,6 +190,13 @@ table.catalog tbody tr.interno{background:var(--surface-2);}
 }
 .dirty-flag.show{display:flex;}
 .dirty-flag .dot{width:7px;height:7px;border-radius:50%;background:var(--warning);}
+.field-warn{
+  margin:.8rem 0 0;padding:.55rem .7rem;border-radius:9px;
+  background:var(--warning-soft);color:var(--warning);font-size:.78rem;line-height:1.4;
+  display:flex;flex-direction:column;gap:.4rem;
+}
+.field-warn.error{background:var(--danger-soft);color:var(--danger);}
+.field-warn[hidden]{display:none;}
 .btn-ghost{
   border:1px solid var(--border);background:var(--surface-2);color:var(--ink);
   border-radius:9px;padding:.6rem 1.1rem;font-size:.85rem;font-weight:600;cursor:pointer;
@@ -279,7 +275,7 @@ footer.page-foot{font-size:.78rem;color:var(--ink-faint);border-top:1px solid va
             <th>Lead time</th>
             <th>Stock de seguridad</th>
             <th>% meta en mezcla 🔒</th>
-            <th>Punto de reorden</th>
+            <th>Punto de reorden <span title="De planeación — calculado con consumo teórico de la fórmula, no con el histórico real. Puede diferir del que muestra Panel de Control, que sí usa consumo real.">(de planeación)</span></th>
             <th>Cantidad a pedir</th>
           </tr>
         </thead>
@@ -290,12 +286,14 @@ footer.page-foot{font-size:.78rem;color:var(--ink-faint);border-top:1px solid va
     <ul class="footnotes">
       <li>El <b>Triturado</b> se valúa siempre en $0 al reingresar a inventario — su costo ya se absorbió como merma el día que se generó, así que su costo estándar queda bloqueado.</li>
       <li>Stock de seguridad por defecto: <b>7 días</b>, aplicado a los 7 materiales que sí se compran a proveedor.</li>
-      <li>Punto de reorden = consumo diario promedio (plantwide, ambas líneas) × (lead time + stock de seguridad). El valor calculado queda visible aunque uses un override manual.</li>
-      <li>El costo estándar es 100% editable por ti — el sistema no lo recalcula solo. Cuando el promedio de tus entradas recientes se aleja 3% o más de tu costo estándar, aparece una sugerencia debajo del campo; tú decides si la aplicas con "Actualizar" o la dejas pasar.</li>
+      <li>Punto de reorden = consumo diario <b>teórico de fórmula</b> (kg por carga × cargas/turno × turnos/día × 2 líneas, según <a href="/parametros-produccion.html" style="color:var(--accent-strong);">Parámetros de Producción</a>) × (lead time + stock de seguridad). Es un número <b>de planeación</b>: puede no coincidir con el punto de reorden que muestra Panel de Control, que se calcula con el consumo real promedio de los últimos días — cada pantalla sirve un propósito distinto (planear compras vs. monitorear existencias hoy). El valor calculado queda visible aunque uses un override manual.</li>
+      <li>El costo estándar es 100% editable por ti — el sistema no lo recalcula solo.</li>
       <li><b>Cantidad a pedir</b> es un campo de referencia para Compras, no se calcula: tú decides cuánto conviene pedir la próxima vez que se reordene ese material. No aplica a Triturado porque no se compra a proveedor.</li>
       <li>El <b>% meta en mezcla</b> ya no se captura aquí — se calcula solo a partir de los kg por carga definidos en <a href="/parametros-produccion.html" style="color:var(--accent-strong);">Parámetros de Producción y Fórmula</a>, para que exista una sola fuente de verdad para la fórmula.</li>
     </ul>
   </section>
+
+  <div class="field-warn error" id="saveError" hidden></div>
 
   <div class="action-bar">
     <span class="dirty-flag" id="dirtyFlag"><span class="dot"></span>Cambios sin guardar</span>
@@ -321,6 +319,16 @@ footer.page-foot{font-size:.78rem;color:var(--ink-faint);border-top:1px solid va
    si esta promesa se resuelve.
    ============================================================ */
 const ROLE_LABEL = { operador:'Operador', admin:'Admin', gerencia:'Gerencia y Comercial', compras:'Compras', calidad:'Calidad y Producción' };
+// Este módulo es independiente del segundo <script> de la página (scope
+// propio, sin variables compartidas) — se duplica un escape mínimo aquí
+// en vez de depender del escapeHtml() de allá. Mismo hallazgo de
+// auditoría que motivó el de abajo: user.nombre viene de Convex/sesión y
+// se interpola en innerHTML sin escapar.
+function escapeHtmlSesion(str){
+  return String(str ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+}
 // Puerta explícita de autorización: se guarda la promesa en window para que
 // el segundo <script type="module"> de esta página (con la lógica
 // principal) la espere explícitamente en su primera línea, en vez de
@@ -331,7 +339,7 @@ window.usuarioSesion = user.nombre;
 window.rolSesion = user.rol;
 const row = document.getElementById('sessionRow');
 if (row) {
-  row.innerHTML = `<span class="role-badge">🔒 ${user.nombre} · ${ROLE_LABEL[user.rol]}</span><a class="logout-link" href="#" id="logoutLink">Cerrar sesión</a>`;
+  row.innerHTML = `<span class="role-badge">🔒 ${escapeHtmlSesion(user.nombre)} · ${ROLE_LABEL[user.rol]}</span><a class="logout-link" href="#" id="logoutLink">Cerrar sesión</a>`;
   document.getElementById('logoutLink').addEventListener('click', async (e) => {
     e.preventDefault();
     await window.Session.logout();
@@ -344,53 +352,40 @@ if (row) {
 // del orden de documento — espera la MISMA promesa que ya se está
 // resolviendo ahí (no dispara un requireRole nuevo).
 await window.__authReady;
-const PRODUCCION_TEORICA_PLANTA = 4400; // kg/día, ambas líneas (materia prima compartida)
-const KG_POR_METRO = 4;
+const api = window.api; // expuesto por session.js (bundleado) — ver su comentario
 
-const DEFAULTS = [
-  {id:'hdpe-r-pel', name:'HDPE reciclado', variant:'peletizado', costo:14.50, costoReciente:15.28, leadTime:10, stockSeg:7, kgPorCarga:25, reorderMode:'manual', reorderManual:38000, cantidadPedir:20000},
-  {id:'hdpe-v-pel', name:'HDPE virgen', variant:'peletizado (sustituto)', costo:22.80, costoReciente:22.95, leadTime:15, stockSeg:7, kgPorCarga:0, reorderMode:'auto', reorderManual:null, cantidadPedir:5000},
-  {id:'hdpe-r-hoj', name:'HDPE reciclado', variant:'en hojuela', costo:11.20, costoReciente:10.85, leadTime:8, stockSeg:7, kgPorCarga:50, reorderMode:'auto', reorderManual:null, cantidadPedir:6000},
-  {id:'hdpe-r-hoj-sl', name:'HDPE reciclado', variant:'hojuela sin lavar', costo:8.40, costoReciente:8.52, leadTime:8, stockSeg:7, kgPorCarga:7.5, reorderMode:'auto', reorderManual:null, cantidadPedir:4000},
-  {id:'caco3', name:'Carbonato de calcio', variant:'peletizado', costo:6.90, costoReciente:7.35, leadTime:12, stockSeg:7, kgPorCarga:50, reorderMode:'auto', reorderManual:null, cantidadPedir:8000},
-  {id:'masterbatch', name:'Masterbatch', variant:'de color', costo:48.00, costoReciente:47.20, leadTime:20, stockSeg:7, kgPorCarga:2.5, reorderMode:'auto', reorderManual:null, cantidadPedir:2000},
-  {id:'aditivo-uv', name:'Aditivo UV', variant:'', costo:65.00, costoReciente:68.90, leadTime:25, stockSeg:7, kgPorCarga:1.5, reorderMode:'auto', reorderManual:null, cantidadPedir:800},
-  {id:'triturado', name:'Triturado', variant:'interno — se valúa en $0', costo:0, leadTime:null, stockSeg:null, kgPorCarga:12.5, interno:true},
-];
-const TOTAL_KG_POR_CARGA = DEFAULTS.reduce((s,m)=>s+(m.kgPorCarga||0),0);
-const SUGG_THRESHOLD_PCT = 3; // solo se sugiere si la compra reciente se aleja >=3% del estándar
-
-let MATERIALS = clone(DEFAULTS);
-let SAVED = clone(DEFAULTS);
+// MATERIALES se llena con datos reales de Convex (cargarCatalogo, más abajo).
+// costoEstandar/leadTimeDias/stockSeguridadDias/reorderMode/reorderManualKg/
+// cantidadPedirKg son editables aquí; kgPorCarga/formulaPct/consumoDiario/
+// reorderCalc/reorderEnUso vienen YA CALCULADOS por api.materiales.listCatalogo
+// a partir de Parámetros de Producción — nunca se capturan en esta pantalla.
+let MATERIALES = [];
+let KG_POR_METRO = 4; // se sobrescribe con el real al cargar (getParametros)
 let dirty = false;
 
-function clone(arr){ return arr.map(m=>({...m})); }
 const fmt = n => Math.round(n).toLocaleString('es-MX');
 const fmtMoney = n => n.toLocaleString('es-MX', {minimumFractionDigits:2, maximumFractionDigits:2});
 
-function recalc(m){
-  m.formulaPct = TOTAL_KG_POR_CARGA>0 ? (m.kgPorCarga||0)/TOTAL_KG_POR_CARGA*100 : 0; // 🔒 derivado de Parámetros de Producción y Fórmula
-  m.consumoDiario = PRODUCCION_TEORICA_PLANTA * (m.formulaPct||0)/100;
-  if(m.interno){ m.reorderCalc = null; m.reorderEnUso = null; return; }
-  m.reorderCalc = m.consumoDiario * ((m.leadTime||0) + (m.stockSeg||0));
-  m.reorderEnUso = m.reorderMode==='manual' ? (m.reorderManual ?? m.reorderCalc) : m.reorderCalc;
+// Hallazgo de auditoría (No Go de PR6): nombre/variante se interpolaban
+// sin escapar en HTML armado a mano (innerHTML). Mismo helper que
+// parametros-produccion.html/gestion-usuarios.html.
+function escapeHtml(str){
+  return String(str ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
 }
-MATERIALS.forEach(recalc);
 
-function suggDelta(m){
-  if(m.interno || !m.costoReciente || !m.costo) return null;
-  return (m.costoReciente - m.costo)/m.costo*100;
-}
-function suggestionHtml(m){
-  const delta = suggDelta(m);
-  if(delta===null || Math.abs(delta) < SUGG_THRESHOLD_PCT) return '';
-  const dir = delta>0 ? 'up' : 'down';
-  const sign = delta>0 ? '+' : '';
-  return `<div class="cost-suggestion" title="Promedio ponderado de tus entradas de los últimos 30 días">
-    💡 Compras recientes: <b class="mono">$${m.costoReciente.toFixed(2)}</b>
-    <span class="${dir}">(${sign}${delta.toFixed(1)}%)</span>
-    <button class="sugg-apply" data-apply="${m.id}">Actualizar</button>
-  </div>`;
+// Recalcula SOLO reorderCalc/reorderEnUso en el cliente, en vivo mientras el
+// usuario edita leadTimeDias/stockSeguridadDias/reorderMode/reorderManualKg
+// — misma fórmula que materiales.ts, para no esperar un round-trip por cada
+// tecla. formulaPct/consumoDiario NO se tocan aquí: se derivan de la fórmula
+// (Parámetros de Producción), que esta pantalla no edita.
+function recalc(m){
+  if(m.esInterno || m.esSustituto){ m.reorderCalc = null; m.reorderEnUso = null; return; }
+  const stockSeguridad = m.stockSeguridadDias ?? 7;
+  const leadTime = m.leadTimeDias ?? 0;
+  m.reorderCalc = m.consumoDiario * (leadTime + stockSeguridad);
+  m.reorderEnUso = m.reorderMode === 'manual' && m.reorderManualKg != null ? m.reorderManualKg : m.reorderCalc;
 }
 
 function pctLockedHtml(m){
@@ -400,9 +395,12 @@ function pctLockedHtml(m){
 }
 
 function rowHtml(m){
-  if(m.interno){
-    return `<tr class="interno" data-id="${m.id}">
-      <td class="mat-cell"><span class="mat-name">${m.name}</span><small>${m.variant}</small></td>
+  const id = escapeHtml(m.materialId);
+  const nombre = escapeHtml(m.nombre);
+  const variante = escapeHtml(m.variante);
+  if(m.esInterno){
+    return `<tr class="interno" data-id="${id}">
+      <td class="mat-cell"><span class="mat-name">${nombre}</span><small>${variante}</small></td>
       <td><div class="field locked"><span class="pre">$</span><input type="number" value="0.00" disabled><span class="suf">/kg 🔒</span></div></td>
       <td><span class="dash-cell">—</span></td>
       <td><span class="dash-cell">—</span></td>
@@ -411,43 +409,54 @@ function rowHtml(m){
       <td><span class="dash-cell" title="No aplica — no se compra a proveedor">No aplica</span></td>
     </tr>`;
   }
-  return `<tr data-id="${m.id}">
-    <td class="mat-cell"><span class="mat-name">${m.name}</span><small>${m.variant}</small></td>
-    <td><div class="costo-cell">
-      <div class="field"><span class="pre">$</span><input type="number" step="0.01" value="${m.costo.toFixed(2)}" data-field="costo"><span class="suf">/kg</span></div>
-      ${suggestionHtml(m)}
-    </div></td>
-    <td><div class="field"><input type="number" value="${m.leadTime}" data-field="leadTime"><span class="suf">días</span></div></td>
-    <td><div class="field"><input type="number" value="${m.stockSeg}" data-field="stockSeg"><span class="suf">días</span></div></td>
-    <td>${pctLockedHtml(m)}</td>
-    <td>
-      <div class="reorder-cell">
-        <div class="mode-toggle" data-id="${m.id}">
+  // Sustituto (p.ej. HDPE virgen): sí se compra y se edita como cualquier
+  // material, pero comparte cupo de fórmula con su principal y no tiene un
+  // punto de reorden propio (backend lo regresa en null a propósito).
+  const reorderCell = m.esSustituto
+    ? `<div class="reorder-cell"><span class="dash-cell" title="Es sustituto — comparte cupo de fórmula con su material principal, no tiene punto de reorden propio">No aplica (sustituto)</span></div>`
+    : `<div class="reorder-cell">
+        <div class="mode-toggle" data-id="${id}">
           <button data-mode-v="auto" class="${m.reorderMode==='auto'?'on':''}">Auto</button>
           <button data-mode-v="manual" class="${m.reorderMode==='manual'?'on':''}">Manual</button>
         </div>
         <div class="reorder-value">
           <span class="reorder-auto-value tnum mono" ${m.reorderMode==='manual'?'hidden':''}>${fmt(m.reorderEnUso)} kg</span>
-          <input type="number" class="reorder-manual-input tnum mono" data-field="reorderManual" value="${m.reorderManual ?? Math.round(m.reorderCalc)}" ${m.reorderMode==='auto'?'hidden':''}>
+          <input type="number" class="reorder-manual-input tnum mono" data-field="reorderManualKg" value="${m.reorderManualKg ?? Math.round(m.reorderCalc)}" ${m.reorderMode==='auto'?'hidden':''}>
         </div>
-        <small class="reorder-ref">calculado: ${fmt(m.reorderCalc)} kg · consumo ${fmt(m.consumoDiario)} kg/día</small>
-      </div>
-    </td>
-    <td><div class="field"><input type="number" step="10" value="${m.cantidadPedir}" data-field="cantidadPedir"><span class="suf">kg</span></div></td>
+        <small class="reorder-ref">calculado: ${fmt(m.reorderCalc)} kg · consumo ${fmt(m.consumoDiario)} kg/día (de planeación)</small>
+      </div>`;
+  return `<tr data-id="${id}">
+    <td class="mat-cell"><span class="mat-name">${nombre}</span><small>${variante}</small></td>
+    <td><div class="field"><span class="pre">$</span><input type="number" step="0.01" value="${m.costoEstandar.toFixed(2)}" data-field="costoEstandar"><span class="suf">/kg</span></div></td>
+    <td><div class="field"><input type="number" value="${m.leadTimeDias ?? 0}" data-field="leadTimeDias"><span class="suf">días</span></div></td>
+    <td><div class="field"><input type="number" value="${m.stockSeguridadDias ?? 7}" data-field="stockSeguridadDias"><span class="suf">días</span></div></td>
+    <td>${pctLockedHtml(m)}</td>
+    <td>${reorderCell}</td>
+    <td><div class="field"><input type="number" step="10" value="${m.cantidadPedirKg ?? 0}" data-field="cantidadPedirKg"><span class="suf">kg</span></div></td>
   </tr>`;
 }
 
 function renderTable(){
-  document.getElementById('catalogBody').innerHTML = MATERIALS.map(rowHtml).join('');
+  document.getElementById('catalogBody').innerHTML = MATERIALES.map(rowHtml).join('');
 }
-renderTable();
-recalcSummary();
 
 function recalcSummary(){
-  document.getElementById('totalPorCarga').innerHTML = fmt(TOTAL_KG_POR_CARGA)+'<span class="unit">kg</span>';
-  const costoKg = MATERIALS.reduce((s,m)=>s+(m.formulaPct||0)/100*(m.costo||0),0);
+  const totalKgPorCarga = MATERIALES.reduce((s,m)=>s+(m.kgPorCarga||0),0);
+  document.getElementById('totalPorCarga').innerHTML = fmt(totalKgPorCarga)+'<span class="unit">kg</span>';
+  const costoKg = MATERIALES.reduce((s,m)=>s+(m.formulaPct||0)/100*(m.costoEstandar||0),0);
   document.getElementById('costoMezclaKg').innerHTML = '$'+fmtMoney(costoKg)+'<span class="unit">/kg</span>';
-  document.getElementById('costoMezclaM').textContent = '$'+fmtMoney(costoKg*KG_POR_METRO)+' / metro (4 kg/m)';
+  document.getElementById('costoMezclaM').textContent = '$'+fmtMoney(costoKg*KG_POR_METRO)+` / metro (${KG_POR_METRO} kg/m)`;
+}
+
+async function cargarCatalogo(){
+  const [catalogo, params] = await Promise.all([
+    window.Session.call(api.materiales.listCatalogo, {}, 'query'),
+    window.Session.call(api.parametros.getParametros, {}, 'query'),
+  ]);
+  MATERIALES = catalogo;
+  KG_POR_METRO = params.kgPorMetro;
+  renderTable();
+  recalcSummary();
 }
 
 function markDirty(){
@@ -460,46 +469,24 @@ function markDirty(){
 document.getElementById('catalogBody').addEventListener('input', e=>{
   const field = e.target.dataset.field; if(!field) return;
   const tr = e.target.closest('tr');
-  const m = MATERIALS.find(x=>x.id===tr.dataset.id);
+  const m = MATERIALES.find(x=>x.materialId===tr.dataset.id);
   if(!m) return;
   const val = parseFloat(e.target.value);
-  if(field==='reorderManual'){ m.reorderManual = isNaN(val)?0:val; }
-  else { m[field] = isNaN(val)?0:val; }
+  m[field] = isNaN(val)?0:val;
   recalc(m);
   const ref = tr.querySelector('.reorder-ref');
-  if(ref) ref.textContent = `calculado: ${fmt(m.reorderCalc)} kg · consumo ${fmt(m.consumoDiario)} kg/día`;
+  if(ref) ref.textContent = `calculado: ${fmt(m.reorderCalc)} kg · consumo ${fmt(m.consumoDiario)} kg/día (de planeación)`;
   const autoSpan = tr.querySelector('.reorder-auto-value');
   if(autoSpan && m.reorderMode==='auto') autoSpan.textContent = fmt(m.reorderEnUso)+' kg';
-  if(field==='costo'){
-    const costoCell = tr.querySelector('.costo-cell');
-    const oldSugg = costoCell.querySelector('.cost-suggestion');
-    if(oldSugg) oldSugg.remove();
-    const newSugg = suggestionHtml(m);
-    if(newSugg) costoCell.insertAdjacentHTML('beforeend', newSugg);
-  }
   recalcSummary();
   markDirty();
 });
 
 document.getElementById('catalogBody').addEventListener('click', e=>{
-  const applyBtn = e.target.closest('.sugg-apply');
-  if(applyBtn){
-    const id = applyBtn.dataset.apply;
-    const m = MATERIALS.find(x=>x.id===id);
-    const tr = applyBtn.closest('tr');
-    const input = tr.querySelector('input[data-field="costo"]');
-    m.costo = m.costoReciente;
-    input.value = m.costo.toFixed(2);
-    recalc(m);
-    recalcSummary();
-    markDirty();
-    applyBtn.closest('.cost-suggestion').remove();
-    return;
-  }
   const btn = e.target.closest('.mode-toggle button'); if(!btn) return;
   const toggle = btn.closest('.mode-toggle');
   const tr = btn.closest('tr');
-  const m = MATERIALS.find(x=>x.id===tr.dataset.id);
+  const m = MATERIALES.find(x=>x.materialId===tr.dataset.id);
   m.reorderMode = btn.dataset.modeV;
   [...toggle.children].forEach(b=>b.classList.toggle('on', b===btn));
   recalc(m);
@@ -507,32 +494,56 @@ document.getElementById('catalogBody').addEventListener('click', e=>{
   const manualInput = tr.querySelector('.reorder-manual-input');
   if(m.reorderMode==='manual'){
     autoSpan.hidden = true; manualInput.hidden = false;
-    manualInput.value = m.reorderManual ?? Math.round(m.reorderCalc);
-    m.reorderManual = parseFloat(manualInput.value);
+    manualInput.value = m.reorderManualKg ?? Math.round(m.reorderCalc);
+    m.reorderManualKg = parseFloat(manualInput.value);
     recalc(m);
   } else {
     autoSpan.hidden = false; manualInput.hidden = true;
     autoSpan.textContent = fmt(m.reorderEnUso)+' kg';
   }
   const ref = tr.querySelector('.reorder-ref');
-  ref.textContent = `calculado: ${fmt(m.reorderCalc)} kg · consumo ${fmt(m.consumoDiario)} kg/día`;
+  ref.textContent = `calculado: ${fmt(m.reorderCalc)} kg · consumo ${fmt(m.consumoDiario)} kg/día (de planeación)`;
   markDirty();
 });
 
-function saveCatalog(){
-  SAVED = clone(MATERIALS);
-  dirty = false;
-  document.getElementById('dirtyFlag').classList.remove('show');
-  document.getElementById('btnSave').disabled = true;
-  document.getElementById('btnReset').disabled = true;
-  const t = document.getElementById('toast');
-  t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 2400);
+async function saveCatalog(){
+  const btn = document.getElementById('btnSave');
+  const errorBox = document.getElementById('saveError');
+  errorBox.hidden = true;
+  const textoOriginal = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Guardando…';
+  try{
+    // Una sola mutation atómica para todos los materiales — la pantalla
+    // tiene un solo botón "Guardar cambios" para toda la tabla; un loop de
+    // mutations independientes dejaría un guardado parcial si un material
+    // a la mitad fallara su validación (mismo bloqueante corregido en PR 3).
+    await window.Session.call(api.materiales.guardarCatalogoCompleto, {
+      materiales: MATERIALES.map(m => ({
+        materialId: m.materialId,
+        costoEstandar: m.costoEstandar,
+        leadTimeDias: m.leadTimeDias,
+        stockSeguridadDias: m.stockSeguridadDias,
+        reorderMode: m.reorderMode,
+        reorderManualKg: m.reorderManualKg,
+        cantidadPedirKg: m.cantidadPedirKg,
+      })),
+    }, 'mutation');
+    dirty = false;
+    document.getElementById('dirtyFlag').classList.remove('show');
+    btn.disabled = true; btn.textContent = textoOriginal;
+    document.getElementById('btnReset').disabled = true;
+    const t = document.getElementById('toast');
+    t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 2400);
+  }catch(err){
+    btn.disabled = false; btn.textContent = textoOriginal;
+    errorBox.hidden = false;
+    errorBox.textContent = '⚠ ' + (err?.message || String(err));
+  }
 }
-function resetCatalog(){
-  MATERIALS = clone(SAVED);
-  MATERIALS.forEach(recalc);
-  renderTable();
-  recalcSummary();
+async function resetCatalog(){
+  // Descarta ediciones locales releyendo de Convex — el servidor es la
+  // única fuente de verdad, no una copia "SAVED" en memoria del cliente.
+  await cargarCatalogo();
   dirty = false;
   document.getElementById('dirtyFlag').classList.remove('show');
   document.getElementById('btnSave').disabled = true;
@@ -544,4 +555,6 @@ function resetCatalog(){
    explícitamente para que esos atributos sigan funcionando. */
 window.saveCatalog = saveCatalog;
 window.resetCatalog = resetCatalog;
+
+await cargarCatalogo();
 </script>
