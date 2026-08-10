@@ -19,6 +19,8 @@ import type * as dashboard from "../dashboard.js";
 import type * as entradas from "../entradas.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_fechaOperativa from "../lib/fechaOperativa.js";
+import type * as materiales from "../materiales.js";
+import type * as parametros from "../parametros.js";
 import type * as peps from "../peps.js";
 import type * as reporteDiario from "../reporteDiario.js";
 import type * as seed from "../seed.js";
@@ -46,6 +48,8 @@ declare const fullApi: ApiFromModules<{
   entradas: typeof entradas;
   "lib/auth": typeof lib_auth;
   "lib/fechaOperativa": typeof lib_fechaOperativa;
+  materiales: typeof materiales;
+  parametros: typeof parametros;
   peps: typeof peps;
   reporteDiario: typeof reporteDiario;
   seed: typeof seed;
