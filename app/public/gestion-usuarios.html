@@ -694,5 +694,13 @@ window.cerrarModalYRelogin = cerrarModalYRelogin;
 window.saveUsers = saveUsers;
 window.resetUsers = resetUsers;
 
-await cargarUsuarios();
+// EDS-65 (10.1): la carga inicial no tenía try/catch — si Convex no
+// respondía, la tabla se quedaba vacía sin ninguna explicación en vez de
+// mostrar un error controlado.
+try {
+  await cargarUsuarios();
+} catch (err) {
+  console.error('[gestion-usuarios] Error al cargar usuarios:', err);
+  mostrarErrorGlobal(new Error('No se pudo conectar con el servidor. Verifica tu conexión y recarga la página.'));
+}
 </script>

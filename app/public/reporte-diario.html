@@ -543,5 +543,15 @@ window.generarAhora = generarAhora;
 window.saveConfig = saveConfig;
 window.resetConfig = resetConfig;
 
-await cargarTodo();
+// EDS-65 (10.1): la carga inicial no tenía try/catch — si Convex no
+// respondía, la pantalla quedaba vacía sin explicación en vez de mostrar
+// un error controlado.
+try {
+  await cargarTodo();
+} catch (err) {
+  console.error('[reporte-diario] Error al cargar datos iniciales:', err);
+  const errorBox = document.getElementById('saveError');
+  errorBox.hidden = false;
+  errorBox.textContent = '⚠ No se pudo conectar con el servidor. Verifica tu conexión y recarga la página.';
+}
 </script>

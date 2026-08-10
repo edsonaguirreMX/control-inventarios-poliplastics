@@ -291,6 +291,8 @@ button{font-family:inherit;}
     </div>
   </header>
 
+  <div class="field-warn error" id="connError" hidden></div>
+
   <div class="stage">
     <div class="phone-wrap">
       <div class="phone">
@@ -958,7 +960,16 @@ async function resetCierreForm(){
 }
 
 /* estado inicial */
-await showHome();
+// EDS-65 (10.1): sin try/catch, si Convex no respondía el menú se quedaba
+// a medio construir sin ninguna explicación.
+try {
+  await showHome();
+} catch (err) {
+  console.error('[cierre-turno-propuestas] Error al cargar datos iniciales:', err);
+  const errorBox = document.getElementById('connError');
+  errorBox.hidden = false;
+  errorBox.textContent = '⚠ No se pudo conectar con el servidor. Verifica tu conexión y recarga la página.';
+}
 
 /* El HTML llama estas funciones vía onclick="" — en un <script type="module">
    quedan en el scope del módulo, no globales, así que hay que exponerlas
