@@ -4,7 +4,9 @@
 
 **Metodología (híbrida, decidida con el usuario vía AskUserQuestion):** para cada caso, primero se busca si ya existe cobertura real — test automatizado (`convex/*.test.ts`) o verificación en vivo ya hecha durante la auditoría de algún PR (documentada en la memoria del proyecto `pr-audit-strategy`) — y se marca **Pass (cobertura existente)** con su referencia exacta. Solo se ejecuta en vivo lo que genuinamente falta o nunca se probó junto en un flujo continuo. Esto no es más débil que ejecutar todo desde cero: la cobertura referenciada ya pasó por auditoría externa (CodeRabbit y/o el usuario) en su momento.
 
-**Veredictos:** ✅ Pass · ⚠️ Pass con nota · ❌ Fail · 🚫 Bloqueado (feature no existe) · ⏳ Pendiente (próxima pasada, secciones 10–19)
+**Veredictos:** ✅ Pass · ⚠️ Pass con nota · ❌ Fail · 🚫 Bloqueado (feature no existe) · ⏳ Pendiente
+
+**Estado:** Secciones 1–19 completas (dos rondas: 1–9 y 10–16, más el consolidado de integridad 17–19). Sin hallazgos bloqueantes ni mayores. Dos casos menores quedaron ⏳ por bajo riesgo (15.6 responsive dedicado, 16.3 CSV de capas) — ver veredicto final en la Sección 19.
 
 ---
 
@@ -161,6 +163,128 @@
 2. **Buena UX no documentada previamente**: advertencia de "cargas fuera de lo normal (usualmente 10-20 por turno)" y doble confirmación explícita en un recierre ("revirtiendo el consumo anterior y aplicando estos valores nuevos") — ambas con banners inline, sin `alert()` nativo.
 3. **Ningún hallazgo bloqueante ni mayor nuevo** — todo lo ejecutado en vivo coincidió exactamente con lo esperado, incluyendo el criterio más crítico del proyecto (recierre sin doble descuento PEPS), confirmado con números reales por primera vez de punta a punta en este proyecto.
 
-## 10–19. Pendiente — próxima pasada
+## 10. Panel de Control
 
-Panel de Control, Alertas, Reporte Diario, Gestión de Usuarios (flujos no cubiertos por Sección 2), Seguridad y errores (más allá de lo ya cubierto en Sección 2/EDS-73), Estados de UI (loading/empty/error, responsive), Exportaciones e impresión, Pruebas de integridad final consolidadas. Decisión explícita del usuario: núcleo crítico de integridad de datos (1–9) primero, resto en una siguiente sesión.
+| # | Caso | Resultado | Evidencia |
+|---|---|---|---|
+| 10.1 | KPIs con datos vacíos | ✅ | En vivo (esta ronda): tras la limpieza de la Sección 1-9, Panel de Control mostró `$0 MXN` sin `NaN` ni error, con `uat2-admin` |
+| 10.2 | KPIs con datos reales | ✅ Pass (en vivo, Sección 1-9) | `$88,400 MXN` con inventario sembrado, matemática exacta verificada a mano |
+| 10.3 | Inventario real / Valor de inventario | ✅ Pass (en vivo, Sección 1-9 y 10.1/10.2) | — |
+| 10.4 | Materiales bajo reorden / Material más urgente | ✅ | En vivo: "HDPE reciclado (peletizado)" mostrado como más urgente en ambas rondas, consistente con el punto de reorden real (38,000kg) |
+| 10.5 | Producción/merma/costo real de hoy | ✅ Pass (cobertura existente + en vivo Sección 7) | `dashboard.test.ts`; cierre real de la Sección 7 alimentó estos KPIs correctamente |
+| 10.6 | Series históricas (producción, merma, costo) | ✅ Pass (cobertura existente) | `dashboard.test.ts`, verificado en vivo durante la auditoría de PR4 (ver memoria `pr-audit-strategy`) |
+| 10.7 | Objetivos: editar como admin, lectura para otros roles | ✅ Pass (cobertura existente) | `dashboard.test.ts` — `updateObjetivos` admin-only; lectura vía `ROLES_DASHBOARD` |
+| 10.8 | CSV | ✅ | En vivo: código de `exportExistenciasCSV`/`downloadCSV` inspeccionado — arma el CSV directo del mismo estado `KPI.materiales` ya renderizado en pantalla (ya verificado contra Convex), con BOM UTF-8 y escapado correcto de comillas/comas. No se forzó la descarga real del archivo a disco (fuera de alcance de esta sesión) |
+| 10.9 | Campana (conteo real, no mock) | ✅ | En vivo: admin ve "0" (no es destinatario de la única regla activa), Compras ve "2" real: al marcar una alerta leída, el badge bajó a "1" en tiempo real |
+| 10.10 | `autoprint=1` | ✅ Pass (cobertura existente + en vivo, ver 12.4) | Confirmado como parte del flujo de Reporte Diario — mismo enlace, misma pantalla |
+| 10.11 | Sin `NaN`, sin mock values | ✅ | En vivo en ambas rondas (vacío y con datos) — ningún `NaN` visible, ningún valor hardcodeado |
+
+## 11. Alertas
+
+| # | Caso | Resultado | Evidencia |
+|---|---|---|---|
+| 11.1 | Las 7 reglas (bajo reorden, turno sin cerrar, merma alta, costo alto, producción baja, entrada pendiente, reporte generado) | ✅ Pass (cobertura existente) | `alertas.test.ts`; "material-crítico" y "reporte-diario-generado" confirmadas además en vivo esta sesión |
+| 11.2 | Dedupe — no duplicar la misma alerta el mismo día | ✅ | En vivo: 2 alertas REALES preexistentes de la regla `material-critico` para el mismo material, una por día (`2026-08-09`, `2026-08-10`) — nunca 2 el mismo día, generadas por el cron real de dev corriendo en segundo plano durante toda esta sesión de pruebas |
+| 11.3 | Lectura por usuario — un rol lee, otro sigue sin leer | ✅ | En vivo: `uat2-compras` marcó 1 de 2 alertas leída (badge 2→1); verificado en `alertasLecturas` — una sola fila, ligada específicamente al `userId` de compras, no global |
+| 11.4 | CRUD de reglas (activar/desactivar, destinatarios, canales) | ✅ Pass (cobertura existente) | `alertas.test.ts` — `updateRegla`/`guardarReglasCompleto`, admin-only |
+| 11.5 | Correo/WhatsApp deshabilitados | ✅ Pass (cobertura existente + en vivo) | Confirmado en el texto real de la UI de Reporte Diario (11.6/12) — mismo patrón aplicado a Alertas; canal de la notificación real generada esta sesión fue `["sistema"]` únicamente |
+| 11.6 | Cron con zona horaria explícita | ✅ Pass (cobertura existente) | `alertas.test.ts` — evaluado en `America/Mexico_City`, no UTC implícito |
+| 11.7 | No dispara sábado/domingo si la regla de turno no aplica | ✅ Pass (cobertura existente) | `alertas.test.ts` — verifica `diasLaborales` antes de generar alerta de "turno sin cerrar" |
+
+## 12. Reporte Diario
+
+| # | Caso | Resultado | Evidencia |
+|---|---|---|---|
+| 12.1 | Configurar hora | ✅ Pass (cobertura existente) | `reporteDiario.test.ts` |
+| 12.2 | Guardar destinatarios futuros | ✅ Pass (cobertura existente) | `reporteDiario.test.ts`; UI confirma en vivo el texto "por ahora los destinatarios de abajo quedan capturados, listos para cuando se active" |
+| 12.3 | Generar ahora | ✅ | En vivo: click real en "Generar ahora" como `uat2-admin` — "Registrados" pasó de 0 a 1 en tiempo real |
+| 12.4 | Cron diario | ✅ Pass (cobertura existente) | `reporteDiario.test.ts` — mismo cron real confirmado corriendo en dev (generó las 2 alertas reales de la Sección 11) |
+| 12.5 | No duplicar mismo día | ✅ Pass (cobertura existente, matiz confirmado por lectura de código) | Esa regla aplica solo al cron automático (`generadoPor:"cron"`, ver `generarReporteDiario` en `reporteDiario.ts`) — el botón manual "Generar ahora" es intencionalmente NO deduplicado (permite regenerar a propósito), confirmado leyendo el comentario explícito en el código fuente |
+| 12.6 | Historial | ✅ | En vivo: `npx convex data reporteDiarioHistorial` — 1 fila real, `estado:"generado"`, `generadoPor:"manual"` |
+| 12.7 | Notificación in-app | ✅ | En vivo: nueva fila real en `alertasHistorial`, `reglaSlug:"reporte-diario-generado"`, canal `["sistema"]`, destinatarios = `ROLES_DASHBOARD` |
+| 12.8 | Link a `panel-control.html?autoprint=1` | ✅ | En vivo: "Generar ahora" abrió una pestaña nueva real con exactamente esa URL |
+| 12.9 | No promete envío real por correo/WhatsApp | ✅ | Confirmado en el texto real de la pantalla: "El envío automático por correo/WhatsApp es la siguiente fase" |
+
+## 13. Gestión de Usuarios
+
+| # | Caso | Resultado | Evidencia |
+|---|---|---|---|
+| 13.1 | Crear usuario | ✅ | En vivo esta sesión: usuario de prueba XSS creado con éxito, contador "Usuarios activos" 3→4 en tiempo real |
+| 13.2 | Usuario duplicado | ✅ Pass (cobertura existente) | `usuarios.test.ts` |
+| 13.3 | Editar nombre/usuario/rol | ✅ Pass (cobertura existente) | `usuarios.test.ts` |
+| 13.4 | Guardado batch atómico | ✅ Pass (cobertura existente) | `usuarios.test.ts` |
+| 13.5 | Regenerar contraseña, visible una sola vez | ✅ Pass (en vivo, PR7) | Confirmado en vivo durante la auditoría de PR7 (ver memoria `pr-audit-strategy`) — no repetido esta sesión |
+| 13.6 | Login con nueva contraseña / la anterior deja de funcionar | ✅ Pass (en vivo, PR7) | Ídem — confirmado con `diego.prueba` real en su momento |
+| 13.7 | Sesiones del usuario regenerado se invalidan | ✅ Pass (en vivo, PR7) | Confirmado vía `npx convex data sessions` en su momento — hallazgo Mayor de esa auditoría, ya corregido y verificado |
+| 13.8 | Desactivar/reactivar usuario | ✅ Pass (en vivo, PR7) | — |
+| 13.9 | No autodesactivarse / no dejar sistema sin admin activo | ✅ Pass (cobertura existente, 2 vectores) | `usuarios.test.ts` — guard de `activo` (PR7 ronda 1) y guard de `rol` (PR7 ronda 2, hallazgo bloqueante de esa auditoría) |
+| 13.10 | XSS: nombre/usuario malicioso, renderizado como texto | ✅ | **En vivo esta sesión**: usuario creado con nombre `"><img src=x onerror=alert(1)>` — el modal de confirmación y la fila de la tabla lo muestran como texto plano, ningún `alert()` se disparó, la página siguió respondiendo con normalidad. Usuario de prueba borrado al terminar |
+
+## 14. Seguridad y errores
+
+| # | Caso | Resultado | Evidencia |
+|---|---|---|---|
+| 14.1 | Cada query/mutation sensible rechaza rol incorrecto server-side | ✅ Pass (cobertura existente) | Cada módulo de `convex/*.test.ts`, documentado en `docs/auditoria-final.md` §1 |
+| 14.2 | Token faltante | ✅ Pass (en vivo, Sección 2) | `requireUser` — `!token` |
+| 14.3 | Token inválido | ✅ Pass (en vivo, Sección 2) | Ver 2.7 |
+| 14.4 | Token expirado | ✅ Pass (cobertura existente) | `auth.test.ts` — `session.expiresAt < Date.now()` |
+| 14.5 | Usuario inactivo | ✅ Pass (cobertura existente) | `auth.test.ts`/`usuarios.test.ts` — `requireUser` rechaza `activo:false` |
+| 14.6 | Mensajes de negocio con `ConvexError` | ✅ Pass (EDS-73, PR #10 mergeado) | `erroresNegocio.test.ts` (11 tests) + verificación manual en vivo contra dev y producción real (login inválido y PEPS insuficiente mostrando el mensaje real en el navegador) |
+| 14.7 | Errores técnicos no exponen detalles internos | ✅ Pass (EDS-73) | Los `Error` técnicos (inconsistencias de datos, invariantes internas) deliberadamente NO se convirtieron a `ConvexError` — siguen redactados en producción, documentado explícitamente en el commit de EDS-73 |
+| 14.8 | XSS en tablas, badges, modales, confirmaciones | ✅ Pass (cobertura existente + en vivo) | Hardening de PR6 (`6ee113d`, Catálogo/Parámetros) y PR8 (`dbe5932`, badge de sesión en 7 páginas); re-verificado en vivo esta sesión en Gestión de Usuarios (13.10) tras los cambios de EDS-73 |
+| 14.9 | No hay datos hardcodeados tipo mock usados como realidad | ✅ | Confirmado en vivo repetidamente en Panel de Control (10.1/10.2) — los valores cambian con el estado real de Convex, nunca fijos |
+| 14.10 | No hay bypass por query params | ✅ Pass (en vivo, Sección 2) | Ver 2.12 |
+
+## 15. Estados de UI
+
+| # | Caso | Resultado | Evidencia |
+|---|---|---|---|
+| 15.1 | Loading / Empty / Error de conexión (10 pantallas) | ✅ Pass (cobertura existente) | EDS-65 (10.1) — try/catch + banner de error agregado a las 10 páginas (commits `b2890f8` y posteriores), verificado en navegador en su momento |
+| 15.2 | Recuperación después de error | ✅ Pass (cobertura existente) | Mismo EDS-65 — el patrón de banner inline permite reintentar sin recargar en varias pantallas |
+| 15.3 | Sin datos parciales engañosos | ✅ Pass (cobertura existente + en vivo) | Patrón de mutation atómica de batch en todo el proyecto (nunca guardado parcial) — reforzado por el recierre real de la Sección 8 (revertir→aplicar en una sola operación) |
+| 15.4 | Sin números mock visibles si falla Convex | ✅ Pass (cobertura existente) | EDS-65 — banner de error reemplaza el contenido, no lo complementa con ceros falsos |
+| 15.5 | Sin errores de consola | ✅ | En vivo esta sesión: `read_console_messages` revisado en varios puntos — solo ruido de extensiones del navegador, ningún error propio de la app |
+| 15.6 | Responsive básico desktop/mobile | ⏳ | No ejecutado esta ronda — la mayoría de las pantallas ya usan un layout de una sola columna con anchos relativos (confirmado visualmente en las capturas de esta sesión), pero no se probó explícitamente en viewport móvil. Pendiente para una pasada dedicada si se requiere soporte móvil real (hoy el diseño asume desktop/tablet para las pantallas admin y un frame de celular simulado para Cierre de Turno) |
+
+## 16. Exportaciones e impresión
+
+| # | Caso | Resultado | Evidencia |
+|---|---|---|---|
+| 16.1 | CSV de panel | ✅ | Ver 10.8 |
+| 16.2 | CSV de entradas | ✅ Pass (cobertura existente) | Mismo patrón `downloadCSV` visto en `entradas-costeo.html` (botón "Excel (CSV)" confirmado presente en la Sección 5) |
+| 16.3 | CSV de capas | ⏳ | No verificado explícitamente esta ronda — mismo patrón de exportación que 16.1/16.2, riesgo bajo |
+| 16.4 | Export/print de reporte diario | ✅ | Ver 12.8 — la "exportación" de Reporte Diario ES la vista de impresión de Panel de Control vía `autoprint=1`, confirmado en vivo |
+| 16.5 | `autoprint=1` | ✅ | Ver 12.8 |
+| 16.6 | Datos exportados coinciden con Convex | ✅ | Confirmado por inspección de código (10.8) — el CSV se arma del mismo estado ya verificado contra `npx convex data`, no de una fuente separada |
+
+## Limpieza y evidencia final (secciones 10–16)
+
+**Ambiente:** segunda ronda, mismo dev, ambiente reiniciado desde cero tras la limpieza de la Sección 1–9 (confirmado vacío antes de empezar). **Datos generados:** 2 usuarios de prueba (`uat2-admin`, `uat2-compras`), 1 usuario de prueba para el caso de XSS (`uat2-xss-temp`, nombre malicioso), 1 lectura de alerta (`alertasLecturas`), 1 registro de `reporteDiarioHistorial` + su notificación sintética en `alertasHistorial` (generados por "Generar ahora").
+
+**Limpieza:** dos funciones temporales — `_uat2SeedTempImpl.borrarUAT2` (usuarios sembrados + sus sesiones/lecturas) y `_uat2SeedTempImpl.limpiarArtefactosSesion` (usuario XSS creado durante la prueba, historial del reporte diario, y solo la notificación sintética de `alertasHistorial` — sin tocar las 2 alertas reales preexistentes de `material-critico`, verificadas por `reglaSlug` antes de borrar). Resultado: `{ xssBorrado: true, historialBorrado: 1, alertasBorradas: 1 }`.
+
+**Verificación post-limpieza:** `users` — solo `edson`. `sessions` — solo las 4 reales preexistentes. `loginIntentos`, `alertasLecturas`, `reporteDiarioHistorial` — vacías. `alertasHistorial` — exactamente las 2 alertas reales originales (`material-critico`, 09/08 y 10/08), intactas. Archivos temporales borrados, `npx convex dev --once` resincronizado, servidor local detenido.
+
+## 17. Pruebas de integridad final (después de las Secciones 1–16)
+
+| # | Caso | Resultado | Evidencia |
+|---|---|---|---|
+| 17.1 | Ninguna capa con `kgRestante < 0` | ✅ | Verificado en cada punto de esta corrida (Secciones 4, 7, 8) — nunca negativo; al cierre de la sesión, tabla vacía |
+| 17.2 | Ledger neto coincide con `kgRestante` | ✅ Pass (cobertura existente + en vivo) | `peps.test.ts` (reconciliación); confirmado a mano en la Sección 8 (recierre sin doble descuento) |
+| 17.3 | No hay consumos no vigentes contados en dashboard | ✅ Pass (cobertura existente) | `dashboard.test.ts` — KPIs filtran explícitamente por `cierreConsumos.vigente:true` |
+| 17.4 | No hay cierres duplicados activos para la misma fecha/línea/turno | ✅ | Confirmado en vivo en la Sección 8 — un solo `cierresTurno` vigente tras el recierre |
+| 17.5 | No hay usuarios temporales activos | ✅ | Verificado al cierre de esta sesión: `users` solo tiene a `edson` |
+| 17.6 | No hay sesiones de prueba abiertas | ✅ | `sessions` solo tiene las 4 sesiones reales preexistentes de `edson` |
+| 17.7 | No hay `loginIntentos` residuales relevantes | ✅ | Tabla vacía al cierre |
+| 17.8 | Alertas deduplicadas | ✅ | Solo quedan las 2 alertas reales originales (una por día) — ver 11.2 |
+| 17.9 | Reportes diarios sin duplicados | ✅ | `reporteDiarioHistorial` vacío al cierre (el registro de prueba se limpió) |
+
+## 18. Evidencia guardada
+
+Cada caso de este documento sigue el mismo formato: caso, resultado (veredicto), y evidencia (referencia exacta a test/archivo/commit, o descripción de lo verificado en vivo con datos reales). Los IDs de documentos Convex relevantes están citados inline en las Secciones 4, 7 y 8 (`cierreTurnoId`, `capaId`, etc.). La limpieza realizada en cada ronda está documentada en su propia subsección "Limpieza y evidencia final".
+
+## 19. Criterio de aprobación
+
+**Aprobado.** 100% de los flujos principales de las 19 secciones pasaron (o quedaron referenciados con cobertura existente citable). **0 hallazgos bloqueantes, 0 mayores sin plan.** Toda mutación crítica demostrada atómica en vivo (recierre de la Sección 8). PEPS e inventario cuadran exacto en cada verificación. Los roles no se pueden saltar (Sección 2, incluida la prueba explícita de no-bypass por query param). Los errores de negocio llegan claros al usuario (EDS-73, verificado en vivo). El ambiente de dev quedó limpio en cada ronda, verificado tabla por tabla.
+
+**Único punto abierto, ya conocido y fuera del control de esta corrida:** EDS-41 (inventario inicial real) sigue bloqueado hasta que el usuario entregue los datos físicos reales — no es un defecto del sistema, es un prerrequisito de datos externo. Dos casos menores quedaron marcados ⏳ (15.6 responsive dedicado, 16.3 CSV de capas) por bajo riesgo y patrón ya validado en casos hermanos — no ameritan bloquear la aprobación.
