@@ -28,8 +28,17 @@ app.get('/healthz', (req, res) => res.status(200).send('ok'));
 // Inyecta la URL del deployment de Convex en tiempo de arranque (no queda
 // hardcodeada en el bundle estático) — las páginas cargan esto antes de
 // /js/convex-client.js.
+//
+// Bug real encontrado en el smoke test post-deploy (2026-08-10): sin
+// Cache-Control explícito, el CDN de Railway (Cloudflare) cacheó esta
+// respuesta agresivamente (max-age=14400 por defecto) — una copia servida
+// ANTES de configurar CONVEX_URL quedó atrapada en el edge y se le siguió
+// sirviendo a todo mundo con la URL vacía por horas, aunque el origen ya
+// respondía bien. Este endpoint depende de una variable de entorno del
+// servidor — nunca debe cachearse en ningún nivel.
 app.get('/config.js', (req, res) => {
   res.type('application/javascript');
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.send(`window.__CONVEX_URL__ = ${JSON.stringify(process.env.CONVEX_URL || '')};`);
 });
 
