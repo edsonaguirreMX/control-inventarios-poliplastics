@@ -319,6 +319,16 @@ footer.page-foot{font-size:.78rem;color:var(--ink-faint);border-top:1px solid va
    si esta promesa se resuelve.
    ============================================================ */
 const ROLE_LABEL = { operador:'Operador', admin:'Admin', gerencia:'Gerencia y Comercial', compras:'Compras', calidad:'Calidad y Producción' };
+// Este módulo es independiente del segundo <script> de la página (scope
+// propio, sin variables compartidas) — se duplica un escape mínimo aquí
+// en vez de depender del escapeHtml() de allá. Mismo hallazgo de
+// auditoría que motivó el de abajo: user.nombre viene de Convex/sesión y
+// se interpola en innerHTML sin escapar.
+function escapeHtmlSesion(str){
+  return String(str ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+}
 // Puerta explícita de autorización: se guarda la promesa en window para que
 // el segundo <script type="module"> de esta página (con la lógica
 // principal) la espere explícitamente en su primera línea, en vez de
@@ -329,7 +339,7 @@ window.usuarioSesion = user.nombre;
 window.rolSesion = user.rol;
 const row = document.getElementById('sessionRow');
 if (row) {
-  row.innerHTML = `<span class="role-badge">🔒 ${user.nombre} · ${ROLE_LABEL[user.rol]}</span><a class="logout-link" href="#" id="logoutLink">Cerrar sesión</a>`;
+  row.innerHTML = `<span class="role-badge">🔒 ${escapeHtmlSesion(user.nombre)} · ${ROLE_LABEL[user.rol]}</span><a class="logout-link" href="#" id="logoutLink">Cerrar sesión</a>`;
   document.getElementById('logoutLink').addEventListener('click', async (e) => {
     e.preventDefault();
     await window.Session.logout();
@@ -356,6 +366,15 @@ let dirty = false;
 const fmt = n => Math.round(n).toLocaleString('es-MX');
 const fmtMoney = n => n.toLocaleString('es-MX', {minimumFractionDigits:2, maximumFractionDigits:2});
 
+// Hallazgo de auditoría (No Go de PR6): nombre/variante se interpolaban
+// sin escapar en HTML armado a mano (innerHTML). Mismo helper que
+// parametros-produccion.html/gestion-usuarios.html.
+function escapeHtml(str){
+  return String(str ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+}
+
 // Recalcula SOLO reorderCalc/reorderEnUso en el cliente, en vivo mientras el
 // usuario edita leadTimeDias/stockSeguridadDias/reorderMode/reorderManualKg
 // — misma fórmula que materiales.ts, para no esperar un round-trip por cada
@@ -376,9 +395,12 @@ function pctLockedHtml(m){
 }
 
 function rowHtml(m){
+  const id = escapeHtml(m.materialId);
+  const nombre = escapeHtml(m.nombre);
+  const variante = escapeHtml(m.variante);
   if(m.esInterno){
-    return `<tr class="interno" data-id="${m.materialId}">
-      <td class="mat-cell"><span class="mat-name">${m.nombre}</span><small>${m.variante}</small></td>
+    return `<tr class="interno" data-id="${id}">
+      <td class="mat-cell"><span class="mat-name">${nombre}</span><small>${variante}</small></td>
       <td><div class="field locked"><span class="pre">$</span><input type="number" value="0.00" disabled><span class="suf">/kg 🔒</span></div></td>
       <td><span class="dash-cell">—</span></td>
       <td><span class="dash-cell">—</span></td>
@@ -393,7 +415,7 @@ function rowHtml(m){
   const reorderCell = m.esSustituto
     ? `<div class="reorder-cell"><span class="dash-cell" title="Es sustituto — comparte cupo de fórmula con su material principal, no tiene punto de reorden propio">No aplica (sustituto)</span></div>`
     : `<div class="reorder-cell">
-        <div class="mode-toggle" data-id="${m.materialId}">
+        <div class="mode-toggle" data-id="${id}">
           <button data-mode-v="auto" class="${m.reorderMode==='auto'?'on':''}">Auto</button>
           <button data-mode-v="manual" class="${m.reorderMode==='manual'?'on':''}">Manual</button>
         </div>
@@ -403,8 +425,8 @@ function rowHtml(m){
         </div>
         <small class="reorder-ref">calculado: ${fmt(m.reorderCalc)} kg · consumo ${fmt(m.consumoDiario)} kg/día (de planeación)</small>
       </div>`;
-  return `<tr data-id="${m.materialId}">
-    <td class="mat-cell"><span class="mat-name">${m.nombre}</span><small>${m.variante}</small></td>
+  return `<tr data-id="${id}">
+    <td class="mat-cell"><span class="mat-name">${nombre}</span><small>${variante}</small></td>
     <td><div class="field"><span class="pre">$</span><input type="number" step="0.01" value="${m.costoEstandar.toFixed(2)}" data-field="costoEstandar"><span class="suf">/kg</span></div></td>
     <td><div class="field"><input type="number" value="${m.leadTimeDias ?? 0}" data-field="leadTimeDias"><span class="suf">días</span></div></td>
     <td><div class="field"><input type="number" value="${m.stockSeguridadDias ?? 7}" data-field="stockSeguridadDias"><span class="suf">días</span></div></td>

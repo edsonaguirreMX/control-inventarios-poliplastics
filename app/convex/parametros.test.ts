@@ -148,6 +148,22 @@ describe('parametros: updateFormulaCarga (tarea 2.2) — fuente única de verdad
     expect(params.formula.find((f) => f.materialId === matId)?.kgPorCarga).toBe(30);
   });
 
+  test('MENOR (auditoría de PR6): un material DESACTIVADO con kgPorCarga>0 no "salva" una fórmula donde todos los materiales activos suman 0', async () => {
+    const t = convexTest(schema, modules);
+    const { adminToken } = await setup(t);
+    const matActivoId = await crearMaterialPrueba(t, { activo: true });
+    const matInactivoId = await crearMaterialPrueba(t, { activo: false });
+    await t.run((ctx) => ctx.db.insert('formulaCarga', { materialId: matActivoId, kgPorCarga: 30, nota: '', updatedAt: Date.now() }));
+    await t.run((ctx) => ctx.db.insert('formulaCarga', { materialId: matInactivoId, kgPorCarga: 50, nota: '', updatedAt: Date.now() }));
+
+    // Deja el material ACTIVO en 0 — el inactivo (50kg) por sí solo NO debe
+    // alcanzar para pasar la validación, porque ninguna pantalla real usa
+    // ese material desactivado para calcular nada.
+    await expect(
+      t.mutation(api.parametros.updateFormulaCarga, { materialId: matActivoId, kgPorCarga: 0, token: adminToken })
+    ).rejects.toThrow(/no puede sumar 0/);
+  });
+
   test('permite dejar UN material en 0 si el total de la fórmula sigue siendo > 0 (caso real: HDPE virgen sustituto)', async () => {
     const t = convexTest(schema, modules);
     const { adminToken } = await setup(t);

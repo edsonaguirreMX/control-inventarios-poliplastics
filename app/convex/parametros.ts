@@ -99,9 +99,22 @@ async function actualizarFormulaCargaImpl(
 // intermedio de 0 entre filas antes de terminar). Si el total quedara en 0,
 // Catálogo derivaría %mezcla/consumoDiario/reorden inválidos para TODOS los
 // materiales, no solo el que se editó.
+//
+// Solo cuentan los materiales ACTIVOS (hallazgo no bloqueante de la
+// auditoría de PR6): hoy esta épica no tiene flujo para desactivar
+// materiales, así que en la práctica todos están activos — pero la regla
+// debe ser correcta desde ahora, no solo mientras esa condición se
+// mantenga. Sin este filtro, una fórmula donde todos los materiales
+// EN USO suman 0 podría "salvarse" con kgPorCarga>0 en un material ya
+// desactivado, que ninguna pantalla real usa para calcular nada.
 async function verificarFormulaTotalPositiva(ctx: MutationCtx): Promise<void> {
   const formula = await ctx.db.query('formulaCarga').collect();
-  const total = formula.reduce((s, f) => s + f.kgPorCarga, 0);
+  const materialesActivos = new Set(
+    (await ctx.db.query('materiales').withIndex('by_activo_orden', (q) => q.eq('activo', true)).collect()).map((m) => m._id)
+  );
+  const total = formula
+    .filter((f) => materialesActivos.has(f.materialId))
+    .reduce((s, f) => s + f.kgPorCarga, 0);
   if (total <= 0) {
     throw new Error('La fórmula completa no puede sumar 0 kg por carga — Catálogo derivaría consumos y puntos de reorden inválidos.');
   }
