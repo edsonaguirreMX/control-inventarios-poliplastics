@@ -1,7 +1,7 @@
 import { convexTest } from 'convex-test';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import schema from './schema';
-import { api } from './_generated/api';
+import { api, internal } from './_generated/api';
 import { crearUsuarioPrueba, crearSesionPrueba } from './testHelpers';
 
 const modules = import.meta.glob('./**/*.ts');
@@ -130,5 +130,73 @@ describe('authActions.login: rate limiting (EDS-70)', () => {
     await expect(
       t.action(api.authActions.login, { usuario: 'no.existe.jamas', password: 'x', remember: false })
     ).rejects.toThrow(/Demasiados intentos fallidos/);
+  });
+
+  // BLOQUEANTE (auditoría de PR8): la versión anterior checaba el bloqueo
+  // con una query de LECTURA separada de la mutation que registraba el
+  // fallo (llamada recién DESPUÉS de bcrypt). Bajo intentos concurrentes,
+  // varias llamadas podían leer "no bloqueado" antes de que ninguna
+  // registrara nada — el conteo final en la tabla terminaba correcto
+  // (Convex serializa mutations), pero el GATE que debía impedir correr
+  // bcrypt de más ya se había pasado de largo en todas. Este test dispara
+  // 6 intentos fallidos EN PARALELO (Promise.all, no un for secuencial
+  // como los de arriba) — con el fix (admitirIntentoLogin, mutation
+  // atómica que checa Y reserva en la misma transacción), Convex serializa
+  // las 6 llamadas entre sí y solo las primeras 5 quedan admitidas a
+  // procesar credenciales, sin importar que se dispararan a la vez.
+  test('BLOQUEANTE (auditoría de PR8): 6 intentos fallidos CONCURRENTES — solo 5 pasan a procesamiento, el resto queda bloqueado sin correr bcrypt', async () => {
+    const t = convexTest(schema, modules);
+    await crearAdminYUsuarioObjetivo(t);
+
+    const resultados = await Promise.allSettled(
+      Array.from({ length: 6 }, () =>
+        t.action(api.authActions.login, { usuario: 'objetivo.prueba', password: 'incorrecta', remember: false })
+      )
+    );
+
+    const porCredenciales = resultados.filter(
+      (r) => r.status === 'rejected' && /Usuario o contraseña incorrectos/.test(String((r as PromiseRejectedResult).reason))
+    );
+    const porRateLimit = resultados.filter(
+      (r) => r.status === 'rejected' && /Demasiados intentos fallidos/.test(String((r as PromiseRejectedResult).reason))
+    );
+
+    // Sin el fix, esto podía dar 6 rechazos por credenciales (los 6
+    // corrieron bcrypt) y 0 por rate limit — la señal exacta de que el
+    // límite no frenó nada bajo concurrencia real.
+    expect(porCredenciales).toHaveLength(5);
+    expect(porRateLimit).toHaveLength(1);
+  });
+});
+
+// Mayor (auditoría de PR8): loginIntentos no tenía expiración ni limpieza
+// — cada usuario (real o inventado por un atacante probando muchos
+// nombres) que alguna vez falló un login dejaba una fila para siempre.
+describe('auth: limpiarLoginIntentosExpirados (mayor de la auditoría de PR8)', () => {
+  test('borra filas cuyo expiresAt ya pasó, deja intactas las que siguen vigentes', async () => {
+    const t = convexTest(schema, modules);
+    const inicio = Date.now();
+    vi.useFakeTimers();
+    vi.setSystemTime(inicio);
+
+    // "viejo.atacado" falla una vez y nunca vuelve — su ventana expira sola.
+    await expect(
+      t.action(api.authActions.login, { usuario: 'viejo.atacado', password: 'x', remember: false })
+    ).rejects.toThrow();
+
+    // Avanza más allá de la ventana de 15 min de esa fila.
+    vi.setSystemTime(inicio + 20 * 60 * 1000);
+
+    // "reciente.atacado" falla justo ahora — su fila sigue vigente.
+    await expect(
+      t.action(api.authActions.login, { usuario: 'reciente.atacado', password: 'x', remember: false })
+    ).rejects.toThrow();
+
+    const { borrados } = await t.mutation(internal.auth.limpiarLoginIntentosExpirados, {});
+    expect(borrados).toBe(1);
+
+    const restantes = await t.run((ctx) => ctx.db.query('loginIntentos').collect());
+    expect(restantes).toHaveLength(1);
+    expect(restantes[0].usuario).toBe('reciente.atacado');
   });
 });

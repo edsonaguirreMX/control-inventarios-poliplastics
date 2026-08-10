@@ -17,26 +17,32 @@ export const login = action({
     remember: v.boolean(),
   },
   handler: async (ctx, { usuario, password, remember }) => {
-    // Rate limit ANTES de tocar la base de usuarios o bcrypt — una cuenta
-    // bloqueada no debe gastar ni una consulta ni un hash de más (EDS-70).
-    const { bloqueado } = await ctx.runQuery(internal.auth.verificarRateLimitLogin, { usuario });
-    if (bloqueado) {
+    // Gate atómico ANTES de tocar la base de usuarios o bcrypt — checa Y
+    // reserva el intento en UNA sola mutation (bloqueante de la auditoría
+    // de PR8: separar "checar" de "registrar" dejaba una ventana de
+    // carrera bajo intentos concurrentes; ver el comentario en
+    // admitirIntentoLogin para el detalle completo).
+    const { admitido } = await ctx.runMutation(internal.auth.admitirIntentoLogin, { usuario });
+    if (!admitido) {
       throw new Error('Demasiados intentos fallidos. Espera unos minutos antes de volver a intentar.');
     }
 
     const user = await ctx.runQuery(internal.auth.getUserByUsuario, { usuario });
 
     // Mismo mensaje genérico si el usuario no existe, está inactivo, o la
-    // contraseña no coincide — no revelar cuál de las tres cosas falló.
+    // contraseña no coincide — no revelar cuál de las tres cosas falló. El
+    // intento ya quedó contado por admitirIntentoLogin arriba — no hace
+    // falta un registro aparte aquí.
     if (!user || !user.activo) {
-      await ctx.runMutation(internal.auth.registrarIntentoFallidoLogin, { usuario });
       throw new Error('Usuario o contraseña incorrectos.');
     }
     const valido = await bcrypt.compare(password, user.passwordHash);
     if (!valido) {
-      await ctx.runMutation(internal.auth.registrarIntentoFallidoLogin, { usuario });
       throw new Error('Usuario o contraseña incorrectos.');
     }
+    // Login exitoso: deshace la reserva de admitirIntentoLogin — un login
+    // correcto es la señal más confiable de que la cuenta no está bajo
+    // ataque.
     await ctx.runMutation(internal.auth.limpiarIntentosLogin, { usuario });
 
     const { token, expiresAt } = await ctx.runMutation(internal.auth.createSession, {

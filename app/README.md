@@ -67,15 +67,15 @@ CI (GitHub Actions, `.github/workflows/ci.yml`) corre en cada push/PR: `npm ci`,
 ## Despliegue a producción
 
 1. **Convex**: `npx convex deploy` crea/actualiza el deployment de producción. Configura ahí también `SEED_SECRET` (uno propio, distinto al de desarrollo) antes de correr `seedInicial` en producción.
-2. **Railway** (o cualquier host que corra Node): apunta esta carpeta (`app/`) como raíz del proyecto.
-   - Build command: `npm install && npm run build`
-   - Start command: `npm start` (= `node src/server.js`)
+2. **Railway** (o cualquier host que corra Node): apunta esta carpeta (`app/`) como raíz del proyecto. La config ya vive en `railway.json` (builder Nixpacks) — no hace falta capturarla a mano en el dashboard, pero para referencia:
+   - Build command: `npm run build` (exacto a `railway.json` → `build.buildCommand`; Nixpacks corre `npm install` por su cuenta como parte de su propia fase de instalación, antes de este comando — no hace falta repetirlo aquí)
+   - Start command: `npm start` (= `node src/server.js`, `railway.json` → `deploy.startCommand`)
    - Variable de entorno: `CONVEX_URL` con la del deployment de **producción** de Convex (no la de desarrollo). `CONVEX_DEPLOYMENT` no hace falta en producción — solo lo usa el CLI local.
    - `/healthz` para el health check del servicio.
 
 ## Estructura del proyecto
 
-```
+```text
 app/
 ├── convex/              # backend: schema, funciones, crons, tests (*.test.ts junto a cada módulo)
 ├── public/              # una página HTML por pantalla + js/session.js (fuente) + js/convex-client.js (generado)

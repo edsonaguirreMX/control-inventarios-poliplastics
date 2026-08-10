@@ -276,5 +276,12 @@ export default defineSchema({
     intentos: v.number(),
     primerIntentoEn: v.number(),
     bloqueadoHasta: v.union(v.number(), v.null()),
-  }).index("by_usuario", ["usuario"]),
+    // Cuándo esta fila deja de ser relevante (fin del bloqueo, o fin de la
+    // ventana si nunca llegó a bloquear) — usado por el cron de limpieza
+    // (mayor de la auditoría de PR8: sin esto, loginIntentos crece sin
+    // límite con cada usuario, real o inventado, que alguna vez falló un
+    // login).
+    expiresAt: v.number(),
+  }).index("by_usuario", ["usuario"])
+    .index("by_expiresAt", ["expiresAt"]),
 });

@@ -173,9 +173,11 @@ describe('cierreEngine: motor de aplicar/revertir cierre (tarea 3.2)', () => {
     expect(capasAntes).toHaveLength(3);
     expect(capasAntes.filter((c) => !c.agotada)).toHaveLength(1);
 
-    await expect(
-      t.run((ctx) => revertirCierreImpl(ctx, { cierreTurnoId: cierreId, createdBy: userId }))
-    ).resolves.not.toThrow();
+    // Assert sobre el valor devuelto, no solo "no lanzó" — resolves.not.toThrow()
+    // pasaría igual si revertirCierreImpl empezara a devolver undefined o
+    // cualquier otra cosa (menor de la auditoría de PR8).
+    const resultado = await t.run((ctx) => revertirCierreImpl(ctx, { cierreTurnoId: cierreId, createdBy: userId }));
+    expect(resultado).toEqual({ ok: true });
 
     const capasDespues = await t.run((ctx) =>
       ctx.db.query('capasCosto').withIndex('by_cierreTurnoId_origen', (q) => q.eq('cierreTurnoId', cierreId).eq('origen', 'triturado')).collect()

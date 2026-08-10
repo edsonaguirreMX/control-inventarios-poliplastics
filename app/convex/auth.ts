@@ -17,41 +17,83 @@ const RATE_LIMIT_VENTANA_MS = 15 * 60 * 1000;
 const RATE_LIMIT_MAX_INTENTOS = 5;
 const RATE_LIMIT_BLOQUEO_MS = 15 * 60 * 1000;
 
-export const verificarRateLimitLogin = internalQuery({
+// EDS-70 endurecido (bloqueante de la auditoría de PR8): la versión
+// original separaba "checar si está bloqueado" (query de lectura) de
+// "registrar el fallo" (mutation, llamada DESPUÉS de bcrypt). Bajo
+// intentos concurrentes, varias llamadas a login() podían leer el mismo
+// estado "no bloqueado" ANTES de que ninguna registrara su fallo — cada
+// una corría bcrypt igual, y el límite de 5 no se respetaba bajo fuerza
+// bruta en paralelo (el conteo final en la tabla terminaba correcto,
+// porque Convex serializa mutations, pero el GATE que debía evitar correr
+// bcrypt de más ya se había pasado de largo en todas).
+//
+// Fix: una sola mutation atómica que checa Y reserva el intento en la
+// MISMA transacción, ANTES de tocar getUserByUsuario/bcrypt. Convex
+// serializa mutations sobre el mismo documento (OCC) — así que aunque
+// login() se llame muchas veces en paralelo, cada llamada a esta mutation
+// se ejecuta una tras otra contra el estado ya actualizado por la
+// anterior, nunca dos leyendo el mismo estado "todavía no bloqueado" a la
+// vez. El intento se cuenta aquí SIEMPRE que se admite (incluso si termina
+// siendo la contraseña correcta) — limpiarIntentosLogin deshace eso en el
+// camino de éxito.
+export const admitirIntentoLogin = internalMutation({
   args: { usuario: v.string() },
-  handler: async (ctx, { usuario }) => {
-    const key = usuario.trim().toLowerCase();
-    const registro = await ctx.db
-      .query('loginIntentos')
-      .withIndex('by_usuario', (q) => q.eq('usuario', key))
-      .unique();
-    if (!registro || !registro.bloqueadoHasta) return { bloqueado: false as const };
-    if (registro.bloqueadoHasta <= Date.now()) return { bloqueado: false as const };
-    return { bloqueado: true as const, hasta: registro.bloqueadoHasta };
-  },
-});
-
-export const registrarIntentoFallidoLogin = internalMutation({
-  args: { usuario: v.string() },
-  handler: async (ctx, { usuario }) => {
+  handler: async (ctx, { usuario }): Promise<{ admitido: boolean }> => {
     const key = usuario.trim().toLowerCase();
     const now = Date.now();
     const registro = await ctx.db
       .query('loginIntentos')
       .withIndex('by_usuario', (q) => q.eq('usuario', key))
       .unique();
-    if (!registro) {
-      await ctx.db.insert('loginIntentos', { usuario: key, intentos: 1, primerIntentoEn: now, bloqueadoHasta: null });
-      return;
+
+    // Ya bloqueado de una ronda anterior de intentos — rechaza sin siquiera
+    // contar este como uno nuevo (no extiende el bloqueo de más).
+    if (registro?.bloqueadoHasta && registro.bloqueadoHasta > now) {
+      return { admitido: false };
     }
+
+    if (!registro) {
+      await ctx.db.insert('loginIntentos', {
+        usuario: key, intentos: 1, primerIntentoEn: now, bloqueadoHasta: null,
+        expiresAt: now + RATE_LIMIT_VENTANA_MS,
+      });
+      return { admitido: true };
+    }
+
     // Ventana deslizante: si el primer intento registrado ya expiró, se
-    // reinicia el conteo en vez de acumular indefinidamente (evita que un
-    // intento fallido aislado hace meses siga contando hoy).
+    // reinicia el conteo en vez de acumular indefinidamente.
     const dentroDeVentana = now - registro.primerIntentoEn < RATE_LIMIT_VENTANA_MS;
     const intentos = dentroDeVentana ? registro.intentos + 1 : 1;
     const primerIntentoEn = dentroDeVentana ? registro.primerIntentoEn : now;
-    const bloqueadoHasta = intentos >= RATE_LIMIT_MAX_INTENTOS ? now + RATE_LIMIT_BLOQUEO_MS : null;
-    await ctx.db.patch(registro._id, { intentos, primerIntentoEn, bloqueadoHasta });
+    const bloqueadoHasta = intentos > RATE_LIMIT_MAX_INTENTOS ? now + RATE_LIMIT_BLOQUEO_MS : null;
+    const expiresAt = (bloqueadoHasta ?? primerIntentoEn + RATE_LIMIT_VENTANA_MS);
+    await ctx.db.patch(registro._id, { intentos, primerIntentoEn, bloqueadoHasta, expiresAt });
+
+    // El intento que cruza el umbral (el 6º) ya no se admite — los
+    // primeros 5 sí, incluso el que deja bloqueados a los siguientes.
+    return { admitido: intentos <= RATE_LIMIT_MAX_INTENTOS };
+  },
+});
+
+// Cron acotado (crons.ts) — sin esto, loginIntentos crece sin límite: cada
+// usuario (real o inventado, probado por un atacante) que alguna vez
+// falló un login deja una fila que nunca se borra sola, aunque su ventana
+// ya haya expirado hace tiempo (mayor de la auditoría de PR8). `.take(200)`
+// por corrida evita que una tabla ya grande vuelva lenta esta limpieza
+// misma; corre cada hora, así que sobrantes de una corrida se limpian en
+// la siguiente sin acumular indefinidamente.
+export const limpiarLoginIntentosExpirados = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    const expirados = await ctx.db
+      .query('loginIntentos')
+      .withIndex('by_expiresAt', (q) => q.lt('expiresAt', now))
+      .take(200);
+    for (const registro of expirados) {
+      await ctx.db.delete(registro._id);
+    }
+    return { borrados: expirados.length };
   },
 });
 

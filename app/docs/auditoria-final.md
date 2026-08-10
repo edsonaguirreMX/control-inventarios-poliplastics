@@ -2,9 +2,20 @@
 
 Barrido de confirmación de autorización server-side e integridad de inventario sobre el backend completo, ya con las 9 épicas funcionales en `main`. Esto **no es la primera vez que se revisa** cada función — cada tarea de Épicas 1–9 ya incluyó su propio criterio de "hecho cuando... valida el rol correcto" desde que se construyó, y cada PR pasó por auditoría (Codex y/o manual) antes de mergearse. Este documento es la pasada de confirmación final que exige EDS-66, con evidencia citable: línea exacta de cada guard, y el test que lo prueba.
 
-**Metodología:** se leyó el código fuente completo de cada módulo de `convex/` (no solo se buscaron patrones por grep) para confirmar que cada `query`/`mutation`/`action` pública llama a `requireRole`/`requireUser` (`convex/lib/auth.ts`) **antes** de tocar `ctx.db`, y que cada función `internal*` (no invocable directo desde el cliente — Convex lo impone a nivel de plataforma) solo se llama desde código que ya autorizó. Donde existía un test automatizado que reproduce el rechazo de rol, se referencia por archivo:línea. Donde no existía, se agregó en esta misma auditoría (ver [Hallazgos](#hallazgos-de-esta-auditoría)).
+**Metodología:** se leyó el código fuente completo de cada módulo de `convex/` (no solo se buscaron patrones por grep) para confirmar que cada `query`/`mutation`/`action` pública **que debe estar restringida a un rol** llama a `requireRole` (`convex/lib/auth.ts`) antes de tocar `ctx.db`, y que cada función `internal*` (no invocable directo desde el cliente — Convex lo impone a nivel de plataforma) solo se llama desde código que ya autorizó. Donde existía un test automatizado que reproduce el rechazo de rol, se referencia por archivo:línea. Donde no existía, se agregó en esta misma auditoría (ver [Hallazgos](#hallazgos-de-esta-auditoría)).
 
-**Fecha:** 2026-08-10 · **Rama:** `pr-8-hardening-deploy` · **Suite al cierre:** 180/180 tests verdes (`npx vitest run`).
+**Esto NO significa que todas las funciones públicas usen `requireRole`/`requireUser` — hay excepciones intencionales, documentadas explícitamente:**
+
+| Función | Por qué no tiene `requireRole`/`requireUser` |
+|---|---|
+| `authActions.login` | Es el propio flujo de login — no puede exigir una sesión que todavía no existe. Protegida en cambio por rate limiting atómico (§ mayor de esta ronda) y mensajes de error genéricos. |
+| `auth.logout` | Por diseño: el `token` es un UUID de 122 bits — poseerlo ya prueba control de esa sesión, así que no hay guard adicional que agregar (ver tabla de `auth.ts` abajo). |
+| `seed.seedInicial` | Action pública, pero protegida por `SEED_SECRET` (variable de entorno del deployment, comparada con `crypto.timingSafeEqual`) en vez de un rol — no puede exigir rol porque se corre ANTES de que exista ningún usuario en la base. |
+| `alertas.evaluarAlertas`, `reporteDiario.generarReporteDiario`, `auth.limpiarLoginIntentosExpirados` | `internalMutation` disparadas por cron (`crons.ts`) — no corren en contexto de ningún usuario, Convex ya impide llamarlas desde el cliente. |
+
+Con esas excepciones ya explícitas, el resto de esta auditoría cubre las funciones que sí deben (y sí) validar un rol específico.
+
+**Fecha:** 2026-08-10 · **Rama:** `pr-8-hardening-deploy` · **Suite al cierre:** 182/182 tests verdes (`npx vitest run`).
 
 ---
 
@@ -16,10 +27,10 @@ Convención de la tabla: **Interna** = `internalQuery`/`internalMutation`/`inter
 
 | Función | Tipo | Rol requerido | Test |
 |---|---|---|---|
-| `login` | action pública | Ninguno (es el propio login) — rate limit por usuario (5 intentos/15min) antes de tocar bcrypt | `auth.test.ts` (5 tests, EDS-70) |
-| `logout` | mutation pública | Ninguno explícito — **por diseño**: el `token` es un UUID aleatorio de 122 bits (`crypto.randomUUID()`), poseerlo ya prueba la sesión; alguien que conoce el token de otro ya tiene control total de esa sesión, así que poder cerrarla no agrega riesgo nuevo | — (bajo riesgo, ver nota) |
+| `login` | action pública | Sin rol (es el propio login, ver excepción arriba) — rate limit atómico por usuario (5 intentos/15min, `admitirIntentoLogin` checa Y reserva en una sola mutation) antes de tocar bcrypt | `auth.test.ts` (8 tests, EDS-70 + bloqueante de esta ronda) |
+| `logout` | mutation pública | Sin rol (ver excepción arriba) | — (bajo riesgo, ver nota) |
 | `me` | query pública | Ninguno — cualquier usuario autenticado puede leer sus propios datos (`requireUser`, `auth.ts:114`) | implícito en todo test que usa sesión |
-| `verificarRateLimitLogin`, `registrarIntentoFallidoLogin`, `limpiarIntentosLogin`, `getUserByUsuario`, `createSession` | internas | Llamadas solo desde `authActions.login`, que ya validó rate limit antes de cada una | `auth.test.ts:29-142` |
+| `admitirIntentoLogin`, `limpiarIntentosLogin`, `limpiarLoginIntentosExpirados`, `getUserByUsuario`, `createSession` | internas | Llamadas solo desde `authActions.login` (o desde el cron de limpieza), que ya autorizó/no requiere contexto de usuario | `auth.test.ts` |
 
 ### `usuarios.ts` / `usuariosActions.ts` — Gestión de Usuarios
 
@@ -110,7 +121,11 @@ Convención de la tabla: **Interna** = `internalQuery`/`internalMutation`/`inter
 |---|---|---|---|
 | `obtenerFechaOperativaHoy` | query | Cualquier autenticado (`requireUser`, `tiempo.ts:14`) — solo expone "qué día es hoy operativamente", sin dato sensible | usado implícitamente en múltiples suites |
 
-**Conclusión de §1:** las 47 funciones públicas del backend (`query`/`mutation`/`action`, sin contar internas) validan rol server-side antes de tocar `ctx.db`. Ninguna depende de que el frontend oculte un botón — se confirmó llamando cada mutation/query directo con un token de rol incorrecto en los tests referenciados, exactamente como lo haría alguien golpeando la API de Convex sin pasar por la UI.
+### `seed.ts` — siembra inicial (fuera de la tabla de roles a propósito)
+
+`seedInicial` es una `action` pública, pero deliberadamente **no** usa `requireRole`/`requireUser` — no puede exigir una sesión ni un rol porque se corre ANTES de que exista ningún usuario en la base (es lo que crea al primer admin). Su protección es un mecanismo distinto: compara el argumento `seedSecret` contra la variable de entorno `SEED_SECRET` del deployment con `crypto.timingSafeEqual` (resistente a timing attacks), y falla explícito si esa variable no está configurada — sin `SEED_SECRET`, nadie puede sembrar la base ni en desarrollo ni en producción. Además es idempotente (`isSeeded` revisa si `materiales` ya tiene datos antes de insertar nada) y el password del admin inicial nunca queda en texto plano en ningún lado — se regresa una sola vez en la respuesta de la action.
+
+**Conclusión de §1:** de las funciones públicas del backend (`query`/`mutation`/`action`, sin contar internas), las que deben estar restringidas a un rol específico lo están — validado leyendo el código y, donde existe, confirmado llamando la función directo con un token de rol incorrecto en los tests referenciados (exactamente como lo haría alguien golpeando la API de Convex sin pasar por la UI). Las 4 excepciones (`login`, `logout`, `seedInicial`, los `internalMutation` de cron) están explícitas arriba, con su propio mecanismo de protección — no es un guard olvidado, es un diseño distinto para un caso distinto. Ninguna función que sí debía validar rol depende de que el frontend oculte un botón.
 
 ---
 
@@ -168,11 +183,14 @@ Sin cobertura de `convex-test` (es renderizado puro del cliente) — la verifica
 | 2 | `produccionPorRango`/`tendenciaMerma`/`tendenciaCosto`/`getObjetivos` (`dashboard.ts`) sin test de rechazo de rol propio (código correcto, mismo patrón que `getKPIsHoy` que sí lo tenía) | Menor | 1 test agregado en `dashboard.test.ts` |
 | 3 | `verificarFormulaTotalPositiva` sumaba TODAS las filas de `formulaCarga`, no solo materiales activos | Menor (ya reportado y corregido en la auditoría manual de PR6, commit `6ee113d`) | Referenciado aquí, no duplicado |
 | 4 | XSS almacenado en badge de sesión de 7 páginas ya en `main` (ver §3) | Mayor | Corregido, commit `dbe5932` |
+| 5 | **No Go de PR #9 — carrera en el rate limit de login**: `verificarRateLimitLogin` (lectura) y `registrarIntentoFallidoLogin` (escritura, después de bcrypt) eran llamadas separadas — bajo intentos concurrentes, varias solicitudes podían leer "no bloqueado" antes de que ninguna registrara su fallo, así que el límite de 5 no se respetaba bajo fuerza bruta en paralelo (el conteo final SÍ terminaba correcto, porque Convex serializa mutations, pero el gate que debía frenar bcrypt de más ya se había pasado de largo en todas) | **Bloqueante** | Reescrito como una sola mutation atómica `admitirIntentoLogin` que checa Y reserva en la misma transacción — cierra la carrera porque Convex serializa llamadas concurrentes contra el mismo documento. Test de 6 intentos concurrentes (`Promise.allSettled`, no un `for` secuencial) agregado en `auth.test.ts`, confirmando 5 admitidos y 1 rechazado bajo concurrencia real. |
+| 6 | `loginIntentos` sin `expiresAt` ni limpieza — crecía sin límite con cada usuario (real o inventado por un atacante) que alguna vez fallara un login | Mayor | Campo `expiresAt` + índice `by_expiresAt` en el schema; nueva `limpiarLoginIntentosExpirados` (cron cada hora, acotada a 200 filas por corrida); test de limpieza agregado |
+| 7 | Este mismo documento sobredeclaraba "todas las funciones públicas usan requireRole/requireUser" sin listar las excepciones intencionales (`login`, `logout`, `seedInicial`, internas de cron) | Mayor (documentación) | Corregido — ver tabla de excepciones al inicio de §1 y la nueva subsección de `seed.ts` |
 
-No se encontraron funciones públicas sin `requireRole`/`requireUser`, ni casos donde el frontend oculta una acción que el backend permitiría de todos modos.
+Con las 4 excepciones intencionales ya explícitas (§1, tabla de excepciones), no se encontraron funciones públicas que DEBIERAN validar rol y no lo hicieran, ni casos donde el frontend oculta una acción que el backend permitiría de todos modos.
 
 ---
 
 ## Veredicto
 
-**EDS-66 (10.2): completo.** Autorización server-side confirmada módulo por módulo con evidencia citable; integridad de inventario confirmada contra los 3 criterios del plan; 6 tests nuevos cerrando gaps de cobertura reales (no hipotéticos); hardening de XSS de PR8 documentado con su verificación manual. Suite completa: **180/180** (`npx vitest run`).
+**EDS-66 (10.2): completo, tras una ronda de No-Go sobre la propia auditoría (PR #9, 2026-08-10).** El No-Go encontró un bloqueante real (carrera en el rate limit, no cubierta por los tests secuenciales originales) y 3 mayores (limpieza de `loginIntentos`, y dos correcciones a este mismo documento) — los 4 corregidos en esta ronda, junto con los 3 menores de estilo (ver commit). Autorización server-side confirmada módulo por módulo con evidencia citable, incluidas sus excepciones intencionales explícitas; integridad de inventario confirmada contra los 3 criterios del plan; 9 tests nuevos en total entre la auditoría original y esta ronda de fixes, cerrando gaps de cobertura y de concurrencia reales (no hipotéticos); hardening de XSS de PR8 documentado con su verificación manual. Suite completa: **182/182** (`npx vitest run`).
