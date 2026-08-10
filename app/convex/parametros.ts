@@ -14,7 +14,7 @@ export const getParametros = query({
     await requireRole(ctx, token, ['admin']);
     const params = await ctx.db.query('parametrosProduccion').first();
     if (!params) {
-      throw new ConvexError('getParametros: no hay parámetros de producción configurados (parametrosProduccion vacío).');
+      throw new Error('getParametros: no hay parámetros de producción configurados (parametrosProduccion vacío).');
     }
     const materiales = await ctx.db.query('materiales').withIndex('by_activo_orden', (q) => q.eq('activo', true)).collect();
     const formula = await ctx.db.query('formulaCarga').collect();
@@ -56,7 +56,7 @@ async function actualizarParametrosImpl(
   }
   const params = await ctx.db.query('parametrosProduccion').first();
   if (!params) {
-    throw new ConvexError('actualizarParametros: no hay parámetros de producción configurados.');
+    throw new Error('actualizarParametros: no hay parámetros de producción configurados.');
   }
   const patch: Record<string, unknown> = { updatedAt: Date.now(), updatedBy: user._id };
   if (args.cargasPorTurno !== undefined) patch.cargasPorTurno = args.cargasPorTurno;

@@ -23,7 +23,7 @@ const VENTANA_CONSUMO_DIAS = 14;
 export async function requireParametros(ctx: QueryCtx) {
   const params = await ctx.db.query('parametrosProduccion').first();
   if (!params) {
-    throw new ConvexError('Panel de Control: no hay parámetros de producción configurados (parametrosProduccion vacío).');
+    throw new Error('Panel de Control: no hay parámetros de producción configurados (parametrosProduccion vacío).');
   }
   return params;
 }

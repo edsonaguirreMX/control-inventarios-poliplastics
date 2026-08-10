@@ -1,4 +1,4 @@
-import { v, ConvexError } from 'convex/values';
+import { v } from 'convex/values';
 import { query } from './_generated/server';
 import { requireUser } from './lib/auth';
 import { fechaOperativa } from './lib/fechaOperativa';
@@ -14,7 +14,7 @@ export const obtenerFechaOperativaHoy = query({
     await requireUser(ctx, token);
     const params = await ctx.db.query('parametrosProduccion').first();
     if (!params) {
-      throw new ConvexError('obtenerFechaOperativaHoy: no hay parámetros de producción configurados (parametrosProduccion vacío).');
+      throw new Error('obtenerFechaOperativaHoy: no hay parámetros de producción configurados (parametrosProduccion vacío).');
     }
     return fechaOperativa(Date.now(), params.zonaHoraria, params.horaInicioTurno1);
   },

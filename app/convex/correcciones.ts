@@ -15,7 +15,7 @@ const VENTANA_DIAS = 10;
 async function ventanaUltimosDias(ctx: { db: { query: any } }, dias: number): Promise<string[]> {
   const params = await ctx.db.query('parametrosProduccion').first();
   if (!params) {
-    throw new ConvexError('ventanaUltimosDias: no hay parámetros de producción configurados (parametrosProduccion vacío).');
+    throw new Error('ventanaUltimosDias: no hay parámetros de producción configurados (parametrosProduccion vacío).');
   }
   const hoy = fechaOperativa(Date.now(), params.zonaHoraria, params.horaInicioTurno1);
   return Array.from({ length: dias }, (_, i) => sumarDiasISO(hoy, -(dias - 1 - i)));

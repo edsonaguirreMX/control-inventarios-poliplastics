@@ -64,7 +64,7 @@ export async function aplicarCierreImpl(
 
   const parametros = await ctx.db.query('parametrosProduccion').first();
   if (!parametros) {
-    throw new ConvexError('aplicarCierre: no hay parametrosProduccion configurados — corre el seed primero.');
+    throw new Error('aplicarCierre: no hay parametrosProduccion configurados — corre el seed primero.');
   }
 
   const kgBuenos = args.metrosBuenos * parametros.kgPorMetro;

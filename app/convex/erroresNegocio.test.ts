@@ -56,9 +56,19 @@ describe('EDS-73: errores de negocio esperados se lanzan como ConvexError (no Er
         t.action(api.authActions.login, { usuario: 'objetivo.ratelimit', password: 'incorrecta', remember: false })
       ).rejects.toThrow();
     }
-    await expect(
-      t.action(api.authActions.login, { usuario: 'objetivo.ratelimit', password: 'incorrecta', remember: false })
-    ).rejects.toBeInstanceOf(ConvexError);
+    // No basta con "es un ConvexError" — credenciales inválidas TAMBIÉN
+    // son ConvexError ahora, así que ese chequeo solo pasaría igual si el
+    // rate limit estuviera roto y el 6º intento fallara por password otra
+    // vez (hallazgo de CodeRabbit en la re-review de este PR). Hace falta
+    // confirmar que es específicamente el rechazo de rate limit.
+    let error: unknown;
+    try {
+      await t.action(api.authActions.login, { usuario: 'objetivo.ratelimit', password: 'incorrecta', remember: false });
+    } catch (e) {
+      error = e;
+    }
+    expect(error).toBeInstanceOf(ConvexError);
+    expect((error as ConvexError<string>).data).toMatch(/Demasiados intentos fallidos/);
   });
 
   test('permisos: un rol sin acceso topa con requireRole', async () => {

@@ -30,7 +30,7 @@ export const listCatalogo = query({
     await requireRole(ctx, token, ['admin']);
     const params = await ctx.db.query('parametrosProduccion').first();
     if (!params) {
-      throw new ConvexError('listCatalogo: no hay parámetros de producción configurados (parametrosProduccion vacío).');
+      throw new Error('listCatalogo: no hay parámetros de producción configurados (parametrosProduccion vacío).');
     }
     const materiales = await ctx.db.query('materiales').withIndex('by_activo_orden', (q) => q.eq('activo', true)).collect();
     const formula = await ctx.db.query('formulaCarga').collect();
