@@ -1,4 +1,4 @@
-import { v } from 'convex/values';
+import { v, ConvexError } from 'convex/values';
 import { mutation, query } from './_generated/server';
 import type { MutationCtx } from './_generated/server';
 import type { Id } from './_generated/dataModel';
@@ -14,7 +14,7 @@ export const getParametros = query({
     await requireRole(ctx, token, ['admin']);
     const params = await ctx.db.query('parametrosProduccion').first();
     if (!params) {
-      throw new Error('getParametros: no hay parámetros de producción configurados (parametrosProduccion vacío).');
+      throw new ConvexError('getParametros: no hay parámetros de producción configurados (parametrosProduccion vacío).');
     }
     const materiales = await ctx.db.query('materiales').withIndex('by_activo_orden', (q) => q.eq('activo', true)).collect();
     const formula = await ctx.db.query('formulaCarga').collect();
@@ -46,17 +46,17 @@ async function actualizarParametrosImpl(
   // reorden multiplicando por estos valores — dejarlos en 0 pondría todo
   // el reorden teórico en 0 y ocultaría necesidades reales de compra.
   if (args.cargasPorTurno !== undefined && args.cargasPorTurno <= 0) {
-    throw new Error('actualizarParametros: cargasPorTurno debe ser mayor a 0.');
+    throw new ConvexError('actualizarParametros: cargasPorTurno debe ser mayor a 0.');
   }
   if (args.turnosPorDia !== undefined && args.turnosPorDia <= 0) {
-    throw new Error('actualizarParametros: turnosPorDia debe ser mayor a 0.');
+    throw new ConvexError('actualizarParametros: turnosPorDia debe ser mayor a 0.');
   }
   if (args.kgPorMetro !== undefined && args.kgPorMetro <= 0) {
-    throw new Error('actualizarParametros: kgPorMetro debe ser mayor a 0 (se usa como divisor en cierres/dashboard).');
+    throw new ConvexError('actualizarParametros: kgPorMetro debe ser mayor a 0 (se usa como divisor en cierres/dashboard).');
   }
   const params = await ctx.db.query('parametrosProduccion').first();
   if (!params) {
-    throw new Error('actualizarParametros: no hay parámetros de producción configurados.');
+    throw new ConvexError('actualizarParametros: no hay parámetros de producción configurados.');
   }
   const patch: Record<string, unknown> = { updatedAt: Date.now(), updatedBy: user._id };
   if (args.cargasPorTurno !== undefined) patch.cargasPorTurno = args.cargasPorTurno;
@@ -70,11 +70,11 @@ async function actualizarFormulaCargaImpl(
   args: { materialId: Id<'materiales'>; kgPorCarga: number; nota?: string }
 ): Promise<void> {
   if (args.kgPorCarga < 0) {
-    throw new Error('actualizarFormulaCarga: kgPorCarga no puede ser negativo.');
+    throw new ConvexError('actualizarFormulaCarga: kgPorCarga no puede ser negativo.');
   }
   const material = await ctx.db.get(args.materialId);
   if (!material) {
-    throw new Error('actualizarFormulaCarga: el material no existe.');
+    throw new ConvexError('actualizarFormulaCarga: el material no existe.');
   }
   const existente = await ctx.db.query('formulaCarga').withIndex('by_materialId', (q) => q.eq('materialId', args.materialId)).unique();
   const now = Date.now();
@@ -116,7 +116,7 @@ async function verificarFormulaTotalPositiva(ctx: MutationCtx): Promise<void> {
     .filter((f) => materialesActivos.has(f.materialId))
     .reduce((s, f) => s + f.kgPorCarga, 0);
   if (total <= 0) {
-    throw new Error('La fórmula completa no puede sumar 0 kg por carga — Catálogo derivaría consumos y puntos de reorden inválidos.');
+    throw new ConvexError('La fórmula completa no puede sumar 0 kg por carga — Catálogo derivaría consumos y puntos de reorden inválidos.');
   }
 }
 

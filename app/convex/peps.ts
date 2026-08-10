@@ -1,4 +1,4 @@
-import { v } from 'convex/values';
+import { v, ConvexError } from 'convex/values';
 import { internalMutation, query } from './_generated/server';
 import type { MutationCtx } from './_generated/server';
 import type { Id } from './_generated/dataModel';
@@ -129,8 +129,15 @@ export async function consumirFIFOImpl(
   // Bloquea por faltante — nunca subcostea — salvo Triturado, cuyo
   // faltante es una realidad física de la operación (se generó menos
   // merma reciclable de la esperada) y cuyo costo siempre es $0.
+  //
+  // EDS-73: ConvexError, no Error — este es el mensaje de negocio más
+  // importante de todo el sistema (bloqueo real de PEPS) y en producción
+  // llegaba al operador como "Server Error" genérico (confirmado en el
+  // smoke test de EDS-67, 2026-08-10) porque Convex redacta cualquier
+  // Error normal antes de mandarlo al cliente — solo ConvexError llega
+  // íntegro.
   if (disponible < kgAConsumir && !material.esInterno) {
-    throw new Error(
+    throw new ConvexError(
       `Inventario insuficiente de ${material.nombre} (${material.variante}): disponible ${disponible}kg, requerido ${kgAConsumir}kg — registra una entrada antes de cerrar el turno.`
     );
   }

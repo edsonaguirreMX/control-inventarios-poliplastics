@@ -1,4 +1,4 @@
-import { v } from 'convex/values';
+import { v, ConvexError } from 'convex/values';
 import { mutation, query, internalMutation, internalQuery } from './_generated/server';
 import type { MutationCtx } from './_generated/server';
 import type { Id } from './_generated/dataModel';
@@ -45,17 +45,17 @@ type ActualizarUsuarioArgs = {
 async function actualizarUsuarioImpl(ctx: MutationCtx, args: ActualizarUsuarioArgs): Promise<void> {
   const existente = await ctx.db.get(args.userId);
   if (!existente) {
-    throw new Error('actualizarUsuario: el usuario no existe.');
+    throw new ConvexError('actualizarUsuario: el usuario no existe.');
   }
   const patch: Record<string, unknown> = { updatedAt: Date.now() };
   if (args.nombre !== undefined) {
     const nombre = args.nombre.trim();
-    if (!nombre) throw new Error('actualizarUsuario: el nombre no puede estar vacío.');
+    if (!nombre) throw new ConvexError('actualizarUsuario: el nombre no puede estar vacío.');
     patch.nombre = nombre;
   }
   if (args.usuario !== undefined) {
     const usuario = args.usuario.trim().toLowerCase();
-    if (!usuario) throw new Error('actualizarUsuario: el usuario no puede estar vacío.');
+    if (!usuario) throw new ConvexError('actualizarUsuario: el usuario no puede estar vacío.');
     // Dentro de la MISMA transacción, un patch anterior en este mismo batch
     // (guardarUsuariosCompleto) ya es visible aquí — Convex da lecturas
     // "read-your-own-writes" dentro de una mutation, así que un intercambio
@@ -64,7 +64,7 @@ async function actualizarUsuarioImpl(ctx: MutationCtx, args: ActualizarUsuarioAr
     // mismo valor a la vez) sigue rechazándose.
     const dup = await ctx.db.query('users').withIndex('by_usuario', (q) => q.eq('usuario', usuario)).unique();
     if (dup && dup._id !== args.userId) {
-      throw new Error(`actualizarUsuario: el usuario "${usuario}" ya existe.`);
+      throw new ConvexError(`actualizarUsuario: el usuario "${usuario}" ya existe.`);
     }
     patch.usuario = usuario;
   }
@@ -86,7 +86,7 @@ async function verificarQuedaAlMenosUnAdminActivo(ctx: MutationCtx): Promise<voi
   const todos = await ctx.db.query('users').collect();
   const quedaAdmin = todos.some((u) => u.activo && u.rol === 'admin');
   if (!quedaAdmin) {
-    throw new Error('Ese cambio dejaría al sistema sin ningún admin activo — nadie podría volver a entrar a Gestión de Usuarios.');
+    throw new ConvexError('Ese cambio dejaría al sistema sin ningún admin activo — nadie podría volver a entrar a Gestión de Usuarios.');
   }
 }
 
@@ -114,7 +114,7 @@ export const guardarUsuariosCompleto = mutation({
   handler: async (ctx, args) => {
     await requireRole(ctx, args.token, ['admin']);
     if (args.usuarios.length === 0) {
-      throw new Error('guardarUsuariosCompleto: no hay cambios que guardar.');
+      throw new ConvexError('guardarUsuariosCompleto: no hay cambios que guardar.');
     }
     for (const u of args.usuarios) {
       await actualizarUsuarioImpl(ctx, u);
@@ -131,11 +131,11 @@ export const crearUsuarioImpl = internalMutation({
   handler: async (ctx, args) => {
     const nombre = args.nombre.trim();
     const usuario = args.usuario.trim().toLowerCase();
-    if (!nombre) throw new Error('crearUsuario: el nombre no puede estar vacío.');
-    if (!usuario) throw new Error('crearUsuario: el usuario no puede estar vacío.');
+    if (!nombre) throw new ConvexError('crearUsuario: el nombre no puede estar vacío.');
+    if (!usuario) throw new ConvexError('crearUsuario: el usuario no puede estar vacío.');
     const existente = await ctx.db.query('users').withIndex('by_usuario', (q) => q.eq('usuario', usuario)).unique();
     if (existente) {
-      throw new Error(`crearUsuario: el usuario "${usuario}" ya existe.`);
+      throw new ConvexError(`crearUsuario: el usuario "${usuario}" ya existe.`);
     }
     const now = Date.now();
     return ctx.db.insert('users', { nombre, usuario, passwordHash: args.passwordHash, rol: args.rol, activo: true, createdAt: now, updatedAt: now });
@@ -150,7 +150,7 @@ export const actualizarPasswordImpl = internalMutation({
   args: { userId: v.id('users'), passwordHash: v.string() },
   handler: async (ctx, args) => {
     const existente = await ctx.db.get(args.userId);
-    if (!existente) throw new Error('regenerarPassword: el usuario no existe.');
+    if (!existente) throw new ConvexError('regenerarPassword: el usuario no existe.');
     await ctx.db.patch(args.userId, { passwordHash: args.passwordHash, updatedAt: Date.now() });
     const sesiones = await ctx.db.query('sessions').withIndex('by_userId', (q) => q.eq('userId', args.userId)).collect();
     for (const s of sesiones) {
@@ -185,11 +185,11 @@ export const eliminarUsuario = mutation({
   handler: async (ctx, args) => {
     const admin = await requireRole(ctx, args.token, ['admin']);
     if (args.userId === admin._id) {
-      throw new Error('No puedes desactivar tu propio usuario mientras tienes la sesión abierta.');
+      throw new ConvexError('No puedes desactivar tu propio usuario mientras tienes la sesión abierta.');
     }
     const objetivo = await ctx.db.get(args.userId);
     if (!objetivo) {
-      throw new Error('eliminarUsuario: el usuario no existe.');
+      throw new ConvexError('eliminarUsuario: el usuario no existe.');
     }
     await ctx.db.patch(args.userId, { activo: false, updatedAt: Date.now() });
     const sesiones = await ctx.db.query('sessions').withIndex('by_userId', (q) => q.eq('userId', args.userId)).collect();
@@ -209,7 +209,7 @@ export const reactivarUsuario = mutation({
     await requireRole(ctx, args.token, ['admin']);
     const objetivo = await ctx.db.get(args.userId);
     if (!objetivo) {
-      throw new Error('reactivarUsuario: el usuario no existe.');
+      throw new ConvexError('reactivarUsuario: el usuario no existe.');
     }
     await ctx.db.patch(args.userId, { activo: true, updatedAt: Date.now() });
     return { ok: true };

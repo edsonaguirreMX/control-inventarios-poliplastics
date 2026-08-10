@@ -454,7 +454,7 @@ async function saveParams(){
   }catch(err){
     btn.disabled = false; btn.textContent = textoOriginal;
     errorBox.hidden = false;
-    errorBox.textContent = '⚠ ' + (err?.message || String(err));
+    errorBox.textContent = '⚠ ' + window.Session.mensajeError(err);
   }
 }
 async function resetParams(){

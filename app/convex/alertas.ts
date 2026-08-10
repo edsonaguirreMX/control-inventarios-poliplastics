@@ -1,4 +1,4 @@
-import { v } from 'convex/values';
+import { v, ConvexError } from 'convex/values';
 import { mutation, query, internalMutation } from './_generated/server';
 import type { MutationCtx, QueryCtx } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
@@ -49,13 +49,13 @@ type ActualizarReglaArgs = {
 async function actualizarReglaImpl(ctx: MutationCtx, user: { _id: Id<'users'> }, args: ActualizarReglaArgs): Promise<void> {
   const regla = await ctx.db.query('alertasReglas').withIndex('by_slug', (q) => q.eq('slug', args.slug)).unique();
   if (!regla) {
-    throw new Error(`actualizarRegla: no existe una regla con slug "${args.slug}".`);
+    throw new ConvexError(`actualizarRegla: no existe una regla con slug "${args.slug}".`);
   }
   if (args.destinatariosRoles !== undefined && args.destinatariosRoles.length === 0) {
-    throw new Error('actualizarRegla: una regla necesita al menos un destinatario.');
+    throw new ConvexError('actualizarRegla: una regla necesita al menos un destinatario.');
   }
   if (args.canales !== undefined && args.canales.length === 0) {
-    throw new Error('actualizarRegla: una regla necesita al menos un canal.');
+    throw new ConvexError('actualizarRegla: una regla necesita al menos un canal.');
   }
   const patch: Record<string, unknown> = { updatedAt: Date.now(), updatedBy: user._id };
   if (args.activa !== undefined) patch.activa = args.activa;
@@ -100,7 +100,7 @@ export const guardarReglasCompleto = mutation({
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, args.token, ['admin']);
     if (args.reglas.length === 0) {
-      throw new Error('guardarReglasCompleto: se necesita al menos una regla.');
+      throw new ConvexError('guardarReglasCompleto: se necesita al menos una regla.');
     }
     for (const regla of args.reglas) {
       await actualizarReglaImpl(ctx, user, regla);

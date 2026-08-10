@@ -1,4 +1,4 @@
-import { v } from 'convex/values';
+import { v, ConvexError } from 'convex/values';
 import { mutation, query } from './_generated/server';
 import type { MutationCtx } from './_generated/server';
 import type { Id } from './_generated/dataModel';
@@ -18,7 +18,7 @@ import { requireRole, requireUser } from './lib/auth';
 function fechaStringATimestamp(fecha: string): number {
   const ms = Date.parse(`${fecha}T00:00:00Z`);
   if (Number.isNaN(ms)) {
-    throw new Error(`Fecha inválida: "${fecha}" (se espera formato YYYY-MM-DD).`);
+    throw new ConvexError(`Fecha inválida: "${fecha}" (se espera formato YYYY-MM-DD).`);
   }
   return ms;
 }
@@ -26,13 +26,13 @@ function fechaStringATimestamp(fecha: string): number {
 async function validarMaterialParaEntrada(ctx: { db: { get: (id: any) => Promise<any> } }, materialId: any) {
   const material = await ctx.db.get(materialId);
   if (!material) {
-    throw new Error('El material seleccionado no existe.');
+    throw new ConvexError('El material seleccionado no existe.');
   }
   if (!material.activo) {
-    throw new Error(`${material.nombre} no está activo en el catálogo — no se pueden registrar entradas.`);
+    throw new ConvexError(`${material.nombre} no está activo en el catálogo — no se pueden registrar entradas.`);
   }
   if (material.esInterno) {
-    throw new Error(`${material.nombre} se genera internamente por merma — no se registra como entrada de compra.`);
+    throw new ConvexError(`${material.nombre} se genera internamente por merma — no se registra como entrada de compra.`);
   }
   return material;
 }
@@ -56,17 +56,17 @@ async function crearEntradaImpl(
   }
 ): Promise<Id<'entradas'>> {
   if (args.cantidadKg <= 0) {
-    throw new Error('crearEntrada: cantidadKg debe ser mayor a 0.');
+    throw new ConvexError('crearEntrada: cantidadKg debe ser mayor a 0.');
   }
   const vieneConCosto = args.costoUnitario !== undefined;
   if (vieneConCosto && args.costoUnitario! < 0) {
-    throw new Error('crearEntrada: costoUnitario no puede ser negativo.');
+    throw new ConvexError('crearEntrada: costoUnitario no puede ser negativo.');
   }
   // Un operador solo captura kg — costear (aunque sea en el mismo acto de
   // crear) es decisión de Compras/Admin. Sin este bloqueo, un operador
   // podría crear capas PEPS con costo arbitrario llamando la API directo.
   if (vieneConCosto && user.rol === 'operador') {
-    throw new Error(
+    throw new ConvexError(
       'Un operador no puede capturar el costo de una entrada — guarda solo la cantidad; Compras la completará después.'
     );
   }
@@ -146,7 +146,7 @@ export const crearEntradasBatch = mutation({
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, args.token, ['operador', 'compras', 'admin']);
     if (args.materiales.length === 0) {
-      throw new Error('crearEntradasBatch: se necesita al menos un material.');
+      throw new ConvexError('crearEntradasBatch: se necesita al menos un material.');
     }
     const ids: Id<'entradas'>[] = [];
     for (const m of args.materiales) {
@@ -169,15 +169,15 @@ export const costearEntrada = mutation({
     const user = await requireRole(ctx, args.token, ['compras', 'admin']);
 
     if (args.costoUnitario < 0) {
-      throw new Error('costearEntrada: costoUnitario no puede ser negativo.');
+      throw new ConvexError('costearEntrada: costoUnitario no puede ser negativo.');
     }
 
     const entrada = await ctx.db.get(args.entradaId);
     if (!entrada) {
-      throw new Error('costearEntrada: la entrada no existe.');
+      throw new ConvexError('costearEntrada: la entrada no existe.');
     }
     if (entrada.estado === 'costeada') {
-      throw new Error(
+      throw new ConvexError(
         'Esta entrada ya fue costeada — para corregir su costo/cantidad usa Corrección de Capturas, no vuelvas a costearla.'
       );
     }
@@ -278,10 +278,10 @@ export const eliminarEntradaPendiente = mutation({
     await requireRole(ctx, token, ['compras', 'admin']);
     const entrada = await ctx.db.get(entradaId);
     if (!entrada) {
-      throw new Error('eliminarEntradaPendiente: la entrada no existe.');
+      throw new ConvexError('eliminarEntradaPendiente: la entrada no existe.');
     }
     if (entrada.estado !== 'pendiente' || entrada.capaId !== null) {
-      throw new Error(
+      throw new ConvexError(
         'Solo se pueden eliminar entradas pendientes sin costear. Una entrada ya costeada se corrige desde Corrección de Capturas.'
       );
     }

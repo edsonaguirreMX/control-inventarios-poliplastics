@@ -293,9 +293,17 @@ async function login(kind) {
     // problema es de conexión. Los mensajes que sí vienen del backend
     // (credenciales, rate limit de EDS-70) se muestran tal cual;
     // cualquier otro error se explica como lo que es.
-    const msg = err?.message || String(err);
-    const esErrorConocido = /incorrectos|Demasiados intentos/.test(msg);
-    errorBox.textContent = esErrorConocido ? msg : 'No se pudo conectar con el servidor. Verifica tu conexión e intenta de nuevo.';
+    //
+    // EDS-73: el criterio para "¿es un mensaje conocido?" ya no es una
+    // regex frágil sobre el texto — es ConvexError vs Error. authActions.ts
+    // lanza ConvexError precisamente para los 2 mensajes que este login
+    // puede mostrar (credenciales, rate limit); cualquier otra cosa es un
+    // error técnico real (antes se veía como "Server Error" genérico en
+    // producción, sin ni siquiera calzar la regex vieja — la causa real del
+    // bug encontrado en el smoke test de EDS-67).
+    errorBox.textContent = window.Session.esErrorDeNegocio(err)
+      ? window.Session.mensajeError(err)
+      : 'No se pudo conectar con el servidor. Verifica tu conexión e intenta de nuevo.';
     errorBox.style.display = 'block';
   }
 }
