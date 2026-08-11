@@ -68,6 +68,57 @@ function validarFechaHoraCorte(fechaISO: string, horaCorte: string): void {
   }
 }
 
+// ¿El instante `instanteMs`, formateado en `zonaHoraria`, reproduce
+// EXACTAMENTE `fechaISO`/`horaHHMM`? Se usa para detectar los dos casos
+// que un cambio de horario puede producir en `horaLocalAInstante`:
+//   - Hueco de "primavera adelanta": la hora pedida no existe localmente
+//     (p. ej. 02:30 cuando el reloj salta de 02:00 a 03:00) —
+//     horaLocalAInstante la normaliza hacia adelante en silencio, así que
+//     el instante resultante YA NO reproduce la hora pedida.
+//   - Hora ambigua de "otoño atrasa": la hora pedida ocurre DOS veces (el
+//     reloj retrocede) — horaLocalAInstante resuelve a un único instante
+//     sin decir cuál, así que el instante ±1h también reproduce la misma
+//     hora local pedida (ver `esHoraLocalAmbigua` abajo).
+function reproduceHoraLocal(instanteMs: number, fechaISO: string, horaHHMM: string, zonaHoraria: string): boolean {
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: zonaHoraria,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+    hour12: false,
+  });
+  const partes = fmt.formatToParts(new Date(instanteMs));
+  const get = (tipo: string) => partes.find((p) => p.type === tipo)?.value ?? '';
+  const horaParte = get('hour') === '24' ? '00' : get('hour');
+  return `${get('year')}-${get('month')}-${get('day')}` === fechaISO && `${horaParte}:${get('minute')}` === horaHHMM;
+}
+
+// Relevante si algún día se configura una zonaHoraria con horario de
+// verano — América/Ciudad de México no lo tiene desde 2022, pero esta
+// mutation acepta cualquier zonaHoraria que traiga parametrosProduccion,
+// así que valida en general en vez de asumir que nunca aplicará. No toca
+// horaLocalAInstante (utilidad compartida, usada también por crons.ts) —
+// valida su resultado desde afuera, sin cambiar su contrato.
+function validarHoraLocalNoAmbiguaNiInexistente(
+  fechaEntrada: number,
+  fechaISO: string,
+  horaCorte: string,
+  zonaHoraria: string
+): void {
+  if (!reproduceHoraLocal(fechaEntrada, fechaISO, horaCorte, zonaHoraria)) {
+    throw new ConvexError(
+      `importarInventarioInicial: la hora local "${fechaISO} ${horaCorte}" no existe en la zona horaria configurada (${zonaHoraria}) — probablemente cae en el cambio de horario de primavera. Usa otra hora.`
+    );
+  }
+  const horaAmbigua =
+    reproduceHoraLocal(fechaEntrada - 3600_000, fechaISO, horaCorte, zonaHoraria) ||
+    reproduceHoraLocal(fechaEntrada + 3600_000, fechaISO, horaCorte, zonaHoraria);
+  if (horaAmbigua) {
+    throw new ConvexError(
+      `importarInventarioInicial: la hora local "${fechaISO} ${horaCorte}" es ambigua en la zona horaria configurada (${zonaHoraria}) — ocurre dos veces por el cambio de horario de otoño. Usa una hora fuera de esa ventana.`
+    );
+  }
+}
+
 async function validarFilaImportacion(
   ctx: MutationCtx,
   fila: { materialId: Id<'materiales'>; kgOriginal: number; costoUnitario: number }
@@ -135,6 +186,7 @@ export const importarInventarioInicial = mutation({
       throw new Error('importarInventarioInicial: no hay parámetros de producción configurados (falta zonaHoraria).');
     }
     const fechaEntrada = horaLocalAInstante(args.fechaISO, args.horaCorte, params.zonaHoraria);
+    validarHoraLocalNoAmbiguaNiInexistente(fechaEntrada, args.fechaISO, args.horaCorte, params.zonaHoraria);
 
     // Primera pasada: valida TODO antes de escribir nada. Convex ya hace
     // atómica la mutation completa (si algo lanza, se descarta toda la
