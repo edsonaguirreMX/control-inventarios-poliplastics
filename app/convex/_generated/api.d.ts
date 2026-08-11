@@ -17,6 +17,7 @@ import type * as correcciones from "../correcciones.js";
 import type * as crons from "../crons.js";
 import type * as dashboard from "../dashboard.js";
 import type * as entradas from "../entradas.js";
+import type * as importacionInicial from "../importacionInicial.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_fechaOperativa from "../lib/fechaOperativa.js";
 import type * as materiales from "../materiales.js";
@@ -46,6 +47,7 @@ declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   dashboard: typeof dashboard;
   entradas: typeof entradas;
+  importacionInicial: typeof importacionInicial;
   "lib/auth": typeof lib_auth;
   "lib/fechaOperativa": typeof lib_fechaOperativa;
   materiales: typeof materiales;
