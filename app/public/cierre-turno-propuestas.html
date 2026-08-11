@@ -1,3 +1,8 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cierre de Turno — Tejaflex</title>
 <style>
 @font-face{
@@ -277,7 +282,36 @@ button{font-family:inherit;}
 .cierre-inline-status.warn{background:var(--warning-soft);color:var(--warning);}
 
 @media (prefers-reduced-motion:reduce){*{transition:none !important;}}
+
+/* ---------- EDS-78: responsive real en celular ----------
+   El wizard (flujos Entrada de material / Cierre de turno, arriba) vive
+   dentro de .phone/.screen — un marco decorativo de "teléfono simulado"
+   (ancho fijo 320px, con bisel y notch) pensado para lucir como preview
+   de producto en una página de escritorio de 2 columnas (.intro +
+   .notes-col a los lados). Es la interfaz REAL que usa el operador — en
+   un celular real (viewport angosto) el marco decorativo estorba en vez
+   de ayudar: hay que quitarlo y dejar que el wizard use el ancho/alto
+   real de la pantalla. .intro/.notes-col son texto explicativo para
+   quien revisa el diseño, no hacen falta para operar — el wizard ya
+   trae su propio contexto ("Cierre de turno · Paso X de 4", etc.). */
+@media (max-width:720px){
+  .page{padding:1rem 1rem 3rem;}
+  .intro{display:none;}
+  .notes-col{display:none;}
+  .stage{gap:0;}
+  .phone-wrap{width:100%;}
+  .phone{
+    width:100%;max-width:none;background:none;border-radius:0;padding:0;box-shadow:none;
+  }
+  .phone::before{display:none;} /* notch decorativo */
+  .screen{
+    height:auto;min-height:calc(100dvh - 2rem);border-radius:16px;overflow:visible;
+  }
+  .statusbar{display:none;} /* reloj/batería simulados — el celular real ya trae los suyos */
+}
 </style>
+</head>
+<body>
 
 <div class="page">
 
@@ -1003,3 +1037,6 @@ window.checkCargasWarn = checkCargasWarn;
 window.checkMetrosWarn = checkMetrosWarn;
 window.checkCaballetesWarn = checkCaballetesWarn;
 </script>
+
+</body>
+</html>
