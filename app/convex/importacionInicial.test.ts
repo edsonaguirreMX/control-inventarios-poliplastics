@@ -192,6 +192,51 @@ describe('importacionInicial: importarInventarioInicial (EDS-41 / tarea 3.5)', (
     ).rejects.toThrow(/no puede ser negativo/);
   });
 
+  test('rechaza fechaISO que no es una fecha calendario real (2026-02-30)', async () => {
+    const t = convexTest(schema, modules);
+    const { adminToken } = await setup(t);
+    const matId = await crearMaterialPrueba(t, { esInterno: false });
+
+    await expect(
+      t.mutation(api.importacionInicial.importarInventarioInicial, {
+        fechaISO: '2026-02-30',
+        horaCorte: '06:00',
+        materiales: [{ materialId: matId, kgOriginal: 100, costoUnitario: 10 }],
+        token: adminToken,
+      })
+    ).rejects.toThrow(/no es una fecha calendario válida/);
+  });
+
+  test('rechaza horaCorte fuera de rango (25:00)', async () => {
+    const t = convexTest(schema, modules);
+    const { adminToken } = await setup(t);
+    const matId = await crearMaterialPrueba(t, { esInterno: false });
+
+    await expect(
+      t.mutation(api.importacionInicial.importarInventarioInicial, {
+        fechaISO: '2026-08-10',
+        horaCorte: '25:00',
+        materiales: [{ materialId: matId, kgOriginal: 100, costoUnitario: 10 }],
+        token: adminToken,
+      })
+    ).rejects.toThrow(/fuera de rango/);
+  });
+
+  test('exige horaCorte en formato fijo HH:MM — rechaza "6:00" (hora sin ceros)', async () => {
+    const t = convexTest(schema, modules);
+    const { adminToken } = await setup(t);
+    const matId = await crearMaterialPrueba(t, { esInterno: false });
+
+    await expect(
+      t.mutation(api.importacionInicial.importarInventarioInicial, {
+        fechaISO: '2026-08-10',
+        horaCorte: '6:00',
+        materiales: [{ materialId: matId, kgOriginal: 100, costoUnitario: 10 }],
+        token: adminToken,
+      })
+    ).rejects.toThrow(/se espera formato HH:MM/);
+  });
+
   test('rechaza lote vacío', async () => {
     const t = convexTest(schema, modules);
     const { adminToken } = await setup(t);

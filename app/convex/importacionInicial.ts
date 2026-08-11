@@ -28,6 +28,46 @@ import { horaLocalAInstante } from './lib/fechaOperativa';
 // Admin-only — igual que Catálogo/Parámetros, es una operación que toca
 // costeo real de toda la planta.
 
+const FECHA_ISO_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+const HORA_HHMM_REGEX = /^\d{2}:\d{2}$/;
+
+// Esta importación define la fechaEntrada PEPS de TODO el inventario
+// inicial — un solo error de formato aquí (fecha/hora malformada) deja
+// capas de arranque con la fecha FIFO incorrecta, en una operación que
+// solo puede correrse una vez por material. `horaLocalAInstante` (y
+// `Date.UTC` detrás de ella) normaliza silenciosamente valores fuera de
+// rango en vez de fallar (2026-02-30 se convierte en 2026-03-02, 25:00 se
+// convierte en la 1am del día siguiente) — así que hay que validar el
+// formato Y que sea una fecha calendario/hora real ANTES de llegar ahí,
+// no confiar en que el runtime rechace lo inválido.
+function validarFechaHoraCorte(fechaISO: string, horaCorte: string): void {
+  if (!FECHA_ISO_REGEX.test(fechaISO)) {
+    throw new ConvexError(
+      `importarInventarioInicial: fechaISO inválida "${fechaISO}" — se espera formato YYYY-MM-DD.`
+    );
+  }
+  const [anio, mes, dia] = fechaISO.split('-').map(Number);
+  // Verifica que sea una fecha calendario REAL: si Date.UTC normalizó algo
+  // (mes/día fuera de rango), los componentes de vuelta no coinciden con
+  // los que se pidieron.
+  const dt = new Date(Date.UTC(anio, mes - 1, dia));
+  if (dt.getUTCFullYear() !== anio || dt.getUTCMonth() !== mes - 1 || dt.getUTCDate() !== dia) {
+    throw new ConvexError(`importarInventarioInicial: fechaISO "${fechaISO}" no es una fecha calendario válida.`);
+  }
+
+  if (!HORA_HHMM_REGEX.test(horaCorte)) {
+    throw new ConvexError(
+      `importarInventarioInicial: horaCorte inválida "${horaCorte}" — se espera formato HH:MM (24 horas).`
+    );
+  }
+  const [hora, minuto] = horaCorte.split(':').map(Number);
+  if (hora > 23 || minuto > 59) {
+    throw new ConvexError(
+      `importarInventarioInicial: horaCorte "${horaCorte}" fuera de rango — debe estar entre 00:00 y 23:59.`
+    );
+  }
+}
+
 async function validarFilaImportacion(
   ctx: MutationCtx,
   fila: { materialId: Id<'materiales'>; kgOriginal: number; costoUnitario: number }
@@ -79,6 +119,8 @@ export const importarInventarioInicial = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, args.token, ['admin']);
+
+    validarFechaHoraCorte(args.fechaISO, args.horaCorte);
 
     if (args.materiales.length === 0) {
       throw new ConvexError('importarInventarioInicial: se necesita al menos un material.');
