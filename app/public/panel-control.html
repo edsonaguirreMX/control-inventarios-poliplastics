@@ -328,7 +328,15 @@ footer.page-foot{font-size:.78rem;color:var(--ink-faint);border-top:1px solid va
   .exist-value,.exist-status,.exist-pedir{justify-self:start;text-align:left;}
   .prod-grid,.meter-row{grid-template-columns:1fr;}
   .topbar{flex-direction:column;align-items:flex-start;}
-  .topbar-right{align-items:flex-start;}
+  .topbar-right{align-items:flex-start;width:100%;}
+  /* Hallazgo real en producción (2026-08-11): los 4 tabs de rol
+     (Compras/Calidad y Producción/Gerencia y Comercial/Admin) tienen
+     white-space:nowrap — su ancho natural excede cualquier pantalla de
+     celular y arrastraba a TODA la página a scroll horizontal. Se
+     contiene el desborde dentro del propio selector (desliza con el
+     dedo, como un segmented control) en vez de dejarlo escapar. */
+  .role-switch{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+  .role-switch::-webkit-scrollbar{display:none;}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none !important;}}
 
