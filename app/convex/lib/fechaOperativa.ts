@@ -1,3 +1,5 @@
+import { ConvexError } from 'convex/values';
+
 /**
  * "Fecha operativa" — el día calendario al que pertenece una captura,
  * considerando que Turno 2 cruza medianoche: todo lo capturado entre las
@@ -90,4 +92,52 @@ export function nombreDiaSemana(fechaISO: string): string {
   const dt = new Date(`${fechaISO}T12:00:00Z`);
   const conAcento = new Intl.DateTimeFormat('es-MX', { weekday: 'long', timeZone: 'UTC' }).format(dt);
   return conAcento.normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+/**
+ * EDS-83: valida que `fecha` (YYYY-MM-DD, capturada en cierres/entradas)
+ * sea una fecha calendario real, que no sea futura, y — si `diasAtras`
+ * no es `null` — que no sea más vieja que `hoy - diasAtras`. Nunca
+ * confiar en que el cliente mande algo razonable solo porque la UI ya
+ * restringe las opciones que ofrece (un bug de UI, o alguien llamando la
+ * API directo, podría mandar cualquier string). Encontrado real: sin
+ * esta validación, `crearCierreTurno`/`crearEntrada(sBatch)` aceptaban
+ * `fecha` sin chequeo alguno — ni formato, ni rango, ni que no fuera
+ * futura.
+ *
+ * `diasAtras`: ventana de captura "tardía" permitida hacia atrás (p. ej.
+ * 7 para un cierre de turno — cubre un fin de semana largo de retraso
+ * real en la captura; para corregir algo más viejo, el camino correcto
+ * es Corrección de Capturas, con auditoría, no esta mutation). `null`
+ * desactiva el límite hacia atrás — usado por Entradas de material,
+ * donde SÍ es normal registrar tarde el papeleo de un recibo real viejo
+ * (a diferencia de un turno, que tiene una ventana operativa acotada).
+ */
+export function validarFechaOperativaEnVentana(
+  fecha: string,
+  zonaHoraria: string,
+  horaInicioTurno1: string,
+  diasAtras: number | null
+): void {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+    throw new ConvexError(`Fecha inválida: "${fecha}" — se espera formato YYYY-MM-DD.`);
+  }
+  const [anio, mes, dia] = fecha.split('-').map(Number);
+  const dt = new Date(Date.UTC(anio, mes - 1, dia));
+  if (dt.getUTCFullYear() !== anio || dt.getUTCMonth() !== mes - 1 || dt.getUTCDate() !== dia) {
+    throw new ConvexError(`Fecha inválida: "${fecha}" no es una fecha calendario real.`);
+  }
+
+  const hoy = fechaOperativa(Date.now(), zonaHoraria, horaInicioTurno1);
+  if (fecha > hoy) {
+    throw new ConvexError(`No se puede capturar una fecha futura (${fecha}) — hoy es ${hoy}.`);
+  }
+  if (diasAtras !== null) {
+    const limite = sumarDiasISO(hoy, -diasAtras);
+    if (fecha < limite) {
+      throw new ConvexError(
+        `Solo se puede capturar hasta ${diasAtras} días atrás (desde ${limite}) — ${fecha} es demasiado antiguo. Para corregir algo más viejo, usa Corrección de Capturas.`
+      );
+    }
+  }
 }

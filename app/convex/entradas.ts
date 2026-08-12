@@ -4,6 +4,7 @@ import type { MutationCtx } from './_generated/server';
 import type { Id } from './_generated/dataModel';
 import { crearCapaImpl } from './peps';
 import { requireRole, requireUser } from './lib/auth';
+import { validarFechaOperativaEnVentana } from './lib/fechaOperativa';
 
 // Flujo de Entradas: el operador (en cierre-turno-propuestas.html, tarea
 // 4.3/4.4) solo captura kg recibidos, sin costo — queda "pendiente" hasta
@@ -125,6 +126,14 @@ export const crearEntrada = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requireRole(ctx, args.token, ['operador', 'compras', 'admin']);
+    const params = await ctx.db.query('parametrosProduccion').first();
+    if (!params) {
+      throw new Error('crearEntrada: no hay parámetros de producción configurados.');
+    }
+    // EDS-83: a diferencia de un cierre de turno, SÍ es normal registrar
+    // tarde el papeleo de una entrada real vieja — solo se valida formato
+    // y que no sea futura, sin límite hacia atrás (diasAtras: null).
+    validarFechaOperativaEnVentana(args.fecha, params.zonaHoraria, params.horaInicioTurno1, null);
     return crearEntradaImpl(ctx, user, args);
   },
 });
@@ -148,6 +157,14 @@ export const crearEntradasBatch = mutation({
     if (args.materiales.length === 0) {
       throw new ConvexError('crearEntradasBatch: se necesita al menos un material.');
     }
+    const params = await ctx.db.query('parametrosProduccion').first();
+    if (!params) {
+      throw new Error('crearEntradasBatch: no hay parámetros de producción configurados.');
+    }
+    // EDS-83: a diferencia de un cierre de turno, SÍ es normal registrar
+    // tarde el papeleo de una entrada real vieja — solo se valida formato
+    // y que no sea futura, sin límite hacia atrás (diasAtras: null).
+    validarFechaOperativaEnVentana(args.fecha, params.zonaHoraria, params.horaInicioTurno1, null);
     const ids: Id<'entradas'>[] = [];
     for (const m of args.materiales) {
       const id = await crearEntradaImpl(ctx, user, { fecha: args.fecha, materialId: m.materialId, cantidadKg: m.cantidadKg });

@@ -132,6 +132,7 @@ describe('EDS-73: errores de negocio esperados se lanzan como ConvexError (no Er
     const matId = await crearMaterialPrueba(t, { esInterno: false });
     const userId = await crearUsuarioPrueba(t, 'operador');
     const token = await crearSesionPrueba(t, userId);
+    await crearParametrosPrueba(t);
 
     await expect(
       t.mutation(api.entradas.crearEntrada, { fecha: '2026-08-10', materialId: matId, cantidadKg: 0, token })

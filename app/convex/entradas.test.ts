@@ -2,11 +2,13 @@ import { convexTest } from 'convex-test';
 import { describe, expect, test } from 'vitest';
 import schema from './schema';
 import { api } from './_generated/api';
-import { crearMaterialPrueba, crearUsuarioPrueba, crearSesionPrueba } from './testHelpers';
+import { crearMaterialPrueba, crearUsuarioPrueba, crearSesionPrueba, crearParametrosPrueba } from './testHelpers';
+import { fechaOperativa, sumarDiasISO } from './lib/fechaOperativa';
 
 const modules = import.meta.glob('./**/*.ts');
 
 async function setup(t: Awaited<ReturnType<typeof convexTest>>) {
+  await crearParametrosPrueba(t); // EDS-83: crearEntrada(sBatch) ahora valida fecha contra parametrosProduccion
   const matId = await crearMaterialPrueba(t, { esInterno: false, activo: true });
   const operadorId = await crearUsuarioPrueba(t, 'operador');
   const adminId = await crearUsuarioPrueba(t, 'admin');
@@ -92,6 +94,7 @@ describe('entradas: backend de Entradas (tarea 3.3, endurecido en auditoría)', 
 
   test('rechaza crear entrada con material inactivo', async () => {
     const t = convexTest(schema, modules);
+    await crearParametrosPrueba(t);
     const matInactivoId = await crearMaterialPrueba(t, { activo: false });
     const adminId = await crearUsuarioPrueba(t, 'admin');
     const adminToken = await crearSesionPrueba(t, adminId);
@@ -103,6 +106,7 @@ describe('entradas: backend de Entradas (tarea 3.3, endurecido en auditoría)', 
 
   test('rechaza crear entrada con material interno (Triturado no se compra)', async () => {
     const t = convexTest(schema, modules);
+    await crearParametrosPrueba(t);
     const trituradoId = await crearMaterialPrueba(t, { esInterno: true });
     const adminId = await crearUsuarioPrueba(t, 'admin');
     const adminToken = await crearSesionPrueba(t, adminId);
@@ -184,5 +188,36 @@ describe('entradas: crearEntradasBatch es atómico (No-Go de auditoría de PR 3,
     const entrada = await t.run((ctx) => ctx.db.get(ids[0]));
     expect(entrada?.estado).toBe('pendiente');
     expect(entrada?.capaId).toBeNull();
+  });
+});
+
+// EDS-83: a diferencia de un cierre de turno, SÍ es normal registrar
+// tarde el papeleo de una entrada real vieja (caso ya cubierto arriba:
+// "la capa creada usa la fecha REAL de la entrada" usa fecha 2020-01-15
+// sin problema) — pero una fecha futura nunca tiene sentido para ningún
+// caso, así que sí se rechaza igual que en cierres.
+describe('entradas: valida fecha en servidor, sin límite hacia atrás (EDS-83)', () => {
+  test('rechaza una fecha futura', async () => {
+    const t = convexTest(schema, modules);
+    const { matId, adminToken } = await setup(t);
+    const manana = sumarDiasISO(fechaOperativa(Date.now(), 'America/Mexico_City', '06:00'), 1);
+
+    await expect(
+      t.mutation(api.entradas.crearEntrada, { fecha: manana, materialId: matId, cantidadKg: 100, token: adminToken })
+    ).rejects.toThrow(/fecha futura/);
+
+    expect(await t.run((ctx) => ctx.db.query('entradas').collect())).toHaveLength(0);
+  });
+
+  test('crearEntradasBatch también rechaza una fecha futura', async () => {
+    const t = convexTest(schema, modules);
+    const { matId, adminToken } = await setup(t);
+    const manana = sumarDiasISO(fechaOperativa(Date.now(), 'America/Mexico_City', '06:00'), 1);
+
+    await expect(
+      t.mutation(api.entradas.crearEntradasBatch, {
+        fecha: manana, materiales: [{ materialId: matId, cantidadKg: 100 }], token: adminToken,
+      })
+    ).rejects.toThrow(/fecha futura/);
   });
 });
