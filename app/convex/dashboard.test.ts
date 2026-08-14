@@ -6,7 +6,7 @@ import { crearCapaImpl } from './peps';
 import {
   crearMaterialPrueba, crearUsuarioPrueba, crearSesionPrueba, crearParametrosPrueba,
 } from './testHelpers';
-import { fechaOperativa } from './lib/fechaOperativa';
+import { fechaOperativa, sumarDiasISO } from './lib/fechaOperativa';
 
 const modules = import.meta.glob('./**/*.ts');
 
@@ -157,6 +157,43 @@ describe('dashboard: getKPIsHoy (tarea 6.1)', () => {
     expect(kpis.pctMermaHoy).toBeCloseTo((20 / 120) * 100, 5);
     expect(kpis.costoRealHoy).toBe(240); // 120kg × $2
     expect(kpis.costoRealPorKgHoy).toBeCloseTo(240 / 100, 5);
+  });
+
+  // EDS-75: reemplaza el texto estático "Actualizado con el cierre de
+  // Turno 2 · 07/08/2026" que vivía hardcodeado en panel-control.html.
+  test('ultimoCierre es null cuando todavía no se ha capturado ningún cierre', async () => {
+    const t = convexTest(schema, modules);
+    const { comprasToken } = await setup(t);
+
+    const kpis = await t.query(api.dashboard.getKPIsHoy, { token: comprasToken });
+    expect(kpis.ultimoCierre).toBeNull();
+  });
+
+  test('ultimoCierre refleja el cierre insertado más recientemente (_creationTime), no el de fecha más reciente', async () => {
+    const t = convexTest(schema, modules);
+    const { comprasToken, operadorToken } = await setup(t);
+    const matId = await crearMaterialPrueba(t);
+    const ayer = sumarDiasISO(HOY, -1);
+
+    // Se captura primero el cierre de HOY...
+    await t.mutation(api.cierres.crearCierreTurno, {
+      fecha: HOY, linea: 1, turno: 1, cargasPreparadas: 1, metrosBuenos: 10,
+      caballetes105Pzas: 0, caballetes106Pzas: 0,
+      consumoPorMaterial: [{ materialId: matId, kgConsumido: 0 }],
+      token: operadorToken,
+    });
+    // ...y DESPUÉS se captura (tardíamente) el de AYER — _creationTime más
+    // reciente, aunque su `fecha` sea más vieja. Si el código eligiera por
+    // `fecha` en vez de `_creationTime`, este test fallaría (elegiría HOY).
+    await t.mutation(api.cierres.crearCierreTurno, {
+      fecha: ayer, linea: 2, turno: 2, cargasPreparadas: 1, metrosBuenos: 10,
+      caballetes105Pzas: 0, caballetes106Pzas: 0,
+      consumoPorMaterial: [{ materialId: matId, kgConsumido: 0 }],
+      token: operadorToken,
+    });
+
+    const kpis = await t.query(api.dashboard.getKPIsHoy, { token: comprasToken });
+    expect(kpis.ultimoCierre).toEqual({ fecha: ayer, linea: 2, turno: 2 });
   });
 });
 

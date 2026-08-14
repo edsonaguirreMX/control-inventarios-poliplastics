@@ -166,11 +166,34 @@ export async function calcularKPIsHoyImpl(ctx: QueryCtx) {
     };
 }
 
+// EDS-75: la línea "Actualizado con el cierre de Turno X · fecha" del
+// topbar era texto estático desde el mockup original — nunca reflejó un
+// cierre real, ni siquiera vacío. Se resuelve buscando el cierresTurno
+// más recientemente insertado — no por `fecha` sola (empata entre
+// línea/turno del mismo día) ni acotado a la ventana de `cierresEnRango`
+// (un cierre real puede ser más viejo que esos 14 días si la planta
+// llevó varios días sin capturar). Se ordena por `_creationTime` (lo da
+// Convex, único y monótono por documento) y no por el campo de negocio
+// `capturadoEn` (`Date.now()` de la app — dos mutations seguidas pueden
+// empatar al milisegundo, sobre todo en pruebas). Tabla chica (unos
+// cuantos cierres por día) — un `.collect()` completo es correcto y
+// suficientemente rápido, no amerita un índice nuevo solo para esto.
+export async function obtenerUltimoCierreImpl(ctx: QueryCtx) {
+  const cierres = await ctx.db.query('cierresTurno').collect();
+  if (cierres.length === 0) return null;
+  const ultimo = cierres.reduce((max, c) => (c._creationTime > max._creationTime ? c : max));
+  return { fecha: ultimo.fecha, linea: ultimo.linea, turno: ultimo.turno };
+}
+
 export const getKPIsHoy = query({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {
     await requireRole(ctx, token, ROLES_DASHBOARD);
-    return calcularKPIsHoyImpl(ctx);
+    const [kpis, ultimoCierre] = await Promise.all([
+      calcularKPIsHoyImpl(ctx),
+      obtenerUltimoCierreImpl(ctx),
+    ]);
+    return { ...kpis, ultimoCierre };
   },
 });
 

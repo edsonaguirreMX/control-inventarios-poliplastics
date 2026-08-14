@@ -318,8 +318,6 @@ button{font-family:inherit;}
 .config-card.live .t{color:var(--accent-strong);}
 .config-card.live:hover{background:var(--accent-soft);}
 
-footer.page-foot{font-size:.78rem;color:var(--ink-faint);border-top:1px solid var(--border);padding-top:1.2rem;}
-
 @media (max-width:900px){
   .kpi-row{grid-template-columns:1fr;}
   .stat-pair{grid-template-columns:1fr;}
@@ -344,7 +342,7 @@ footer.page-foot{font-size:.78rem;color:var(--ink-faint);border-top:1px solid va
 @media print{
   body{background:#fff !important;color:#111 !important;}
   .bell-wrap, .role-switch, .btn-pdf, .updated-at, .role-badge, .session-row,
-  .card-actions .tbl-toggle, .tbl-toggle, .config-cards, footer.page-foot,
+  .card-actions .tbl-toggle, .tbl-toggle, .config-cards,
   a[href*="artifact"]{ display:none !important; }
   .card{border:1px solid #ccc !important;box-shadow:none !important;break-inside:avoid;margin-bottom:12px;}
   body.print-all .role-section{ display:block !important; }
@@ -379,7 +377,7 @@ footer.page-foot{font-size:.78rem;color:var(--ink-faint);border-top:1px solid va
         <button class="role-btn" data-role="gerencia">Gerencia y Comercial</button>
         <button class="role-btn" data-role="admin">Admin</button>
       </div>
-      <div class="updated-at">Actualizado con el cierre de Turno 2 · 07/08/2026</div>
+      <div class="updated-at" id="updatedAt">Cargando…</div>
     </div>
   </header>
 
@@ -568,10 +566,6 @@ footer.page-foot{font-size:.78rem;color:var(--ink-faint);border-top:1px solid va
     </div>
   </section>
 
-  <footer class="page-foot">
-    Mockup de diseño — inventario, consumo y costos son ilustrativos para fines de comparación visual, no cifras reales de producción. Basado en el Documento de Funcionalidades del Sistema de Control de Materias Primas Tejaflex.
-  </footer>
-
 </div>
 
 <script src="/config.js?v=2026081001"></script>
@@ -634,6 +628,7 @@ const fmt = n => Math.round(n).toLocaleString('es-MX');
 const fmtMoney = n => n.toLocaleString('es-MX', {minimumFractionDigits:2, maximumFractionDigits:2});
 const fmtPct = n => (n>0?'+':'') + n.toFixed(1) + '%';
 function isoADisplayCorto(iso){ const [, m, d] = iso.split('-'); return `${d}/${m}`; }
+function isoADisplayLargo(iso){ const [y, m, d] = iso.split('-'); return `${d}/${m}/${y}`; }
 
 // Producción por turno/línea — antes un generador determinístico
 // ilustrativo, ahora una simple consulta al arreglo real ya cargado
@@ -673,6 +668,17 @@ function tendenciaCostoTexto(){
   if(Math.abs(delta) < 0.01) return { texto:'Estable', color:'var(--ink)', detalle:'Sin cambio significativo en los últimos 5 días.' };
   if(delta > 0) return { texto:'Repunte reciente', color:'var(--danger)', detalle:`Costo real subió $${delta.toFixed(2)}/kg en promedio en los últimos 5 días vs. los 5 anteriores.` };
   return { texto:'Mejora reciente', color:'var(--positive)', detalle:`Costo real bajó $${Math.abs(delta).toFixed(2)}/kg en promedio en los últimos 5 días vs. los 5 anteriores.` };
+}
+
+// EDS-75: reemplaza el texto estático "Actualizado con el cierre de
+// Turno 2 · 07/08/2026" — ahora viene de KPI.ultimoCierre (real, del
+// backend). Si todavía no hay ningún cierre capturado (KPI.ultimoCierre
+// === null), no inventa una fecha.
+function renderUltimoCierre(){
+  const u = KPI.ultimoCierre;
+  document.getElementById('updatedAt').textContent = u
+    ? `Actualizado con el cierre de Turno ${u.turno} · ${isoADisplayLargo(u.fecha)}`
+    : 'Sin cierres capturados todavía';
 }
 
 function renderKPIs(){
@@ -1222,6 +1228,7 @@ async function cargarTodo(){
   COSTO_30 = costoSerie.map(d => d.costoRealPorKg);
   OBJETIVOS = objetivos;
 
+  renderUltimoCierre();
   renderKPIs();
   renderExistencias();
   renderCostoStats();
