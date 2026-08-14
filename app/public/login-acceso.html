@@ -95,15 +95,6 @@ a{color:inherit;}
   padding:1.6rem 1.7rem 1.8rem;box-shadow:var(--shadow-lg);
 }
 
-.tabswitch{display:flex;background:var(--surface-2);border:1px solid var(--border);border-radius:11px;padding:3px;gap:2px;margin-bottom:1.4rem;}
-.tabswitch button{
-  flex:1;border:none;background:none;padding:.55rem .8rem;border-radius:8px;font-size:.85rem;font-weight:600;
-  color:var(--ink-muted);cursor:pointer;
-}
-.tabswitch button.active{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08);}
-
-.pane{display:none;flex-direction:column;gap:1.1rem;}
-.pane.active{display:flex;}
 
 .field-group{display:flex;flex-direction:column;gap:.4rem;}
 .field-group label{font-size:.78rem;color:var(--ink-muted);}
@@ -177,45 +168,21 @@ a{color:inherit;}
   </div>
 
   <div class="card">
-    <div class="tabswitch" id="tabSwitch">
-      <button class="active" data-tab="operador">Operador</button>
-      <button data-tab="admin">Administración</button>
-    </div>
-
-    <!-- PANE: OPERADOR -->
-    <div class="pane active" id="paneOperador">
-      <div id="operadorForm" style="display:flex;flex-direction:column;gap:1.1rem;">
-        <div class="field-group">
-          <label>Usuario</label>
-          <input type="text" id="operadorEmail" placeholder="usuario" autocomplete="username">
-        </div>
-        <div class="field-group">
-          <label>Contraseña</label>
-          <input type="password" id="operadorPassword" placeholder="••••••••" autocomplete="current-password">
-        </div>
-        <label class="remember-row"><input type="checkbox" id="operadorRemember"> Recordar en este dispositivo</label>
-        <div id="operadorError" class="field-error"></div>
-        <button class="btn-primary" id="btnOperadorEntrar" disabled>Entrar</button>
+    <!-- EDS-84: un solo formulario — el rol lo decide el backend al
+         autenticar, nunca una pestaña elegida antes de escribir la
+         contraseña (ver redirectByRole() abajo). -->
+    <div id="loginForm" style="display:flex;flex-direction:column;gap:1.1rem;">
+      <div class="field-group">
+        <label>Usuario</label>
+        <input type="text" id="loginUsuario" placeholder="usuario" autocomplete="username">
       </div>
-      <div id="operadorSuccess" style="display:none;"></div>
-    </div>
-
-    <!-- PANE: ADMIN -->
-    <div class="pane" id="paneAdmin">
-      <div id="adminForm" style="display:flex;flex-direction:column;gap:1.1rem;">
-        <div class="field-group">
-          <label>Usuario</label>
-          <input type="text" id="adminEmail" placeholder="usuario" autocomplete="username">
-        </div>
-        <div class="field-group">
-          <label>Contraseña</label>
-          <input type="password" id="adminPassword" placeholder="••••••••" autocomplete="current-password">
-        </div>
-        <label class="remember-row"><input type="checkbox" id="adminRemember"> Recordar en este dispositivo</label>
-        <div id="adminError" class="field-error"></div>
-        <button class="btn-primary" id="btnAdminEntrar" disabled>Entrar</button>
+      <div class="field-group">
+        <label>Contraseña</label>
+        <input type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password">
       </div>
-      <div id="adminSuccess" style="display:none;"></div>
+      <label class="remember-row"><input type="checkbox" id="loginRemember"> Recordar en este dispositivo</label>
+      <div id="loginError" class="field-error"></div>
+      <button class="btn-primary" id="btnLoginEntrar" disabled>Entrar</button>
     </div>
   </div>
 
@@ -235,50 +202,28 @@ function redirectByRole(rol) {
   window.location.href = rol === 'operador' ? CIERRE_TURNO_URL : PANEL_CONTROL_URL;
 }
 
-/* ---------- tabs ---------- */
-document.getElementById('tabSwitch').addEventListener('click', (e) => {
-  const b = e.target.closest('button');
-  if (!b) return;
-  setTab(b.dataset.tab);
-});
-function setTab(tab) {
-  document.querySelectorAll('#tabSwitch button').forEach((c) => c.classList.toggle('active', c.dataset.tab === tab));
-  document.getElementById('paneOperador').classList.toggle('active', tab === 'operador');
-  document.getElementById('paneAdmin').classList.toggle('active', tab === 'admin');
-}
-
 /* ---------- habilitar "Entrar" solo con usuario + contraseña ---------- */
-function wireEntrarState(kind) {
-  const emailId = kind === 'operador' ? 'operadorEmail' : 'adminEmail';
-  const passId = kind === 'operador' ? 'operadorPassword' : 'adminPassword';
-  const btnId = kind === 'operador' ? 'btnOperadorEntrar' : 'btnAdminEntrar';
+function wireEntrarState() {
   const update = () => {
-    const usuario = document.getElementById(emailId).value.trim();
-    const password = document.getElementById(passId).value;
-    document.getElementById(btnId).disabled = !(usuario && password);
+    const usuario = document.getElementById('loginUsuario').value.trim();
+    const password = document.getElementById('loginPassword').value;
+    document.getElementById('btnLoginEntrar').disabled = !(usuario && password);
   };
-  document.getElementById(emailId).addEventListener('input', update);
-  document.getElementById(passId).addEventListener('input', update);
-  document.getElementById(passId).addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !document.getElementById(btnId).disabled) login(kind);
+  document.getElementById('loginUsuario').addEventListener('input', update);
+  document.getElementById('loginPassword').addEventListener('input', update);
+  document.getElementById('loginPassword').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !document.getElementById('btnLoginEntrar').disabled) login();
   });
 }
-wireEntrarState('operador');
-wireEntrarState('admin');
+wireEntrarState();
 
 /* ---------- login real contra Convex ---------- */
-async function login(kind) {
-  const emailId = kind === 'operador' ? 'operadorEmail' : 'adminEmail';
-  const passId = kind === 'operador' ? 'operadorPassword' : 'adminPassword';
-  const rememberId = kind === 'operador' ? 'operadorRemember' : 'adminRemember';
-  const btnId = kind === 'operador' ? 'btnOperadorEntrar' : 'btnAdminEntrar';
-  const errorId = kind === 'operador' ? 'operadorError' : 'adminError';
-
-  const usuario = document.getElementById(emailId).value.trim();
-  const password = document.getElementById(passId).value;
-  const remember = document.getElementById(rememberId).checked;
-  const btn = document.getElementById(btnId);
-  const errorBox = document.getElementById(errorId);
+async function login() {
+  const usuario = document.getElementById('loginUsuario').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const remember = document.getElementById('loginRemember').checked;
+  const btn = document.getElementById('btnLoginEntrar');
+  const errorBox = document.getElementById('loginError');
 
   errorBox.style.display = 'none';
   btn.disabled = true;
@@ -287,9 +232,10 @@ async function login(kind) {
 
   try {
     const user = await window.Session.login(usuario, password, remember);
-    // El rol lo decide el backend, no la pestaña donde se escribió el login
-    // (si alguien mete credenciales de operador en la pestaña de Admin,
-    // igual se le manda a Cierre de Turno).
+    // EDS-84: un solo formulario — el rol siempre lo decide el backend al
+    // autenticar (antes había 2 pestañas idénticas, Operador/Admin, que no
+    // cambiaban nada funcional: cualquiera de las dos mandaba al mismo
+    // redirectByRole()).
     redirectByRole(user.rol);
   } catch (err) {
     btn.disabled = false;
@@ -314,8 +260,7 @@ async function login(kind) {
     errorBox.style.display = 'block';
   }
 }
-document.getElementById('btnOperadorEntrar').addEventListener('click', () => login('operador'));
-document.getElementById('btnAdminEntrar').addEventListener('click', () => login('admin'));
+document.getElementById('btnLoginEntrar').addEventListener('click', () => login());
 
 /* ---------- si ya hay una sesión válida (token recordado), saltar el login ---------- */
 (async () => {
