@@ -623,30 +623,37 @@ async function cambiarDiaSeleccionado(iso){
 /* ============================================================
    ESTADO DE CIERRES (línea × turno) — real, vía estadoCierresDelDia
    ============================================================ */
-// EDS-83 (auditoría CodeRabbit): si el operador cambia el selector de día
-// dos veces antes de que la primera consulta termine, ambas llamadas
-// tocan CIERRES_HOY/el DOM — la respuesta más lenta podría llegar AL
-// FINAL y pintar cierres que ya no corresponden a fechaSeleccionada.
-// `fechaPedida` se captura ANTES del await; si al volver ya no coincide
-// con fechaSeleccionada, es que el usuario cambió de día mientras esto
-// estaba en vuelo — se descarta la respuesta obsoleta en vez de aplicarla.
+// EDS-83 (auditoría CodeRabbit, ronda 2): si el operador cambia el
+// selector de día mientras hay un await en vuelo, una respuesta vieja
+// podía pintar el DOM con una mezcla de fecha nueva + datos viejos — la
+// primera ronda del fix solo guardaba DESPUÉS del primer await
+// (refrescarCierresHoy), pero renderCierreGrid todavía tenía un SEGUNDO
+// await (isoHoy()) sin proteger, dejando la misma ventana de carrera
+// abierta un paso más adelante. Fix real: refrescarCierresHoy regresa el
+// resultado LOCAL (nunca depende de que quien llama vuelva a leer una
+// global que pudo cambiar mientras tanto), y renderCierreGrid hace UNA
+// sola comprobación al final, después de TODOS los await, pintando
+// siempre con fechaPedida/cierres locales — nunca con
+// fechaSeleccionada/CIERRES_HOY global, que para ese momento ya podrían
+// pertenecer a otra selección más reciente.
 async function refrescarCierresHoy(fechaPedida = fechaSeleccionada){
   const resultado = await window.Session.call(api.cierres.estadoCierresDelDia, { fecha: fechaPedida }, 'query');
-  if (fechaPedida !== fechaSeleccionada) return;
-  CIERRES_HOY = resultado;
+  if (fechaPedida === fechaSeleccionada) CIERRES_HOY = resultado;
+  return resultado;
 }
 async function renderCierreGrid(){
   const fechaPedida = fechaSeleccionada;
-  await refrescarCierresHoy(fechaPedida);
-  if (fechaPedida !== fechaSeleccionada) return; // idem — no pintar un grid obsoleto
+  const cierres = await refrescarCierresHoy(fechaPedida);
   const hoyReal = await isoHoy();
-  const prefijo = fechaSeleccionada === hoyReal ? 'Cierres de hoy'
-    : fechaSeleccionada === sumarDiasISOCliente(hoyReal, -1) ? 'Cierres de ayer'
-    : `Cierres del ${isoADisplayCompleto(fechaSeleccionada)}`;
+  if (fechaPedida !== fechaSeleccionada) return; // el usuario cambió de día mientras esto estaba en vuelo — no pintar un grid obsoleto
+
+  const prefijo = fechaPedida === hoyReal ? 'Cierres de hoy'
+    : fechaPedida === sumarDiasISOCliente(hoyReal, -1) ? 'Cierres de ayer'
+    : `Cierres del ${isoADisplayCompleto(fechaPedida)}`;
   document.getElementById('cierreStatusTitle').textContent = prefijo;
   const combos = [[1,1],[1,2],[2,1],[2,2]];
   document.getElementById('cierreGrid').innerHTML = combos.map(([l,t])=>{
-    const info = CIERRES_HOY.find(c=>c.linea===l && c.turno===t);
+    const info = cierres.find(c=>c.linea===l && c.turno===t);
     const done = info?.cerrado;
     return `<div class="cierre-cell">
       <span class="lt">Línea ${l} · Turno ${t}</span>
