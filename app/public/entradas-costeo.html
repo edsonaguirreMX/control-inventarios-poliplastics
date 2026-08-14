@@ -195,6 +195,7 @@ table.capas tbody tr.mat-total td.num{font-family:'IBM Plex Mono',monospace;}
 /* ---------- action bar ---------- */
 .action-bar{
   position:sticky;bottom:1.2rem;display:flex;justify-content:flex-end;align-items:center;gap:.8rem;
+  flex-wrap:wrap;
   background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:.8rem 1.1rem;
   box-shadow:var(--shadow);
 }
@@ -219,6 +220,13 @@ footer.page-foot{font-size:.78rem;color:var(--ink-faint);border-top:1px solid va
 @media (max-width:900px){
   .kpi-row{grid-template-columns:repeat(2,1fr);}
   .topbar{flex-direction:column;align-items:flex-start;}
+  .dirty-flag{flex:1 1 100%;margin-right:0;}
+}
+/* A 2 columnas, los valores en $ (p.ej. "valor costeado", que puede llegar
+   a 7 cifras) quedan apretados en un teléfono real (~375-390px) — a 1
+   columna tienen todo el ancho disponible. */
+@media (max-width:480px){
+  .kpi-row{grid-template-columns:1fr;}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none !important;}}
 
