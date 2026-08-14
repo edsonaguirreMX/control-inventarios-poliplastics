@@ -166,11 +166,39 @@ export async function calcularKPIsHoyImpl(ctx: QueryCtx) {
     };
 }
 
+// EDS-75: la línea "Actualizado con el cierre de Turno X · fecha" del
+// topbar era texto estático desde el mockup original — nunca reflejó un
+// cierre real, ni siquiera vacío. Se resuelve buscando el cierresTurno
+// más recientemente insertado — no por `fecha` sola (empata entre
+// línea/turno del mismo día) ni acotado a la ventana de `cierresEnRango`
+// (un cierre real puede ser más viejo que esos 14 días si la planta
+// llevó varios días sin capturar). Se ordena por `_creationTime` (lo da
+// Convex, único y monótono por documento) y no por el campo de negocio
+// `capturadoEn` (`Date.now()` de la app — dos mutations seguidas pueden
+// empatar al milisegundo, sobre todo en pruebas).
+//
+// Hallazgo de CodeRabbit en la revisión de este PR: la primera versión
+// hacía `.collect()` de toda la tabla y reducía a mano — un table scan
+// completo en cada carga del Panel de Control. `cierresTurno` no tiene
+// política de borrado (convención "nada se borra" del proyecto), así que
+// crece indefinidamente; el índice `by_creation_time` que Convex ya trae
+// por default resuelve exactamente "el documento más reciente" con
+// `.order('desc').first()`, sin escanear nada.
+export async function obtenerUltimoCierreImpl(ctx: QueryCtx) {
+  const ultimo = await ctx.db.query('cierresTurno').order('desc').first();
+  if (ultimo === null) return null;
+  return { fecha: ultimo.fecha, linea: ultimo.linea, turno: ultimo.turno };
+}
+
 export const getKPIsHoy = query({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {
     await requireRole(ctx, token, ROLES_DASHBOARD);
-    return calcularKPIsHoyImpl(ctx);
+    const [kpis, ultimoCierre] = await Promise.all([
+      calcularKPIsHoyImpl(ctx),
+      obtenerUltimoCierreImpl(ctx),
+    ]);
+    return { ...kpis, ultimoCierre };
   },
 });
 
