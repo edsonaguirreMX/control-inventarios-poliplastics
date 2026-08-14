@@ -175,13 +175,18 @@ export async function calcularKPIsHoyImpl(ctx: QueryCtx) {
 // llevó varios días sin capturar). Se ordena por `_creationTime` (lo da
 // Convex, único y monótono por documento) y no por el campo de negocio
 // `capturadoEn` (`Date.now()` de la app — dos mutations seguidas pueden
-// empatar al milisegundo, sobre todo en pruebas). Tabla chica (unos
-// cuantos cierres por día) — un `.collect()` completo es correcto y
-// suficientemente rápido, no amerita un índice nuevo solo para esto.
+// empatar al milisegundo, sobre todo en pruebas).
+//
+// Hallazgo de CodeRabbit en la revisión de este PR: la primera versión
+// hacía `.collect()` de toda la tabla y reducía a mano — un table scan
+// completo en cada carga del Panel de Control. `cierresTurno` no tiene
+// política de borrado (convención "nada se borra" del proyecto), así que
+// crece indefinidamente; el índice `by_creation_time` que Convex ya trae
+// por default resuelve exactamente "el documento más reciente" con
+// `.order('desc').first()`, sin escanear nada.
 export async function obtenerUltimoCierreImpl(ctx: QueryCtx) {
-  const cierres = await ctx.db.query('cierresTurno').collect();
-  if (cierres.length === 0) return null;
-  const ultimo = cierres.reduce((max, c) => (c._creationTime > max._creationTime ? c : max));
+  const ultimo = await ctx.db.query('cierresTurno').order('desc').first();
+  if (ultimo === null) return null;
   return { fecha: ultimo.fecha, linea: ultimo.linea, turno: ultimo.turno };
 }
 
