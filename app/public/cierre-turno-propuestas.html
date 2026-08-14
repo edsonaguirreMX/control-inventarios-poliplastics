@@ -623,11 +623,22 @@ async function cambiarDiaSeleccionado(iso){
 /* ============================================================
    ESTADO DE CIERRES (línea × turno) — real, vía estadoCierresDelDia
    ============================================================ */
-async function refrescarCierresHoy(){
-  CIERRES_HOY = await window.Session.call(api.cierres.estadoCierresDelDia, { fecha: fechaSeleccionada }, 'query');
+// EDS-83 (auditoría CodeRabbit): si el operador cambia el selector de día
+// dos veces antes de que la primera consulta termine, ambas llamadas
+// tocan CIERRES_HOY/el DOM — la respuesta más lenta podría llegar AL
+// FINAL y pintar cierres que ya no corresponden a fechaSeleccionada.
+// `fechaPedida` se captura ANTES del await; si al volver ya no coincide
+// con fechaSeleccionada, es que el usuario cambió de día mientras esto
+// estaba en vuelo — se descarta la respuesta obsoleta en vez de aplicarla.
+async function refrescarCierresHoy(fechaPedida = fechaSeleccionada){
+  const resultado = await window.Session.call(api.cierres.estadoCierresDelDia, { fecha: fechaPedida }, 'query');
+  if (fechaPedida !== fechaSeleccionada) return;
+  CIERRES_HOY = resultado;
 }
 async function renderCierreGrid(){
-  await refrescarCierresHoy();
+  const fechaPedida = fechaSeleccionada;
+  await refrescarCierresHoy(fechaPedida);
+  if (fechaPedida !== fechaSeleccionada) return; // idem — no pintar un grid obsoleto
   const hoyReal = await isoHoy();
   const prefijo = fechaSeleccionada === hoyReal ? 'Cierres de hoy'
     : fechaSeleccionada === sumarDiasISOCliente(hoyReal, -1) ? 'Cierres de ayer'
