@@ -170,20 +170,23 @@ a{color:inherit;}
   <div class="card">
     <!-- EDS-84: un solo formulario — el rol lo decide el backend al
          autenticar, nunca una pestaña elegida antes de escribir la
-         contraseña (ver redirectByRole() abajo). -->
-    <div id="loginForm" style="display:flex;flex-direction:column;gap:1.1rem;">
+         contraseña (ver redirectByRole() abajo). <form> real (no <div>)
+         para semántica de envío nativa (Enter en cualquier campo, no
+         solo en el de contraseña) y labels asociados por `for`
+         (auditoría CodeRabbit del PR). -->
+    <form id="loginForm" style="display:flex;flex-direction:column;gap:1.1rem;">
       <div class="field-group">
-        <label>Usuario</label>
-        <input type="text" id="loginUsuario" placeholder="usuario" autocomplete="username">
+        <label for="loginUsuario">Usuario</label>
+        <input type="text" id="loginUsuario" name="usuario" placeholder="usuario" autocomplete="username">
       </div>
       <div class="field-group">
-        <label>Contraseña</label>
-        <input type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password">
+        <label for="loginPassword">Contraseña</label>
+        <input type="password" id="loginPassword" name="password" placeholder="••••••••" autocomplete="current-password">
       </div>
       <label class="remember-row"><input type="checkbox" id="loginRemember"> Recordar en este dispositivo</label>
       <div id="loginError" class="field-error"></div>
-      <button class="btn-primary" id="btnLoginEntrar" disabled>Entrar</button>
-    </div>
+      <button class="btn-primary" id="btnLoginEntrar" type="submit" disabled>Entrar</button>
+    </form>
   </div>
 
   <p class="footnote">Los roles y accesos se asignan en <a href="/gestion-usuarios.html">Gestión de Usuarios</a> (Admin). Como los operadores rotan de línea y turno, su cuenta no queda ligada a ninguna — eligen línea y turno cada vez que cierran un turno.</p>
@@ -211,9 +214,15 @@ function wireEntrarState() {
   };
   document.getElementById('loginUsuario').addEventListener('input', update);
   document.getElementById('loginPassword').addEventListener('input', update);
-  document.getElementById('loginPassword').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !document.getElementById('btnLoginEntrar').disabled) login();
-  });
+  // Auditoría CodeRabbit del PR: sin esto, si el navegador autocompleta
+  // ambos campos (autofill guardado, o restaurar la página con "atrás"),
+  // el botón se quedaba deshabilitado hasta que el usuario tocara algo —
+  // 'input' nunca se dispara para un valor que el navegador ya puso ahí
+  // solo. `update()` de entrada sincroniza el estado real; `pageshow`
+  // cubre el caso de bfcache (volver con "atrás" a una página ya
+  // rellenada, sin recargarla).
+  update();
+  window.addEventListener('pageshow', update);
 }
 wireEntrarState();
 
@@ -260,7 +269,13 @@ async function login() {
     errorBox.style.display = 'block';
   }
 }
-document.getElementById('btnLoginEntrar').addEventListener('click', () => login());
+// <form> real (auditoría CodeRabbit del PR) — 'submit' cubre tanto el
+// clic en el botón como Enter en cualquier campo del formulario, no
+// solo en el de contraseña como antes.
+document.getElementById('loginForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  login();
+});
 
 /* ---------- si ya hay una sesión válida (token recordado), saltar el login ---------- */
 (async () => {
