@@ -2,9 +2,15 @@ import { v, ConvexError } from 'convex/values';
 import { mutation, query } from './_generated/server';
 import { requireRole } from './lib/auth';
 import { aplicarCierreImpl, recapturarCierreImpl } from './cierreEngine';
+import { validarFechaOperativaEnVentana } from './lib/fechaOperativa';
 
 const LINEAS = [1, 2] as const;
 const TURNOS = [1, 2] as const;
+
+// EDS-83: cuántos días atrás puede capturar el wizard un turno tardío
+// (p. ej. captura la noche siguiente porque no hubo señal/tiempo antes) —
+// más viejo que esto, el camino correcto es Corrección de Capturas.
+const DIAS_ATRAS_PERMITIDOS = 7;
 
 // Estado de las 4 combinaciones línea×turno de un día — el operador ve de
 // un vistazo cuáles ya se cerraron. No es una tabla, se deriva del índice
@@ -82,6 +88,17 @@ export const crearCierreTurno = mutation({
     if (args.cargasPreparadas < 0) {
       throw new ConvexError('crearCierreTurno: cargasPreparadas no puede ser negativo.');
     }
+
+    // EDS-83: nunca confiar en que el cliente mande una fecha razonable
+    // solo porque la UI ya restringe las opciones que ofrece — validar
+    // en servidor, siempre. Encontrado real: sin esto, un cierre
+    // capturado tarde (o un bug de UI) podía quedar fechado el día
+    // equivocado sin que nada lo impidiera.
+    const params = await ctx.db.query('parametrosProduccion').first();
+    if (!params) {
+      throw new Error('crearCierreTurno: no hay parámetros de producción configurados.');
+    }
+    validarFechaOperativaEnVentana(args.fecha, params.zonaHoraria, params.horaInicioTurno1, DIAS_ATRAS_PERMITIDOS);
 
     const existente = await ctx.db
       .query('cierresTurno')

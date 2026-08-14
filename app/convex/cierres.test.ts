@@ -4,6 +4,7 @@ import schema from './schema';
 import { api } from './_generated/api';
 import { crearCapaImpl } from './peps';
 import { crearMaterialPrueba, crearUsuarioPrueba, crearSesionPrueba, crearParametrosPrueba } from './testHelpers';
+import { fechaOperativa, sumarDiasISO } from './lib/fechaOperativa';
 
 const modules = import.meta.glob('./**/*.ts');
 
@@ -170,5 +171,46 @@ describe('cierres: estadoCierresDelDia / consumoEsperado (tarea 4.1)', () => {
     const resultado = await t.query(api.cierres.consumoEsperado, { cargasPreparadas: 8, token: operadorToken });
     const fila = resultado.find((r) => r.materialId === matBId);
     expect(fila?.kgEsperado).toBe(200); // 25 * 8
+  });
+});
+
+// EDS-83: encontrado real — el usuario capturó el primer cierre real
+// tarde (la noche siguiente) y quedó fechado el día equivocado porque
+// nada validaba `fecha` en el servidor. Estas pruebas ejercitan la
+// mutation real, no solo la función pura (esa cobertura vive en
+// tiempo.test.ts).
+describe('cierres: crearCierreTurno valida fecha en servidor (EDS-83)', () => {
+  test('rechaza una fecha futura', async () => {
+    const t = convexTest(schema, modules);
+    const { matAId, operadorToken } = await setup(t);
+    const manana = sumarDiasISO(fechaOperativa(Date.now(), 'America/Mexico_City', '06:00'), 1);
+
+    await expect(
+      t.mutation(api.cierres.crearCierreTurno, {
+        fecha: manana, linea: 1, turno: 1, cargasPreparadas: 8, metrosBuenos: 40,
+        caballetes105Pzas: 0, caballetes106Pzas: 0,
+        consumoPorMaterial: [{ materialId: matAId, kgConsumido: 180 }],
+        token: operadorToken,
+      })
+    ).rejects.toThrow(/fecha futura/);
+
+    expect(await t.run((ctx) => ctx.db.query('cierresTurno').collect())).toHaveLength(0);
+  });
+
+  test('rechaza una fecha de hace más de 7 días (captura tardía fuera de ventana)', async () => {
+    const t = convexTest(schema, modules);
+    const { matAId, operadorToken } = await setup(t);
+    const hace8 = sumarDiasISO(fechaOperativa(Date.now(), 'America/Mexico_City', '06:00'), -8);
+
+    await expect(
+      t.mutation(api.cierres.crearCierreTurno, {
+        fecha: hace8, linea: 1, turno: 1, cargasPreparadas: 8, metrosBuenos: 40,
+        caballetes105Pzas: 0, caballetes106Pzas: 0,
+        consumoPorMaterial: [{ materialId: matAId, kgConsumido: 180 }],
+        token: operadorToken,
+      })
+    ).rejects.toThrow(/hasta 7 días atrás/);
+
+    expect(await t.run((ctx) => ctx.db.query('cierresTurno').collect())).toHaveLength(0);
   });
 });

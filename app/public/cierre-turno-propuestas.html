@@ -277,6 +277,17 @@ button{font-family:inherit;}
 .cierre-cell .st.done{background:var(--positive-soft);color:var(--positive-ink);}
 .cierre-cell .st.pending{background:var(--surface);color:var(--ink-faint);}
 
+/* EDS-83: selector de día operativo — el operador siempre ve y elige
+   explícitamente qué día está capturando, en vez de asumirlo en
+   silencio. Mismo lenguaje visual que .field-group de otras pantallas. */
+.dia-picker{display:flex;flex-direction:column;gap:.35rem;}
+.dia-picker label{font-size:.72rem;color:var(--ink-muted);text-transform:uppercase;letter-spacing:.06em;}
+.dia-picker select{
+  border:1px solid var(--border);background:var(--surface-2);border-radius:9px;padding:.65rem .8rem;
+  font-size:.85rem;color:var(--ink);font-weight:600;cursor:pointer;
+}
+.dia-picker select:focus{outline:none;border-color:var(--accent);background:var(--surface);}
+
 .cierre-inline-status{margin:0 1.1rem 1rem;padding:.55rem .75rem;border-radius:9px;font-size:.74rem;line-height:1.4;}
 .cierre-inline-status.ok{background:var(--surface-2);color:var(--ink-muted);}
 .cierre-inline-status.warn{background:var(--warning-soft);color:var(--warning);}
@@ -338,8 +349,12 @@ button{font-family:inherit;}
           <div class="wiz-flow active" id="wizHome">
             <div class="wiz-step-body" style="display:flex;flex-direction:column;padding:0 1.1rem;gap:1.1rem;">
               <div class="wiz-step-title" style="padding:1rem 0 0;">
-                <div class="k">Almacén Tejaflex · 07/08/2026</div>
+                <div class="k">Almacén Tejaflex</div>
                 <h3>¿Qué vas a capturar?</h3>
+              </div>
+              <div class="dia-picker">
+                <label for="diaSelect">Día que estás capturando</label>
+                <select id="diaSelect" onchange="cambiarDiaSeleccionado(this.value)"></select>
               </div>
               <div style="display:flex;flex-direction:column;gap:.8rem;">
                 <button class="home-card" onclick="goEntradas()">
@@ -352,7 +367,7 @@ button{font-family:inherit;}
                 </button>
               </div>
               <div class="cierre-status">
-                <div class="cierre-status-title">Cierres de hoy</div>
+                <div class="cierre-status-title" id="cierreStatusTitle">Cierres de hoy</div>
                 <div class="cierre-grid" id="cierreGrid"></div>
               </div>
             </div>
@@ -389,6 +404,7 @@ button{font-family:inherit;}
             <div class="wiz-step active" data-step="0">
               <div class="wiz-step-body">
                 <div class="wiz-step-title"><div class="k">Cierre de turno · Paso 1 de 4</div><h3>¿Qué turno vas a cerrar?</h3></div>
+                <div class="cierre-inline-status ok" id="wizFechaLabel"></div>
                 <div class="section-label">Línea</div>
                 <div class="big-pick" id="wizLinea">
                   <button class="sel" data-v="1"><b>1</b><span>Línea</span></button>
@@ -565,16 +581,79 @@ async function isoHoy(){ return window.Session.call(api.tiempo.obtenerFechaOpera
 function isoADisplayLargo(iso){ const [y,m,d] = iso.split('-'); return `${d}/${m}/${y}`; }
 
 /* ============================================================
+   EDS-83: DÍA OPERATIVO SELECCIONADO — el wizard nunca vuelve a calcular
+   "hoy" en el momento de guardar (eso fue exactamente el bug real:
+   capturar por la noche un turno que había terminado el día anterior
+   quedaba fechado el día equivocado, sin que nadie lo notara antes de
+   guardar). Se fija UNA vez al abrir el menú (o al cambiarlo a mano) y
+   viaja igual a ambos flujos (Entrada de material y Cierre de turno).
+   ============================================================ */
+const DIAS_ATRAS_SELECCIONABLES = 7; // mismo límite que valida el servidor en cierres (EDS-83)
+let fechaSeleccionada = null;
+
+function sumarDiasISOCliente(iso, dias){
+  const [y,m,d] = iso.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m-1, d));
+  dt.setUTCDate(dt.getUTCDate() + dias);
+  return dt.toISOString().slice(0,10);
+}
+const MESES_ES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+function isoADisplayCompleto(iso){
+  const [y,m,d] = iso.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m-1, d, 12)); // mediodía UTC — evita bordes de zona horaria en el nombre del día
+  const nombreDia = new Intl.DateTimeFormat('es-MX', { weekday:'long', timeZone:'UTC' }).format(dt);
+  return `${nombreDia} ${d} de ${MESES_ES[m-1]}`;
+}
+async function initDiaPickerSiHaceFalta(){
+  if (fechaSeleccionada) return; // ya se eligió antes en esta sesión — no resetear a "hoy" al volver al menú
+  const hoy = await isoHoy();
+  fechaSeleccionada = hoy;
+  const select = document.getElementById('diaSelect');
+  select.innerHTML = Array.from({length: DIAS_ATRAS_SELECCIONABLES + 1}, (_,i)=>{
+    const iso = sumarDiasISOCliente(hoy, -i);
+    const prefijo = i===0 ? 'Hoy · ' : i===1 ? 'Ayer · ' : '';
+    return `<option value="${iso}"${i===0?' selected':''}>${prefijo}${isoADisplayCompleto(iso)}</option>`;
+  }).join('');
+}
+async function cambiarDiaSeleccionado(iso){
+  fechaSeleccionada = iso;
+  await renderCierreGrid();
+}
+
+/* ============================================================
    ESTADO DE CIERRES (línea × turno) — real, vía estadoCierresDelDia
    ============================================================ */
-async function refrescarCierresHoy(){
-  CIERRES_HOY = await window.Session.call(api.cierres.estadoCierresDelDia, { fecha: await isoHoy() }, 'query');
+// EDS-83 (auditoría CodeRabbit, ronda 2): si el operador cambia el
+// selector de día mientras hay un await en vuelo, una respuesta vieja
+// podía pintar el DOM con una mezcla de fecha nueva + datos viejos — la
+// primera ronda del fix solo guardaba DESPUÉS del primer await
+// (refrescarCierresHoy), pero renderCierreGrid todavía tenía un SEGUNDO
+// await (isoHoy()) sin proteger, dejando la misma ventana de carrera
+// abierta un paso más adelante. Fix real: refrescarCierresHoy regresa el
+// resultado LOCAL (nunca depende de que quien llama vuelva a leer una
+// global que pudo cambiar mientras tanto), y renderCierreGrid hace UNA
+// sola comprobación al final, después de TODOS los await, pintando
+// siempre con fechaPedida/cierres locales — nunca con
+// fechaSeleccionada/CIERRES_HOY global, que para ese momento ya podrían
+// pertenecer a otra selección más reciente.
+async function refrescarCierresHoy(fechaPedida = fechaSeleccionada){
+  const resultado = await window.Session.call(api.cierres.estadoCierresDelDia, { fecha: fechaPedida }, 'query');
+  if (fechaPedida === fechaSeleccionada) CIERRES_HOY = resultado;
+  return resultado;
 }
 async function renderCierreGrid(){
-  await refrescarCierresHoy();
+  const fechaPedida = fechaSeleccionada;
+  const cierres = await refrescarCierresHoy(fechaPedida);
+  const hoyReal = await isoHoy();
+  if (fechaPedida !== fechaSeleccionada) return; // el usuario cambió de día mientras esto estaba en vuelo — no pintar un grid obsoleto
+
+  const prefijo = fechaPedida === hoyReal ? 'Cierres de hoy'
+    : fechaPedida === sumarDiasISOCliente(hoyReal, -1) ? 'Cierres de ayer'
+    : `Cierres del ${isoADisplayCompleto(fechaPedida)}`;
+  document.getElementById('cierreStatusTitle').textContent = prefijo;
   const combos = [[1,1],[1,2],[2,1],[2,2]];
   document.getElementById('cierreGrid').innerHTML = combos.map(([l,t])=>{
-    const info = CIERRES_HOY.find(c=>c.linea===l && c.turno===t);
+    const info = cierres.find(c=>c.linea===l && c.turno===t);
     const done = info?.cerrado;
     return `<div class="cierre-cell">
       <span class="lt">Línea ${l} · Turno ${t}</span>
@@ -590,6 +669,7 @@ async function showHome(){
   document.querySelectorAll('#phoneA .wiz-flow').forEach(f=>f.classList.remove('active'));
   document.getElementById('wizHome').classList.add('active');
   document.getElementById('aStatus').textContent = 'Menú';
+  await initDiaPickerSiHaceFalta();
   await renderCierreGrid();
 }
 async function goEntradas(){
@@ -604,6 +684,7 @@ async function goCierre(){
   document.querySelectorAll('#phoneA .wiz-flow').forEach(f=>f.classList.remove('active'));
   document.getElementById('flowCierre').classList.add('active');
   document.getElementById('aStatus').textContent = 'Cierre de turno';
+  document.getElementById('wizFechaLabel').textContent = `📅 Vas a cerrar el turno de: ${isoADisplayCompleto(fechaSeleccionada)}`;
   await resetCierreForm();
   cierreGo(0);
   await updateInlineStatus();
@@ -657,7 +738,7 @@ async function renderEntrResumen(){
     : `<div class="summary-line"><span>Sin materiales marcados</span><b>—</b></div>`;
   document.getElementById('entrResumen').innerHTML = `
     <div class="wiz-step-title"><div class="k">Entrada de material · Paso 2 de 2</div><h3>Revisa antes de guardar</h3></div>
-    <div class="summary-line" style="border-top:none;"><span>Fecha</span><b>${isoADisplayLargo(await isoHoy())}</b></div>
+    <div class="summary-line" style="border-top:none;"><span>Fecha</span><b>${isoADisplayCompleto(fechaSeleccionada)}</b></div>
     <div class="summary-line"><span>Destino</span><b>Almacén general — sin línea</b></div>
     <div class="summary-group"><h4>Materiales recibidos</h4>${rowsHtml}</div>
     <div class="summary-line"><span>Total recibido</span><b class="tnum">${fmt(total)} kg</b></div>`;
@@ -689,7 +770,7 @@ async function entrSave(){
     // quedado guardados aunque la UI mostrara error (guardado parcial,
     // mayor de la auditoría). Con el batch, o se guardan todos o ninguno.
     await window.Session.call(api.entradas.crearEntradasBatch, {
-      fecha: await isoHoy(),
+      fecha: fechaSeleccionada,
       materiales: filas.map(f=>({ materialId: f.materialId, cantidadKg: f.qty })),
     }, 'mutation');
     btn.textContent = '✓ Entrada guardada'; btn.classList.add('done');
@@ -914,7 +995,8 @@ function renderWizResumen(){
   }).join('');
   document.getElementById('wizResumen').innerHTML = `
     <div class="wiz-step-title"><div class="k">Cierre de turno · Paso 4 de 4</div><h3>Revisa antes de guardar</h3></div>
-    <div class="summary-line" style="border-top:none;"><span>Línea / Turno</span><b>L${wizState.linea} · T${wizState.turno}</b></div>
+    <div class="summary-line" style="border-top:none;"><span>Fecha</span><b>${isoADisplayCompleto(fechaSeleccionada)}</b></div>
+    <div class="summary-line"><span>Línea / Turno</span><b>L${wizState.linea} · T${wizState.turno}</b></div>
     <div class="summary-line"><span>Cargas preparadas</span><b>${fmt(cargas)}</b></div>
     <div class="summary-group"><h4>Consumo</h4>${consumoHtml}</div>
     <div class="summary-group"><h4>Producción y merma</h4>
@@ -944,12 +1026,12 @@ async function wizSave(){
   const textoOriginal = btn.textContent;
   btn.disabled = true; btn.textContent = 'Guardando…';
   try{
-    // Una sola lectura de la fecha operativa, reutilizada para el guardado
-    // y para el toast — evita dos round-trips que en teoría podrían caer
-    // en lados distintos de la medianoche operativa.
-    const fechaHoy = await isoHoy();
+    // EDS-83: fecha FIJADA al elegir el día en el menú, nunca recalculada
+    // aquí — esto es exactamente lo que corrige el bug real (capturar de
+    // noche un turno que terminó horas antes ya no puede aterrizar en el
+    // día equivocado, porque el día se decidió explícitamente al inicio).
     const r = await window.Session.call(api.cierres.crearCierreTurno, {
-      fecha: fechaHoy, linea: wizState.linea, turno: wizState.turno,
+      fecha: fechaSeleccionada, linea: wizState.linea, turno: wizState.turno,
       cargasPreparadas, metrosBuenos, caballetes105Pzas, caballetes106Pzas,
       consumoPorMaterial, confirmarRecierre: confirmandoRecierre,
     }, 'mutation');
@@ -961,7 +1043,7 @@ async function wizSave(){
       btn.disabled = false; btn.textContent = textoOriginal;
       confirmBox.hidden = false;
       confirmBox.className = 'field-warn';
-      confirmBox.innerHTML = `⚠ Línea ${wizState.linea} · Turno ${wizState.turno} ya se cerró hoy. Guardar de nuevo se registrará como una corrección (recierre), revirtiendo el consumo anterior y aplicando estos valores nuevos. <button type="button" onclick="confirmarYGuardarRecierre()">Sí, recerrar este turno</button>`;
+      confirmBox.innerHTML = `⚠ Línea ${wizState.linea} · Turno ${wizState.turno} ya se cerró el ${isoADisplayCompleto(fechaSeleccionada)}. Guardar de nuevo se registrará como una corrección (recierre), revirtiendo el consumo anterior y aplicando estos valores nuevos. <button type="button" onclick="confirmarYGuardarRecierre()">Sí, recerrar este turno</button>`;
       return;
     }
 
@@ -971,7 +1053,7 @@ async function wizSave(){
     const t = document.getElementById('wizToast');
     const quien = sessionUser.nombre ? ` · Cerrado por ${sessionUser.nombre}` : '';
     const etiqueta = r.recierreAplicado ? 'Turno recerrado (corrección)' : 'Turno cerrado';
-    t.textContent = `✓ ${etiqueta} — Línea ${wizState.linea} · Turno ${wizState.turno} · ${isoADisplayLargo(fechaHoy)}${quien}`;
+    t.textContent = `✓ ${etiqueta} — Línea ${wizState.linea} · Turno ${wizState.turno} · ${isoADisplayCompleto(fechaSeleccionada)}${quien}`;
     t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 2400);
     document.getElementById('wizBackHomeBtn').hidden = false;
     await refrescarCierresHoy();
@@ -1021,6 +1103,7 @@ try {
 window.goEntradas = goEntradas;
 window.goCierre = goCierre;
 window.showHome = showHome;
+window.cambiarDiaSeleccionado = cambiarDiaSeleccionado;
 window.tryAdvanceEntrada = tryAdvanceEntrada;
 window.entrSave = entrSave;
 window.cierreGo = cierreGo;
