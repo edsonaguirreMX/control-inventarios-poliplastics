@@ -428,7 +428,7 @@ button{font-family:inherit;}
                 <div class="wiz-step-title"><div class="k">Cierre de turno · Paso 2 de 4</div><h3>Consumo del turno</h3></div>
                 <div class="field-block" style="border-top:none;">
                   <label>Cargas preparadas</label>
-                  <div class="field-big"><input type="number" inputmode="numeric" id="wizCargas" value="14" oninput="renderConsumo()"><span class="u">cargas</span></div>
+                  <div class="field-big"><input type="number" inputmode="numeric" id="wizCargas" placeholder="0" oninput="renderConsumo()"><span class="u">cargas</span></div>
                 </div>
                 <div class="field-warn" id="wizCargasWarn" hidden></div>
                 <div class="section-label">kg por material <span class="lock">según fórmula de carga</span></div>
@@ -445,7 +445,7 @@ button{font-family:inherit;}
                 <div class="wiz-step-title"><div class="k">Cierre de turno · Paso 3 de 4</div><h3>Producción y merma</h3></div>
                 <div class="field-block" style="border-top:none;">
                   <label>Metros buenos producidos</label>
-                  <div class="field-big"><input type="number" inputmode="decimal" id="wizMetros" value="505" oninput="calcMermaA(); checkMetrosWarn(); checkCaballetesWarn();"><span class="u">m</span></div>
+                  <div class="field-big"><input type="number" inputmode="decimal" id="wizMetros" placeholder="0" oninput="calcMermaA(); checkMetrosWarn(); checkCaballetesWarn();"><span class="u">m</span></div>
                 </div>
                 <div class="field-warn" id="wizMetrosWarn" hidden></div>
                 <div class="field-block">
@@ -453,12 +453,12 @@ button{font-family:inherit;}
                 </div>
                 <div class="field-block">
                   <label>Caballetes 1.05 producidos</label>
-                  <div class="field-big"><input type="number" inputmode="numeric" id="wizCab105" value="12" oninput="calcMermaA(); checkCaballetesWarn();"><span class="u">pzas</span></div>
+                  <div class="field-big"><input type="number" inputmode="numeric" id="wizCab105" placeholder="0" oninput="calcMermaA(); checkCaballetesWarn();"><span class="u">pzas</span></div>
                   <small class="mat-hint" style="padding:0;">1.250 kg cada uno</small>
                 </div>
                 <div class="field-block">
                   <label>Caballetes 1.06 producidos</label>
-                  <div class="field-big"><input type="number" inputmode="numeric" id="wizCab106" value="8" oninput="calcMermaA(); checkCaballetesWarn();"><span class="u">pzas</span></div>
+                  <div class="field-big"><input type="number" inputmode="numeric" id="wizCab106" placeholder="0" oninput="calcMermaA(); checkCaballetesWarn();"><span class="u">pzas</span></div>
                   <small class="mat-hint" style="padding:0;">1.9 kg cada uno</small>
                 </div>
                 <div class="field-block">
@@ -504,10 +504,6 @@ button{font-family:inherit;}
       </div>
     </div>
   </div>
-
-  <footer class="page-foot" style="margin-top:3rem;padding-top:1.2rem;border-top:1px solid var(--border);font-size:.78rem;color:var(--ink-faint);">
-    Mockup de diseño — cantidades y fórmula de carga son ilustrativas para fines de comparación visual. Basado en el Documento de Funcionalidades del Sistema de Control de Materias Primas Tejaflex.
-  </footer>
 
 </div>
 
@@ -1069,10 +1065,18 @@ function confirmarYGuardarRecierre(){
 }
 
 async function resetCierreForm(){
-  document.getElementById('wizCargas').value = 14;
-  document.getElementById('wizMetros').value = 505;
-  document.getElementById('wizCab105').value = 12;
-  document.getElementById('wizCab106').value = 8;
+  // Hallazgo real del usuario en el primer cierre real en producción:
+  // estos 4 campos traían valores de demo (14/505/12/8) precargados —
+  // "casualmente" dentro de los rangos que no disparan ninguna
+  // advertencia (checkCargasWarn acepta 10-20, checkMetrosWarn solo
+  // exige >0), así que un operador podía guardar un cierre real sin
+  // tocar ninguno de los 4 y sin ver ni una sola alerta. Deben iniciar
+  // vacíos — el operador SIEMPRE escribe el dato real, nunca hereda un
+  // número que parezca plausible por casualidad.
+  document.getElementById('wizCargas').value = '';
+  document.getElementById('wizMetros').value = '';
+  document.getElementById('wizCab105').value = '';
+  document.getElementById('wizCab106').value = '';
   document.getElementById('wizConsumo').innerHTML = '';
   document.getElementById('wizRecierreConfirm').hidden = true;
   document.getElementById('wizSaveError').hidden = true;
