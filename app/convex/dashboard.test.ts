@@ -92,10 +92,18 @@ describe('dashboard: getKPIsHoy (tarea 6.1)', () => {
     expect(fila?.status).toBe('crit');
   });
 
-  test('BUG DE INTEGRIDAD REGRESIÓN: el consumo diario promedio ignora cierreConsumos con vigente:false (recierre)', async () => {
+  // EDS-88: el punto de reorden dejó de basarse en consumo REAL promedio
+  // (por eso se elimina el viejo test de regresión que verificaba
+  // exclusión de cierreConsumos no vigentes de ese promedio — ya no
+  // existe ningún promedio real que calcular aquí). Ahora se prueba lo
+  // contrario: que Panel de Control es un espejo EXACTO de Catálogo de
+  // Materiales, incluso cuando hay cierres reales capturados (que ya no
+  // deben influir en el resultado).
+  test('EDS-88: getKPIsHoy.reorderKg es un espejo exacto de materiales.listCatalogo.reorderEnUso, sin importar el consumo real capturado', async () => {
     const t = convexTest(schema, modules);
-    const { comprasToken, operadorToken, adminId } = await setup(t);
-    const matId = await crearMaterialPrueba(t, { leadTimeDias: 1, stockSeguridadDias: 0 });
+    const { comprasToken, adminToken, operadorToken, adminId } = await setup(t);
+    const matId = await crearMaterialPrueba(t, { leadTimeDias: 3, stockSeguridadDias: 5 });
+    await t.run((ctx) => ctx.db.insert('formulaCarga', { materialId: matId, kgPorCarga: 10, nota: '', updatedAt: Date.now() }));
     await t.run((ctx) =>
       crearCapaImpl(ctx, {
         materialId: matId, kgOriginal: 100000, costoUnitario: 1, fechaEntrada: 1000,
@@ -103,34 +111,44 @@ describe('dashboard: getKPIsHoy (tarea 6.1)', () => {
         origenTipo: 'entrada', origenId: 'setup', createdBy: adminId,
       })
     );
-
-    // Primer cierre: consume 1400 kg (queda vigente:false tras el recierre).
+    // Un cierre real con un consumo bien distinto al teórico — si el
+    // dashboard todavía calculara con consumo real, reorderKg divergiría
+    // del de Catálogo. No debe importar.
     await t.mutation(api.cierres.crearCierreTurno, {
       fecha: HOY, linea: 1, turno: 1, cargasPreparadas: 1, metrosBuenos: 0,
       caballetes105Pzas: 0, caballetes106Pzas: 0,
-      consumoPorMaterial: [{ materialId: matId, kgConsumido: 1400 }],
+      consumoPorMaterial: [{ materialId: matId, kgConsumido: 9999 }],
       token: operadorToken,
     });
-    // Recierre del MISMO turno: consume solo 14 kg — el registro de 1400kg
-    // queda vigente:false, el de 14kg queda vigente:true.
-    await t.mutation(api.cierres.crearCierreTurno, {
-      fecha: HOY, linea: 1, turno: 1, cargasPreparadas: 1, metrosBuenos: 0,
-      caballetes105Pzas: 0, caballetes106Pzas: 0,
-      consumoPorMaterial: [{ materialId: matId, kgConsumido: 14 }],
-      confirmarRecierre: true, token: operadorToken,
-    });
-
-    // Verificación de control: SÍ existe una fila vigente:false de 1400kg.
-    const consumos = await t.run((ctx) => ctx.db.query('cierreConsumos').collect());
-    expect(consumos.some((c) => c.kgConsumido === 1400 && c.vigente === false)).toBe(true);
-    expect(consumos.some((c) => c.kgConsumido === 14 && c.vigente === true)).toBe(true);
 
     const kpis = await t.query(api.dashboard.getKPIsHoy, { token: comprasToken });
-    const fila = kpis.materiales.find((m) => m.materialId === matId);
-    // consumoDiarioPromedio = 14kg / 14 días = 1kg/día → reorder = 1×(1+0) = 1kg.
-    // Si el bug existiera (sumara también los 1400kg vigente:false),
-    // reorder saldría ~100× más grande.
-    expect(fila?.reorderKg).toBeCloseTo(1, 5);
+    const catalogo = await t.query(api.materiales.listCatalogo, { token: adminToken });
+    const filaDashboard = kpis.materiales.find((m) => m.materialId === matId);
+    const filaCatalogo = catalogo.find((m) => m.materialId === matId);
+
+    // consumoDiario = 10 kgPorCarga × 8 cargasPorTurno × 2 turnosPorDia × 2 líneas = 320
+    // reorder = 320 × (3 leadTime + 5 stockSeguridad) = 2560
+    expect(filaCatalogo?.reorderEnUso).toBeCloseTo(2560, 5);
+    expect(filaDashboard?.reorderKg).toBeCloseTo(filaCatalogo!.reorderEnUso!, 5);
+    expect(filaDashboard?.coberturaDias).toBeCloseTo(filaDashboard!.existenciaKg / filaCatalogo!.consumoDiario, 5);
+  });
+
+  test('EDS-88: cambiar lineasActivas recalcula reorderKg igual en Catálogo y en Panel de Control', async () => {
+    const t = convexTest(schema, modules);
+    const { comprasToken, adminToken } = await setup(t);
+    const matId = await crearMaterialPrueba(t, { leadTimeDias: 0, stockSeguridadDias: 1 });
+    await t.run((ctx) => ctx.db.insert('formulaCarga', { materialId: matId, kgPorCarga: 5, nota: '', updatedAt: Date.now() }));
+
+    await t.mutation(api.parametros.updateParametros, { lineasActivas: 1, token: adminToken });
+
+    const kpis = await t.query(api.dashboard.getKPIsHoy, { token: comprasToken });
+    const catalogo = await t.query(api.materiales.listCatalogo, { token: adminToken });
+    const filaDashboard = kpis.materiales.find((m) => m.materialId === matId);
+    const filaCatalogo = catalogo.find((m) => m.materialId === matId);
+
+    // consumoDiario = 5 × 8 × 2 × 1 línea = 80; reorder = 80 × (0+1) = 80
+    expect(filaCatalogo?.reorderEnUso).toBeCloseTo(80, 5);
+    expect(filaDashboard?.reorderKg).toBeCloseTo(80, 5);
   });
 
   test('% merma y costo real de hoy usan las 4 combinaciones línea×turno de hoy', async () => {

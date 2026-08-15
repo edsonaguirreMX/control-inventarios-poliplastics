@@ -55,6 +55,37 @@ describe('parametros: getParametros/updateParametros (tarea 2.2)', () => {
       t.mutation(api.parametros.updateParametros, { turnosPorDia: 0, token: adminToken })
     ).rejects.toThrow(/mayor a 0/);
   });
+
+  // EDS-88: lineasActivas — antes hardcoded a 2 (NUM_LINEAS en
+  // materiales.ts), ahora editable desde Catálogo de Materiales.
+  test('getParametros devuelve lineasActivas:2 por default cuando el documento no lo tiene (documentos existentes en prod)', async () => {
+    const t = convexTest(schema, modules);
+    const { adminToken } = await setup(t); // crearParametrosPrueba no inserta lineasActivas
+    const params = await t.query(api.parametros.getParametros, { token: adminToken });
+    expect(params.lineasActivas).toBe(2);
+  });
+
+  test('updateParametros persiste lineasActivas y getParametros lo refleja', async () => {
+    const t = convexTest(schema, modules);
+    const { adminToken } = await setup(t);
+    await t.mutation(api.parametros.updateParametros, { lineasActivas: 1, token: adminToken });
+    const params = await t.query(api.parametros.getParametros, { token: adminToken });
+    expect(params.lineasActivas).toBe(1);
+  });
+
+  test('rechaza lineasActivas fuera de 1-2 (spec fija máximo 2 líneas físicas)', async () => {
+    const t = convexTest(schema, modules);
+    const { adminToken } = await setup(t);
+    await expect(
+      t.mutation(api.parametros.updateParametros, { lineasActivas: 0, token: adminToken })
+    ).rejects.toThrow(/1 o 2/);
+    await expect(
+      t.mutation(api.parametros.updateParametros, { lineasActivas: 3, token: adminToken })
+    ).rejects.toThrow(/1 o 2/);
+    await expect(
+      t.mutation(api.parametros.updateParametros, { lineasActivas: 1.5, token: adminToken })
+    ).rejects.toThrow(/1 o 2/);
+  });
 });
 
 describe('parametros: updateFormulaCarga (tarea 2.2) — fuente única de verdad con Catálogo', () => {

@@ -23,6 +23,7 @@ export const getParametros = query({
     return {
       cargasPorTurno: params.cargasPorTurno,
       turnosPorDia: params.turnosPorDia,
+      lineasActivas: params.lineasActivas ?? 2,
       kgPorMetro: params.kgPorMetro,
       formula: materiales.map((m) => ({
         materialId: m._id,
@@ -40,16 +41,24 @@ export const getParametros = query({
 async function actualizarParametrosImpl(
   ctx: MutationCtx,
   user: { _id: Id<'users'> },
-  args: { cargasPorTurno?: number; turnosPorDia?: number; kgPorMetro?: number }
+  args: { cargasPorTurno?: number; turnosPorDia?: number; lineasActivas?: number; kgPorMetro?: number }
 ): Promise<void> {
-  // > 0, no solo "no negativo": Catálogo deriva consumoDiario y punto de
-  // reorden multiplicando por estos valores — dejarlos en 0 pondría todo
-  // el reorden teórico en 0 y ocultaría necesidades reales de compra.
+  // > 0, no solo "no negativo": Catálogo (y ahora también Panel de
+  // Control, EDS-88) derivan consumoDiario y punto de reorden
+  // multiplicando por estos valores — dejarlos en 0 pondría todo el
+  // reorden teórico en 0 y ocultaría necesidades reales de compra.
   if (args.cargasPorTurno !== undefined && args.cargasPorTurno <= 0) {
     throw new ConvexError('actualizarParametros: cargasPorTurno debe ser mayor a 0.');
   }
   if (args.turnosPorDia !== undefined && args.turnosPorDia <= 0) {
     throw new ConvexError('actualizarParametros: turnosPorDia debe ser mayor a 0.');
+  }
+  // EDS-88: 1 o 2 — el spec fija un máximo físico de 2 líneas (Lambrín/
+  // Thermo-PVC fuera de alcance v1, mismo límite ya usado en
+  // cierres.ts/entradas.ts). El usuario pidió poder bajarlo a 1 cuando
+  // solo opera una línea, para no inflar el punto de reorden teórico.
+  if (args.lineasActivas !== undefined && (!Number.isInteger(args.lineasActivas) || args.lineasActivas < 1 || args.lineasActivas > 2)) {
+    throw new ConvexError('actualizarParametros: lineasActivas debe ser 1 o 2.');
   }
   if (args.kgPorMetro !== undefined && args.kgPorMetro <= 0) {
     throw new ConvexError('actualizarParametros: kgPorMetro debe ser mayor a 0 (se usa como divisor en cierres/dashboard).');
@@ -61,6 +70,7 @@ async function actualizarParametrosImpl(
   const patch: Record<string, unknown> = { updatedAt: Date.now(), updatedBy: user._id };
   if (args.cargasPorTurno !== undefined) patch.cargasPorTurno = args.cargasPorTurno;
   if (args.turnosPorDia !== undefined) patch.turnosPorDia = args.turnosPorDia;
+  if (args.lineasActivas !== undefined) patch.lineasActivas = args.lineasActivas;
   if (args.kgPorMetro !== undefined) patch.kgPorMetro = args.kgPorMetro;
   await ctx.db.patch(params._id, patch);
 }
@@ -124,6 +134,7 @@ export const updateParametros = mutation({
   args: {
     cargasPorTurno: v.optional(v.number()),
     turnosPorDia: v.optional(v.number()),
+    lineasActivas: v.optional(v.number()),
     kgPorMetro: v.optional(v.number()),
     token: v.string(),
   },

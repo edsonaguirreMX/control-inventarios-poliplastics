@@ -74,12 +74,18 @@ export async function crearSesionPrueba(t: AnyTestConvex, userId: any) {
   return token;
 }
 
-export async function crearParametrosPrueba(t: AnyTestConvex, kgPorMetro = 4) {
+// lineasActivas se omite por default a propósito (no un default de 2
+// aquí) — así los tests que no lo pasan siguen probando el mismo caso
+// real de producción: un documento existente sin este campo (EDS-88 lo
+// agregó como v.optional, no con una migración), que el código debe
+// tratar como `?? 2`.
+export async function crearParametrosPrueba(t: AnyTestConvex, kgPorMetro = 4, lineasActivas?: number) {
   return t.run(async (ctx) => {
     const now = Date.now();
     return ctx.db.insert('parametrosProduccion', {
       cargasPorTurno: 8,
       turnosPorDia: 2,
+      ...(lineasActivas !== undefined ? { lineasActivas } : {}),
       kgPorMetro,
       horaInicioTurno1: '06:00',
       horaInicioTurno2: '18:00',

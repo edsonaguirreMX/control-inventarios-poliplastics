@@ -20,6 +20,7 @@ import type * as entradas from "../entradas.js";
 import type * as importacionInicial from "../importacionInicial.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_fechaOperativa from "../lib/fechaOperativa.js";
+import type * as lib_puntoReorden from "../lib/puntoReorden.js";
 import type * as materiales from "../materiales.js";
 import type * as parametros from "../parametros.js";
 import type * as peps from "../peps.js";
@@ -50,6 +51,7 @@ declare const fullApi: ApiFromModules<{
   importacionInicial: typeof importacionInicial;
   "lib/auth": typeof lib_auth;
   "lib/fechaOperativa": typeof lib_fechaOperativa;
+  "lib/puntoReorden": typeof lib_puntoReorden;
   materiales: typeof materiales;
   parametros: typeof parametros;
   peps: typeof peps;

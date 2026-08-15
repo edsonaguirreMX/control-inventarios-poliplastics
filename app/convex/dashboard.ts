@@ -3,6 +3,7 @@ import { mutation, query } from './_generated/server';
 import type { QueryCtx } from './_generated/server';
 import { requireRole } from './lib/auth';
 import { fechaOperativa, sumarDiasISO } from './lib/fechaOperativa';
+import { consumoDiarioTeorico, puntoReordenTeorico } from './lib/puntoReorden';
 
 // Roles que ven Panel de Control (mismo criterio que el guard de la
 // página en panel-control.html) — operador no tiene esta pantalla, su
@@ -13,12 +14,6 @@ import { fechaOperativa, sumarDiasISO } from './lib/fechaOperativa';
 // aparte en reporteDiarioConfig ni arriesgar que diverja de quién
 // realmente consume el dashboard.
 export const ROLES_DASHBOARD = ['compras', 'calidad', 'gerencia', 'admin'] as const;
-
-// Ventana para "consumo diario promedio" — alimenta el punto de reorden
-// (regla 4 del spec: consumo diario promedio × (lead time + stock de
-// seguridad en días, default 7)). 14 días es suficiente para amortiguar
-// variación turno a turno sin diluir una tendencia reciente real.
-const VENTANA_CONSUMO_DIAS = 14;
 
 export async function requireParametros(ctx: QueryCtx) {
   const params = await ctx.db.query('parametrosProduccion').first();
@@ -59,7 +54,10 @@ export async function cierresEnRango(ctx: QueryCtx, dias: number) {
 // abajo) es un wrapper delgado que solo agrega la autorización.
 export async function calcularKPIsHoyImpl(ctx: QueryCtx) {
     const params = await requireParametros(ctx);
-    const { hoy, cierres: cierresVentana } = await cierresEnRango(ctx, VENTANA_CONSUMO_DIAS);
+    // Antes se pedían 14 días de cierres aquí para promediar consumo real
+    // (EDS-88 lo quitó — ver más abajo); "hoy" ya no necesita ventana,
+    // solo el propio día.
+    const { hoy, cierres: cierresHoy } = await cierresEnRango(ctx, 1);
 
     const materiales = await ctx.db.query('materiales').withIndex('by_activo_orden', (q) => q.eq('activo', true)).collect();
 
@@ -75,27 +73,20 @@ export async function calcularKPIsHoyImpl(ctx: QueryCtx) {
       valorPorMaterial.set(c.materialId, (valorPorMaterial.get(c.materialId) ?? 0) + c.kgRestante * c.costoUnitario);
     }
 
-    // Consumo diario promedio por material — SOLO cierreConsumos con
-    // vigente:true; un recierre o corrección marca las filas viejas
-    // vigente:false pero las conserva para auditoría, y NUNCA deben
-    // contarse aquí (bloqueante recurrente en las auditorías del
-    // proyecto: "el dashboard calcula con datos obsoletos").
-    const consumoTotalPorMaterial = new Map<string, number>();
-    for (const cierre of cierresVentana) {
-      const consumos = await ctx.db
-        .query('cierreConsumos')
-        .withIndex('by_cierreTurnoId_vigente', (q) => q.eq('cierreTurnoId', cierre._id).eq('vigente', true))
-        .collect();
-      for (const c of consumos) {
-        consumoTotalPorMaterial.set(c.materialId, (consumoTotalPorMaterial.get(c.materialId) ?? 0) + c.kgConsumido);
-      }
-    }
+    // EDS-88: punto de reorden UNIFICADO con Catálogo de Materiales — antes
+    // este dashboard promediaba el consumo REAL de los últimos 14 días
+    // (cierreConsumos vigentes) y Catálogo usaba el consumo TEÓRICO de
+    // fórmula; a pedido explícito del usuario, Catálogo es ahora la única
+    // fuente de verdad y este cálculo es un espejo exacto (misma función
+    // compartida lib/puntoReorden.ts, mismos parámetros
+    // cargasPorTurno/turnosPorDia/lineasActivas editables desde Catálogo).
+    // Consecuencia aceptada: las alertas material-critico/material-por-vencer
+    // (que reutilizan esta función) también pasan a evaluarse contra el
+    // punto de reorden teórico, no el histórico real.
+    const formula = await ctx.db.query('formulaCarga').collect();
+    const formulaPorMaterial = new Map(formula.map((f) => [f.materialId, f]));
+    const paramsConsumo = { cargasPorTurno: params.cargasPorTurno, turnosPorDia: params.turnosPorDia, lineasActivas: params.lineasActivas ?? 2 };
 
-    // Punto de reorden (regla 4 del spec, no negociable):
-    // consumo diario promedio × (lead time + stock de seguridad en días,
-    // default 7 si no está configurado). Triturado (esInterno, se genera
-    // internamente) y HDPE virgen (esSustituto, sin cupo de consumo fijo)
-    // no tienen punto de reorden — igual que en el mockup original.
     const materialesConDetalle = materiales.map((m) => {
       const existenciaKg = existenciaPorMaterial.get(m._id) ?? 0;
       const valorKg = valorPorMaterial.get(m._id) ?? 0;
@@ -108,13 +99,11 @@ export async function calcularKPIsHoyImpl(ctx: QueryCtx) {
           reorderKg: null, coberturaDias: null, status: 'neutral' as const,
         };
       }
-      const consumoTotal = consumoTotalPorMaterial.get(m._id) ?? 0;
-      const consumoDiarioPromedio = consumoTotal / VENTANA_CONSUMO_DIAS;
-      const stockSeguridad = m.stockSeguridadDias ?? 7;
-      const leadTime = m.leadTimeDias ?? 0;
-      const reorderCalculado = consumoDiarioPromedio * (leadTime + stockSeguridad);
+      const kgPorCarga = formulaPorMaterial.get(m._id)?.kgPorCarga ?? 0;
+      const consumoDiario = consumoDiarioTeorico(kgPorCarga, paramsConsumo);
+      const reorderCalculado = puntoReordenTeorico(consumoDiario, m.leadTimeDias, m.stockSeguridadDias);
       const reorderKg = m.reorderMode === 'manual' && m.reorderManualKg !== null ? m.reorderManualKg : reorderCalculado;
-      const coberturaDias = consumoDiarioPromedio > 0 ? existenciaKg / consumoDiarioPromedio : null;
+      const coberturaDias = consumoDiario > 0 ? existenciaKg / consumoDiario : null;
       const status: 'crit' | 'warn' | 'ok' =
         existenciaKg < reorderKg ? 'crit' : existenciaKg < reorderKg * 1.15 ? 'warn' : 'ok';
       return {
@@ -127,7 +116,6 @@ export async function calcularKPIsHoyImpl(ctx: QueryCtx) {
 
     const valorInventarioTotal = materialesConDetalle.reduce((s, m) => s + m.valorKg, 0);
 
-    const cierresHoy = cierresVentana.filter((c) => c.fecha === hoy);
     const kgBuenosHoy = cierresHoy.reduce((s, c) => s + c.kgBuenos, 0);
     const metrosBuenosHoy = cierresHoy.reduce((s, c) => s + c.metrosBuenos, 0);
     const mermaTotalHoy = cierresHoy.reduce((s, c) => s + c.mermaTotalKg, 0);
@@ -139,7 +127,7 @@ export async function calcularKPIsHoyImpl(ctx: QueryCtx) {
 
     // Costo estándar de referencia: Σ %fórmula × costoEstandar de catálogo
     // (mismo cálculo que el mockup original, ahora con datos reales).
-    const formula = await ctx.db.query('formulaCarga').collect();
+    // Reutiliza `formula` ya cargada arriba para el punto de reorden.
     const totalKgPorCarga = formula.reduce((s, f) => s + f.kgPorCarga, 0);
     const materialesPorId = new Map(materiales.map((m) => [m._id, m]));
     const costoEstandarPorKg =

@@ -64,6 +64,13 @@ export default defineSchema({
     // singleton — un solo documento
     cargasPorTurno: v.number(),
     turnosPorDia: v.number(),
+    // EDS-88: cuántas líneas se consideran activas para el consumo diario
+    // teórico (kgPorCarga × cargasPorTurno × turnosPorDia × lineasActivas)
+    // que alimenta el punto de reorden — antes hardcoded a 2 en
+    // materiales.ts. Opcional (no v.number() a secas) porque el singleton
+    // ya existe en producción sin este campo; el código lo trata como
+    // `?? 2` en vez de requerir una migración antes de desplegar.
+    lineasActivas: v.optional(v.number()),
     kgPorMetro: v.number(),
     horaInicioTurno1: v.string(), // "06:00"
     horaInicioTurno2: v.string(), // "18:00"
