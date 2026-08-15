@@ -89,6 +89,38 @@ async function logout() {
   }
 }
 
+// EDS-89: logout automático tras 10 minutos de inactividad — la sesión
+// quedaba abierta indefinidamente mientras el navegador siguiera abierto,
+// sin importar cuánto tiempo llevara sola la pantalla. Se activa una sola
+// vez por carga de página (iniciarMonitorInactividad se llama desde
+// requireRole, que ya corre en las 10 pantallas protegidas — nunca en
+// login-acceso.html, que no llama requireRole y no tiene sesión que
+// cuidar). Revisa por intervalo en vez de resetear un setTimeout en cada
+// evento — mousemove puede disparar cientos de veces por segundo y no
+// hace falta esa precisión para un timeout de 10 minutos.
+const INACTIVIDAD_MS = 10 * 60 * 1000;
+const INTERVALO_CHEQUEO_MS = 15 * 1000;
+let ultimaActividad = Date.now();
+let monitorInactividadIniciado = false;
+
+function marcarActividad() {
+  ultimaActividad = Date.now();
+}
+
+function iniciarMonitorInactividad() {
+  if (monitorInactividadIniciado) return;
+  monitorInactividadIniciado = true;
+  ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'click'].forEach((evento) =>
+    window.addEventListener(evento, marcarActividad, { passive: true })
+  );
+  setInterval(async () => {
+    if (Date.now() - ultimaActividad >= INACTIVIDAD_MS) {
+      await logout();
+      window.location.href = '/login-acceso.html?motivo=inactividad';
+    }
+  }, INTERVALO_CHEQUEO_MS);
+}
+
 /**
  * Exige que haya sesión y que el rol esté en `roles`; si no, redirige a
  * login-acceso.html y deja la promesa colgada (no tiene caso que el resto
@@ -101,6 +133,7 @@ async function requireRole(roles) {
     window.location.href = '/login-acceso.html';
     return new Promise(() => {});
   }
+  iniciarMonitorInactividad();
   return user;
 }
 
