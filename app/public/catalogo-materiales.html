@@ -537,8 +537,16 @@ async function guardarParams(){
   const turnosPorDia = parseFloat(document.getElementById('pTurnos').value) || 0;
   const lineasActivas = parseFloat(document.getElementById('pLineas').value) || 0;
 
+  // Hallazgo de CodeRabbit en la revisión de este PR: mientras la
+  // mutation está en vuelo, los 3 inputs seguían editables — si el
+  // admin los volvía a tocar antes de que la respuesta llegara,
+  // cargarCatalogo() pisaría esa segunda edición en silencio (misma
+  // familia de bug que el guard de arriba, solo que dentro de la
+  // propia ventana de guardado).
+  const inputs = ['pCargas', 'pTurnos', 'pLineas'].map((id) => document.getElementById(id));
   const textoOriginal = btn.textContent;
   btn.disabled = true; btn.textContent = 'Guardando…';
+  inputs.forEach((input) => { input.disabled = true; });
   try{
     await window.Session.call(api.parametros.updateParametros, { cargasPorTurno, turnosPorDia, lineasActivas }, 'mutation');
     await cargarCatalogo();
@@ -549,6 +557,7 @@ async function guardarParams(){
     errorBox.textContent = '⚠ ' + window.Session.mensajeError(err);
   }finally{
     btn.disabled = false; btn.textContent = textoOriginal;
+    inputs.forEach((input) => { input.disabled = false; });
   }
 }
 
