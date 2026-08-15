@@ -58,6 +58,23 @@ describe('materiales: listCatalogo (tarea 2.1)', () => {
     expect(filaManual?.reorderEnUso).toBe(999999);
   });
 
+  // EDS-88: lineasActivas — antes hardcoded a 2 (NUM_LINEAS), ahora
+  // editable desde Catálogo. Confirma que consumoDiario/reorderCalc
+  // responden al valor configurado, no al hardcode viejo.
+  test('lineasActivas configurado a 1 reduce consumoDiario/reorderCalc a la mitad vs. el default de 2', async () => {
+    const t = convexTest(schema, modules);
+    const adminId = await crearUsuarioPrueba(t, 'admin');
+    const adminToken = await crearSesionPrueba(t, adminId);
+    await crearParametrosPrueba(t, 4, 1); // lineasActivas:1 explícito
+    const matId = await crearMaterialPrueba(t, { leadTimeDias: 0, stockSeguridadDias: 0 });
+    await t.run((ctx) => ctx.db.insert('formulaCarga', { materialId: matId, kgPorCarga: 10, nota: '', updatedAt: Date.now() }));
+
+    const catalogo = await t.query(api.materiales.listCatalogo, { token: adminToken });
+    const fila = catalogo.find((m) => m.materialId === matId);
+    // consumoDiario = 10 kgPorCarga × 8 cargasPorTurno × 2 turnosPorDia × 1 línea
+    expect(fila?.consumoDiario).toBeCloseTo(10 * 8 * 2 * 1, 5);
+  });
+
   test('Triturado (esInterno) y sustitutos (esSustituto) no tienen punto de reorden', async () => {
     const t = convexTest(schema, modules);
     const { adminToken } = await setup(t);

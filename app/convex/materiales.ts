@@ -3,27 +3,21 @@ import { mutation, query } from './_generated/server';
 import type { MutationCtx } from './_generated/server';
 import type { Id } from './_generated/dataModel';
 import { requireRole } from './lib/auth';
-
-// El spec fija exactamente 2 líneas (Lambrín/Thermo-PVC quedan fuera de
-// alcance v1) — mismo hardcode ya usado en cierres.ts/entradas.ts, no una
-// tabla configurable.
-const NUM_LINEAS = 2;
+import { consumoDiarioTeorico, puntoReordenTeorico } from './lib/puntoReorden';
 
 // Catálogo de Materiales — pantalla admin-only (mismo guard que la
 // página). %mezcla, consumo diario y punto de reorden se calculan aquí en
 // vivo a partir de formulaCarga/parametrosProduccion, NUNCA se guardan:
 // así Catálogo y Parámetros no pueden divergir entre sí.
 //
-// El "consumo diario" de esta pantalla es TEÓRICO — de planeación
-// (kgPorCarga × cargasPorTurno × turnosPorDia × 2 líneas), y cambia de
-// inmediato al editar Parámetros de Producción, sin depender de cierres
-// reales. Es DISTINTO, a propósito, del consumo diario PROMEDIO REAL que
-// usa panel-control.html (dashboard.getKPIsHoy) para su propio punto de
-// reorden — ese sí se deriva del historial real de cierreConsumos. Cada
-// pantalla sirve un propósito distinto (planeación vs. monitoreo
-// operativo) y pueden mostrar un punto de reorden distinto para el mismo
-// material — la UI de Catálogo lo etiqueta explícitamente como "de
-// planeación" para que esto nunca se lea como una divergencia/bug.
+// EDS-88: este cálculo (consumo TEÓRICO de fórmula — kgPorCarga ×
+// cargasPorTurno × turnosPorDia × lineasActivas) es ahora la ÚNICA
+// fuente de verdad del punto de reorden en todo el sistema — Panel de
+// Control (dashboard.calcularKPIsHoyImpl) usa la misma función
+// compartida (lib/puntoReorden.ts) en vez de su propio cálculo basado en
+// consumo real histórico. cargasPorTurno/turnosPorDia/lineasActivas ya
+// no se editan solo en Parámetros de Producción — también desde esta
+// misma pantalla (ver parametros.updateParametros).
 export const listCatalogo = query({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {
@@ -36,19 +30,18 @@ export const listCatalogo = query({
     const formula = await ctx.db.query('formulaCarga').collect();
     const formulaPorMaterial = new Map(formula.map((f) => [f.materialId, f]));
     const totalKgPorCarga = formula.reduce((s, f) => s + f.kgPorCarga, 0);
+    const paramsConsumo = { cargasPorTurno: params.cargasPorTurno, turnosPorDia: params.turnosPorDia, lineasActivas: params.lineasActivas ?? 2 };
 
     return materiales.map((m) => {
       const kgPorCarga = formulaPorMaterial.get(m._id)?.kgPorCarga ?? 0;
       const formulaPct = totalKgPorCarga > 0 ? (kgPorCarga / totalKgPorCarga) * 100 : 0;
-      const consumoDiario = kgPorCarga * params.cargasPorTurno * params.turnosPorDia * NUM_LINEAS;
+      const consumoDiario = consumoDiarioTeorico(kgPorCarga, paramsConsumo);
 
       const sinReorden = m.esInterno || m.esSustituto;
       let reorderCalc: number | null = null;
       let reorderEnUso: number | null = null;
       if (!sinReorden) {
-        const stockSeguridad = m.stockSeguridadDias ?? 7;
-        const leadTime = m.leadTimeDias ?? 0;
-        reorderCalc = consumoDiario * (leadTime + stockSeguridad);
+        reorderCalc = puntoReordenTeorico(consumoDiario, m.leadTimeDias, m.stockSeguridadDias);
         reorderEnUso = m.reorderMode === 'manual' && m.reorderManualKg !== null ? m.reorderManualKg : reorderCalc;
       }
 

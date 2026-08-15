@@ -406,7 +406,7 @@ button{font-family:inherit;}
     <div class="card-head">
       <div>
         <h3>Existencias y punto de reorden</h3>
-        <p class="card-sub">kg actuales por material vs. su punto de reorden (consumo diario × lead time + 7 días de stock de seguridad).</p>
+        <p class="card-sub">kg actuales por material vs. su punto de reorden (consumo diario teórico de fórmula × lead time + stock de seguridad) — mismo cálculo que Catálogo de Materiales, donde Admin ajusta cargas por turno, turnos por día y líneas activas.</p>
       </div>
       <div class="card-actions">
         <div class="legend-inline">
@@ -710,7 +710,7 @@ function renderKPIs(){
       <span class="stat-label">Más urgente de reordenar</span>
       ${masUrgente ? `
         <span class="stat-value" style="font-size:1.15rem;">${masUrgente.nombre} <small style="display:block;font-family:'IBM Plex Sans',sans-serif;font-size:.72rem;color:var(--ink-faint);font-weight:400;">${masUrgente.variante}</small></span>
-        <span class="stat-sub">${masUrgente.coberturaDias!==null ? `Cobertura: ${masUrgente.coberturaDias.toFixed(0)} días` : 'Sin historial de consumo todavía'}</span>
+        <span class="stat-sub">${masUrgente.coberturaDias!==null ? `Cobertura: ${masUrgente.coberturaDias.toFixed(0)} días` : 'Sin kg por carga en la fórmula'}</span>
       ` : `
         <span class="stat-value" style="font-size:1.15rem;">— <small style="display:block;font-family:'IBM Plex Sans',sans-serif;font-size:.72rem;color:var(--ink-faint);font-weight:400;">Sin materiales críticos</small></span>
         <span class="stat-sub">Todo por arriba de su punto de reorden</span>
@@ -785,7 +785,7 @@ function renderExistencias(){
   const criticos = KPI.materiales.filter(m=>m.status==='crit');
   document.getElementById('existInsight').innerHTML = criticos.length
     ? `⚠ <b>${criticos.map(m=>m.nombre).join(' y ')}</b> están por debajo de su punto de reorden. ` +
-      criticos.map(m=>`${m.nombre}: ${m.coberturaDias!==null ? m.coberturaDias.toFixed(0)+' días de cobertura' : 'sin historial de consumo'}`).join(' · ') +
+      criticos.map(m=>`${m.nombre}: ${m.coberturaDias!==null ? m.coberturaDias.toFixed(0)+' días de cobertura' : 'sin kg por carga en la fórmula'}`).join(' · ') +
       ` — conviene levantar la orden de compra hoy.`
     : `✓ Ningún material está por debajo de su punto de reorden.`;
 }

@@ -131,6 +131,19 @@ a{color:inherit;}
   padding:.5rem .9rem;border-radius:9px;font-size:.8rem;font-weight:600;cursor:not-allowed;white-space:nowrap;
 }
 
+/* ---------- parámetros del cálculo (EDS-88) — mismo patrón que parametros-produccion.html ---------- */
+.param-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(13rem,1fr));gap:1rem;}
+.param-field{display:flex;flex-direction:column;gap:.4rem;}
+.param-field label{font-size:.78rem;color:var(--ink-muted);}
+.param-actions{display:flex;align-items:center;gap:.8rem;margin-top:1.1rem;}
+.btn-primary-sm{
+  border:none;background:var(--accent);color:var(--accent-ink);
+  border-radius:9px;padding:.5rem 1rem;font-size:.82rem;font-weight:700;cursor:pointer;
+}
+.btn-primary-sm:disabled{background:var(--surface-2);color:var(--ink-faint);cursor:not-allowed;}
+.param-saved{font-size:.78rem;color:var(--positive);font-weight:600;opacity:0;transition:opacity .2s;}
+.param-saved.show{opacity:1;}
+
 /* ---------- table ---------- */
 .table-scroll{overflow-x:auto;}
 table.catalog{border-collapse:collapse;width:100%;min-width:1080px;}
@@ -269,6 +282,34 @@ footer.page-foot{font-size:.78rem;color:var(--ink-faint);border-top:1px solid va
   <section class="card">
     <div class="card-head">
       <div>
+        <h3>Parámetros del cálculo</h3>
+        <p class="card-sub">Alimentan el consumo diario teórico y el punto de reorden de toda la tabla — y del Panel de Control, que usa exactamente estos mismos valores. Súbelos si aumentas el ritmo de producción; bájalos si operas menos líneas o turnos de lo normal.</p>
+      </div>
+    </div>
+    <div class="param-row">
+      <div class="param-field">
+        <label>Cargas por turno</label>
+        <div class="field"><input type="number" id="pCargas" value="8" oninput="markParamsDirty()"><span class="suf">cargas</span></div>
+      </div>
+      <div class="param-field">
+        <label>Turnos por día</label>
+        <div class="field"><input type="number" id="pTurnos" value="2" oninput="markParamsDirty()"><span class="suf">turnos</span></div>
+      </div>
+      <div class="param-field">
+        <label>Líneas activas</label>
+        <div class="field"><input type="number" id="pLineas" value="2" min="1" max="2" oninput="markParamsDirty()"><span class="suf">de 2</span></div>
+      </div>
+    </div>
+    <div class="param-actions">
+      <button class="btn-primary-sm" id="btnGuardarParams" onclick="guardarParams()">Guardar y recalcular</button>
+      <span class="param-saved" id="paramsSaved">✓ Guardado</span>
+    </div>
+    <div class="field-warn error" id="paramsError" hidden></div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <div>
         <h3>Materiales</h3>
         <p class="card-sub">Los campos son editables. El punto de reorden se calcula solo; puedes sobrescribirlo por material si Compras lo necesita.</p>
       </div>
@@ -283,8 +324,7 @@ footer.page-foot{font-size:.78rem;color:var(--ink-faint);border-top:1px solid va
             <th>Costo estándar</th>
             <th>Lead time</th>
             <th>Stock de seguridad</th>
-            <th>% meta en mezcla 🔒</th>
-            <th>Punto de reorden <span title="De planeación — calculado con consumo teórico de la fórmula, no con el histórico real. Puede diferir del que muestra Panel de Control, que sí usa consumo real.">(de planeación)</span></th>
+            <th>Punto de reorden <span title="Calculado con el consumo teórico de fórmula (kg por carga × cargas/turno × turnos/día × líneas activas, arriba) — Panel de Control muestra exactamente este mismo valor.">(de planeación)</span></th>
             <th>Cantidad a pedir</th>
           </tr>
         </thead>
@@ -295,10 +335,10 @@ footer.page-foot{font-size:.78rem;color:var(--ink-faint);border-top:1px solid va
     <ul class="footnotes">
       <li>El <b>Triturado</b> se valúa siempre en $0 al reingresar a inventario — su costo ya se absorbió como merma el día que se generó, así que su costo estándar queda bloqueado.</li>
       <li>Stock de seguridad por defecto: <b>7 días</b>, aplicado a los 7 materiales que sí se compran a proveedor.</li>
-      <li>Punto de reorden = consumo diario <b>teórico de fórmula</b> (kg por carga × cargas/turno × turnos/día × 2 líneas, según <a href="/parametros-produccion.html" style="color:var(--accent-strong);">Parámetros de Producción</a>) × (lead time + stock de seguridad). Es un número <b>de planeación</b>: puede no coincidir con el punto de reorden que muestra Panel de Control, que se calcula con el consumo real promedio de los últimos días — cada pantalla sirve un propósito distinto (planear compras vs. monitorear existencias hoy). El valor calculado queda visible aunque uses un override manual.</li>
+      <li>Punto de reorden = consumo diario <b>teórico de fórmula</b> (kg por carga × Cargas por turno × Turnos por día × Líneas activas, editables arriba) × (lead time + stock de seguridad). Es la <b>única fuente de verdad</b> del punto de reorden en todo el sistema: Panel de Control muestra exactamente este mismo valor, sin diferencias — cambiar cargas/turnos/líneas aquí recalcula ambas pantallas de inmediato. El valor calculado queda visible aunque uses un override manual.</li>
+      <li>Los <b>kg por carga</b> de cada material (el % que le toca de la fórmula) se siguen editando en <a href="/parametros-produccion.html" style="color:var(--accent-strong);">Parámetros de Producción y Fórmula</a> — Cargas por turno, Turnos por día y Líneas activas ahora también se editan aquí porque son justo lo que mueve el punto de reorden día a día.</li>
       <li>El costo estándar es 100% editable por ti — el sistema no lo recalcula solo.</li>
       <li><b>Cantidad a pedir</b> es un campo de referencia para Compras, no se calcula: tú decides cuánto conviene pedir la próxima vez que se reordene ese material. No aplica a Triturado porque no se compra a proveedor.</li>
-      <li>El <b>% meta en mezcla</b> ya no se captura aquí — se calcula solo a partir de los kg por carga definidos en <a href="/parametros-produccion.html" style="color:var(--accent-strong);">Parámetros de Producción y Fórmula</a>, para que exista una sola fuente de verdad para la fórmula.</li>
     </ul>
   </section>
 
@@ -371,6 +411,7 @@ const api = window.api; // expuesto por session.js (bundleado) — ver su coment
 let MATERIALES = [];
 let KG_POR_METRO = 4; // se sobrescribe con el real al cargar (getParametros)
 let dirty = false;
+let paramsDirty = false; // Cargas por turno / Turnos por día / Líneas activas sin guardar
 
 const fmt = n => Math.round(n).toLocaleString('es-MX');
 const fmtMoney = n => n.toLocaleString('es-MX', {minimumFractionDigits:2, maximumFractionDigits:2});
@@ -397,12 +438,6 @@ function recalc(m){
   m.reorderEnUso = m.reorderMode === 'manual' && m.reorderManualKg != null ? m.reorderManualKg : m.reorderCalc;
 }
 
-function pctLockedHtml(m){
-  return `<div class="field locked" title="Se define en Parámetros de Producción y Fórmula, a partir de los kg por carga">
-    <span class="mono" style="flex:1;text-align:right;font-size:.86rem;">${m.formulaPct.toFixed(1)}</span><span class="suf">% 🔒</span>
-  </div>`;
-}
-
 function rowHtml(m){
   const id = escapeHtml(m.materialId);
   const nombre = escapeHtml(m.nombre);
@@ -413,7 +448,6 @@ function rowHtml(m){
       <td><div class="field locked"><span class="pre">$</span><input type="number" value="0.00" disabled><span class="suf">/kg 🔒</span></div></td>
       <td><span class="dash-cell">—</span></td>
       <td><span class="dash-cell">—</span></td>
-      <td>${pctLockedHtml(m)}</td>
       <td><span class="internal-badge">⟲ Generado internamente</span></td>
       <td><span class="dash-cell" title="No aplica — no se compra a proveedor">No aplica</span></td>
     </tr>`;
@@ -439,7 +473,6 @@ function rowHtml(m){
     <td><div class="field"><span class="pre">$</span><input type="number" step="0.01" value="${m.costoEstandar.toFixed(2)}" data-field="costoEstandar"><span class="suf">/kg</span></div></td>
     <td><div class="field"><input type="number" value="${m.leadTimeDias ?? 0}" data-field="leadTimeDias"><span class="suf">días</span></div></td>
     <td><div class="field"><input type="number" value="${m.stockSeguridadDias ?? 7}" data-field="stockSeguridadDias"><span class="suf">días</span></div></td>
-    <td>${pctLockedHtml(m)}</td>
     <td>${reorderCell}</td>
     <td><div class="field"><input type="number" step="10" value="${m.cantidadPedirKg ?? 0}" data-field="cantidadPedirKg"><span class="suf">kg</span></div></td>
   </tr>`;
@@ -464,8 +497,59 @@ async function cargarCatalogo(){
   ]);
   MATERIALES = catalogo;
   KG_POR_METRO = params.kgPorMetro;
+  document.getElementById('pCargas').value = params.cargasPorTurno;
+  document.getElementById('pTurnos').value = params.turnosPorDia;
+  document.getElementById('pLineas').value = params.lineasActivas;
+  paramsDirty = false; // los 3 inputs recién se repoblaron desde el servidor
   renderTable();
   recalcSummary();
+}
+
+// EDS-88: Cargas por turno/Turnos por día/Líneas activas ahora también se
+// editan aquí (antes solo en Parámetros de Producción) porque son
+// justo lo que mueve el consumo diario teórico y el punto de reorden —
+// tanto de esta tabla como de Panel de Control (mismo backend
+// compartido, ver dashboard.ts). Guardar recarga TODO el catálogo desde
+// el servidor en vez de recalcular en el cliente, para no duplicar la
+// fórmula de reorden en dos lugares (ya está en lib/puntoReorden.ts).
+async function guardarParams(){
+  const btn = document.getElementById('btnGuardarParams');
+  const errorBox = document.getElementById('paramsError');
+  const savedFlag = document.getElementById('paramsSaved');
+  errorBox.hidden = true;
+  savedFlag.classList.remove('show');
+
+  // Hallazgo de auditoría: guardarParams() termina en cargarCatalogo(),
+  // que recarga MATERIALES completo desde Convex — si el admin ya editó
+  // costo/lead time/stock/modo manual/cantidad a pedir en la tabla pero
+  // no dio "Guardar cambios" todavía, esa recarga pisaría sus cambios
+  // locales en silencio (mismo patrón de bug ya visto en Gestión de
+  // Usuarios: una acción auxiliar que recarga datos no debe borrar
+  // ediciones sin guardar). Se bloquea en vez de intentar reconciliar
+  // ambos formularios — más simple y sin riesgo de perder datos.
+  if(dirty){
+    errorBox.hidden = false;
+    errorBox.textContent = '⚠ Guarda o restablece los cambios de la tabla de materiales antes de recalcular parámetros.';
+    return;
+  }
+
+  const cargasPorTurno = parseFloat(document.getElementById('pCargas').value) || 0;
+  const turnosPorDia = parseFloat(document.getElementById('pTurnos').value) || 0;
+  const lineasActivas = parseFloat(document.getElementById('pLineas').value) || 0;
+
+  const textoOriginal = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Guardando…';
+  try{
+    await window.Session.call(api.parametros.updateParametros, { cargasPorTurno, turnosPorDia, lineasActivas }, 'mutation');
+    await cargarCatalogo();
+    savedFlag.classList.add('show');
+    setTimeout(() => savedFlag.classList.remove('show'), 2400);
+  }catch(err){
+    errorBox.hidden = false;
+    errorBox.textContent = '⚠ ' + window.Session.mensajeError(err);
+  }finally{
+    btn.disabled = false; btn.textContent = textoOriginal;
+  }
 }
 
 function markDirty(){
@@ -473,6 +557,10 @@ function markDirty(){
   document.getElementById('dirtyFlag').classList.add('show');
   document.getElementById('btnSave').disabled = false;
   document.getElementById('btnReset').disabled = false;
+}
+
+function markParamsDirty(){
+  paramsDirty = true;
 }
 
 document.getElementById('catalogBody').addEventListener('input', e=>{
@@ -550,6 +638,17 @@ async function saveCatalog(){
   }
 }
 async function resetCatalog(){
+  // Mismo bug de estado que guardarParams() (ver su comentario): esta
+  // función también termina en cargarCatalogo(), que pisaría en
+  // silencio una edición sin guardar en Cargas por turno/Turnos por
+  // día/Líneas activas aunque "Restablecer" solo pretendía descartar
+  // los cambios de la tabla de materiales.
+  if(paramsDirty){
+    const errorBox = document.getElementById('paramsError');
+    errorBox.hidden = false;
+    errorBox.textContent = '⚠ Guarda o borra los cambios de Parámetros del cálculo antes de restablecer la tabla de materiales.';
+    return;
+  }
   // Descarta ediciones locales releyendo de Convex — el servidor es la
   // única fuente de verdad, no una copia "SAVED" en memoria del cliente.
   await cargarCatalogo();
@@ -559,11 +658,18 @@ async function resetCatalog(){
   document.getElementById('btnReset').disabled = true;
 }
 
-/* El HTML llama estas funciones vía onclick="" — en un <script type="module">
-   quedan en el scope del módulo, no globales, así que hay que exponerlas
-   explícitamente para que esos atributos sigan funcionando. */
+/* El HTML llama estas funciones vía onclick=""/oninput="" — en un
+   <script type="module"> quedan en el scope del módulo, no globales, así
+   que hay que exponerlas explícitamente para que esos atributos sigan
+   funcionando. Hallazgo real durante la verificación manual de EDS-88:
+   markParamsDirty() quedó fuera de esta lista al escribirla — el guard
+   de guardarParams()/resetCatalog() nunca se activaba porque
+   oninput="markParamsDirty()" tiraba un ReferenceError silencioso (solo
+   visible en consola), paramsDirty se quedaba en false para siempre. */
 window.saveCatalog = saveCatalog;
 window.resetCatalog = resetCatalog;
+window.guardarParams = guardarParams;
+window.markParamsDirty = markParamsDirty;
 
 // EDS-65 (10.1): la carga inicial no tenía try/catch — si Convex no
 // respondía, la pantalla quedaba vacía sin explicación en vez de mostrar

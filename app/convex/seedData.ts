@@ -166,6 +166,7 @@ export const insertSeedData = internalMutation({
     await ctx.db.insert('parametrosProduccion', {
       cargasPorTurno: 8,
       turnosPorDia: 2,
+      lineasActivas: 2,
       kgPorMetro: 4,
       horaInicioTurno1: '06:00',
       horaInicioTurno2: '18:00',
