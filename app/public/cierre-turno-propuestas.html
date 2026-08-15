@@ -392,6 +392,7 @@ button{font-family:inherit;}
               <div class="field-warn error" id="entrSaveError" hidden></div>
               <div class="cta-bar">
                 <button class="btn-save" id="entrSaveBtn" onclick="entrSave()">Guardar entrada de material</button>
+                <button class="btn-ghost" id="entrBackHomeBtn" hidden onclick="showHome()">Volver al inicio</button>
               </div>
             </div>
             <div class="toast" id="entrToast">✓ Entrada registrada — va directo a inventario general, sin línea asignada</div>
@@ -674,6 +675,14 @@ async function goEntradas(){
   document.getElementById('aStatus').textContent = 'Entrada de material';
   MATERIALES_ENTRADA = await window.Session.call(api.entradas.listMaterialesActivos, {}, 'query');
   document.getElementById('entrList').innerHTML = MATERIALES_ENTRADA.map(m=>buildToggleRow(m)).join('');
+  // Reinicia el botón de guardar y el de "Volver al inicio" — si el
+  // operador ya guardó una entrada, volvió al menú y entra de nuevo aquí
+  // para capturar otra, no debe heredar el estado "✓ Entrada guardada"
+  // (deshabilitado) de la vez anterior.
+  const btn = document.getElementById('entrSaveBtn');
+  btn.disabled = false; btn.textContent = 'Guardar entrada de material'; btn.classList.remove('done');
+  document.getElementById('entrSaveError').hidden = true;
+  document.getElementById('entrBackHomeBtn').hidden = true;
   await entrGo(0);
 }
 async function goCierre(){
@@ -773,6 +782,12 @@ async function entrSave(){
     const t = document.getElementById('entrToast');
     t.textContent = `✓ Entrada registrada — va directo a inventario general, sin línea asignada — registrada por ${sessionUser.nombre}`;
     t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 2400);
+    // Hallazgo real del usuario en producción: una vez guardada la
+    // entrada, el botón queda deshabilitado ("✓ Entrada guardada") y no
+    // había forma de regresar al menú — la única salida era cerrar
+    // sesión y volver a entrar. Mismo botón "Volver al inicio" que ya
+    // existe en Cierre de turno (wizBackHomeBtn).
+    document.getElementById('entrBackHomeBtn').hidden = false;
   }catch(err){
     btn.disabled = false; btn.textContent = textoOriginal;
     errorBox.hidden = false;
