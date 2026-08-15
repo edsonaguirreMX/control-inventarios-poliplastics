@@ -54,10 +54,6 @@ export async function cierresEnRango(ctx: QueryCtx, dias: number) {
 // abajo) es un wrapper delgado que solo agrega la autorización.
 export async function calcularKPIsHoyImpl(ctx: QueryCtx) {
     const params = await requireParametros(ctx);
-    // Antes se pedían 14 días de cierres aquí para promediar consumo real
-    // (EDS-88 lo quitó — ver más abajo); "hoy" ya no necesita ventana,
-    // solo el propio día.
-    const { hoy, cierres: cierresHoy } = await cierresEnRango(ctx, 1);
 
     const materiales = await ctx.db.query('materiales').withIndex('by_activo_orden', (q) => q.eq('activo', true)).collect();
 
@@ -116,14 +112,31 @@ export async function calcularKPIsHoyImpl(ctx: QueryCtx) {
 
     const valorInventarioTotal = materialesConDetalle.reduce((s, m) => s + m.valorKg, 0);
 
-    const kgBuenosHoy = cierresHoy.reduce((s, c) => s + c.kgBuenos, 0);
-    const metrosBuenosHoy = cierresHoy.reduce((s, c) => s + c.metrosBuenos, 0);
-    const mermaTotalHoy = cierresHoy.reduce((s, c) => s + c.mermaTotalKg, 0);
-    const costoTotalHoy = cierresHoy.reduce((s, c) => s + c.costoTotalConsumido, 0);
-    const totalProcesadoHoy = kgBuenosHoy + mermaTotalHoy;
-    const pctMermaHoy = totalProcesadoHoy > 0 ? (mermaTotalHoy / totalProcesadoHoy) * 100 : 0;
-    const costoRealPorKgHoy = kgBuenosHoy > 0 ? costoTotalHoy / kgBuenosHoy : 0;
-    const costoRealPorMetroHoy = metrosBuenosHoy > 0 ? costoTotalHoy / metrosBuenosHoy : 0;
+    // EDS-90: "hoy" nunca tiene cierres capturados el mismo día — en la
+    // operación real, un turno se cierra horas o días después de que
+    // terminó. Las tarjetas de producción/merma/costo "de hoy" quedaban
+    // en 0 casi todo el tiempo porque agregaban cierresTurno de la fecha
+    // operativa de HOY. Se usa la fecha del ÚLTIMO cierre capturado como
+    // referencia (mismo obtenerUltimoCierreImpl que ya usa el topbar,
+    // EDS-75) — mismo criterio de agregación de siempre (todas las
+    // combinaciones línea×turno de esa fecha), solo cambia qué fecha se
+    // usa. Consecuencia aceptada explícitamente por el usuario: las
+    // alertas merma-alta/costo-alto (alertas.ts, reutilizan esta función)
+    // también evalúan ahora contra el último cierre real en vez de "hoy"
+    // (que casi nunca tenía datos con los que disparar).
+    const ultimoCierre = await obtenerUltimoCierreImpl(ctx);
+    const cierresReferencia = ultimoCierre
+      ? await ctx.db.query('cierresTurno').withIndex('by_fecha', (q) => q.eq('fecha', ultimoCierre.fecha)).collect()
+      : [];
+
+    const kgBuenosUltimoCierre = cierresReferencia.reduce((s, c) => s + c.kgBuenos, 0);
+    const metrosBuenosUltimoCierre = cierresReferencia.reduce((s, c) => s + c.metrosBuenos, 0);
+    const mermaTotalUltimoCierre = cierresReferencia.reduce((s, c) => s + c.mermaTotalKg, 0);
+    const costoTotalUltimoCierre = cierresReferencia.reduce((s, c) => s + c.costoTotalConsumido, 0);
+    const totalProcesadoUltimoCierre = kgBuenosUltimoCierre + mermaTotalUltimoCierre;
+    const pctMermaUltimoCierre = totalProcesadoUltimoCierre > 0 ? (mermaTotalUltimoCierre / totalProcesadoUltimoCierre) * 100 : 0;
+    const costoRealPorKgUltimoCierre = kgBuenosUltimoCierre > 0 ? costoTotalUltimoCierre / kgBuenosUltimoCierre : 0;
+    const costoRealPorMetroUltimoCierre = metrosBuenosUltimoCierre > 0 ? costoTotalUltimoCierre / metrosBuenosUltimoCierre : 0;
 
     // Costo estándar de referencia: Σ %fórmula × costoEstandar de catálogo
     // (mismo cálculo que el mockup original, ahora con datos reales).
@@ -140,15 +153,15 @@ export async function calcularKPIsHoyImpl(ctx: QueryCtx) {
     const costoEstandarPorMetro = costoEstandarPorKg * params.kgPorMetro;
 
     return {
-      fecha: hoy,
+      fecha: ultimoCierre?.fecha ?? fechaOperativa(Date.now(), params.zonaHoraria, params.horaInicioTurno1),
       materiales: materialesConDetalle,
       valorInventarioTotal,
-      pctMermaHoy,
-      produccionHoyKg: kgBuenosHoy,
-      produccionHoyMetros: metrosBuenosHoy,
-      costoRealHoy: costoTotalHoy,
-      costoRealPorKgHoy,
-      costoRealPorMetroHoy,
+      pctMermaUltimoCierre,
+      produccionUltimoCierreKg: kgBuenosUltimoCierre,
+      produccionUltimoCierreMetros: metrosBuenosUltimoCierre,
+      costoUltimoCierre: costoTotalUltimoCierre,
+      costoRealPorKgUltimoCierre,
+      costoRealPorMetroUltimoCierre,
       costoEstandarPorKg,
       costoEstandarPorMetro,
     };

@@ -686,14 +686,19 @@ function renderKPIs(){
   const nCrit = materialesConReorden.filter(m=>m.status==='crit').length;
   const nWarn = materialesConReorden.filter(m=>m.status==='warn').length;
   const masUrgente = materialesConReorden.filter(m=>m.status==='crit').sort((a,b)=>(a.coberturaDias??Infinity)-(b.coberturaDias??Infinity))[0];
-  const mermaHoy = KPI.pctMermaHoy;
-  const costoRealKg = KPI.costoRealPorKgHoy;
-  const costoRealM = KPI.costoRealPorMetroHoy;
+  const mermaHoy = KPI.pctMermaUltimoCierre;
+  const costoRealKg = KPI.costoRealPorKgUltimoCierre;
+  const costoRealM = KPI.costoRealPorMetroUltimoCierre;
   const costoEstandarKg = KPI.costoEstandarPorKg;
   const costoEstandarM = KPI.costoEstandarPorMetro;
   const semanaTotal = Array.from({length:7},(_,i)=>metrosPlantaDia(23+i)).reduce((a,b)=>a+b,0);
   const semanaPct = OBJETIVOS.semana > 0 ? semanaTotal/OBJETIVOS.semana*100 : 0;
   const tendencia = tendenciaCostoTexto();
+  // EDS-90: "hoy" nunca tiene cierres capturados el mismo día en la
+  // operación real — estas tarjetas ahora muestran el último cierre
+  // capturado (KPI.ultimoCierre, mismo dato que usa renderUltimoCierre)
+  // y lo dejan explícito en la etiqueta en vez de decir "hoy".
+  const fechaRef = KPI.ultimoCierre ? isoADisplayCorto(KPI.ultimoCierre.fecha) : 'sin cierres';
 
   document.getElementById('kpiCompras').innerHTML = `
     <div class="stat-tile">
@@ -719,13 +724,13 @@ function renderKPIs(){
 
   document.getElementById('kpiCalidad').innerHTML = `
     <div class="stat-tile">
-      <div class="stat-row"><span class="stat-label">% merma — hoy</span>${spark(MERMA_30.slice(-12))}</div>
+      <div class="stat-row"><span class="stat-label">% merma — último cierre (${fechaRef})</span>${spark(MERMA_30.slice(-12))}</div>
       <span class="stat-value">${mermaHoy.toFixed(1)}<span class="unit">%</span></span>
       <span class="stat-delta ${mermaHoy>MERMA_META?'bad':'good'}" style="width:fit-content;">${mermaHoy>MERMA_META?'+':''}${(mermaHoy-MERMA_META).toFixed(1)}pp vs. meta ${MERMA_META.toFixed(1)}%</span>
     </div>
     <div class="stat-tile">
-      <span class="stat-label">Producción de hoy</span>
-      <span class="stat-value">${fmt(KPI.produccionHoyMetros)}<span class="unit">m</span></span>
+      <span class="stat-label">Producción — último cierre (${fechaRef})</span>
+      <span class="stat-value">${fmt(KPI.produccionUltimoCierreMetros)}<span class="unit">m</span></span>
       <span class="stat-sub">Ambas líneas y turnos · objetivo ${fmt((OBJETIVOS.turnoL1+OBJETIVOS.turnoL2)*2)} m/día en planta</span>
     </div>
     <div class="stat-tile">
@@ -736,12 +741,12 @@ function renderKPIs(){
 
   document.getElementById('kpiGerencia').innerHTML = `
     <div class="stat-tile">
-      <div class="stat-row"><span class="stat-label">Costo real / kg — hoy</span>${spark(COSTO_30.slice(-12))}</div>
+      <div class="stat-row"><span class="stat-label">Costo real / kg — último cierre (${fechaRef})</span>${spark(COSTO_30.slice(-12))}</div>
       <span class="stat-value">$${fmtMoney(costoRealKg)}</span>
       <span class="stat-delta ${costoEstandarKg>0 && costoRealKg>costoEstandarKg?'bad':'good'}" style="width:fit-content;">${costoEstandarKg>0?fmtPct((costoRealKg/costoEstandarKg-1)*100)+' vs. estándar $'+fmtMoney(costoEstandarKg):'sin estándar configurado'}</span>
     </div>
     <div class="stat-tile">
-      <span class="stat-label">Costo real / metro — hoy</span>
+      <span class="stat-label">Costo real / metro — último cierre (${fechaRef})</span>
       <span class="stat-value">$${fmtMoney(costoRealM)}</span>
       <span class="stat-delta ${costoEstandarM>0 && costoRealM>costoEstandarM?'bad':'good'}" style="width:fit-content;">${costoEstandarM>0?fmtPct((costoRealM/costoEstandarM-1)*100)+' vs. estándar $'+fmtMoney(costoEstandarM):'sin estándar configurado'}</span>
     </div>
@@ -917,16 +922,19 @@ function inicializarCamposObjetivos(){
    RENDER: Costo real vs estándar — stat pair
    ============================================================ */
 function renderCostoStats(){
-  const costoRealKg = KPI.costoRealPorKgHoy, costoRealM = KPI.costoRealPorMetroHoy;
+  const costoRealKg = KPI.costoRealPorKgUltimoCierre, costoRealM = KPI.costoRealPorMetroUltimoCierre;
   const costoEstandarKg = KPI.costoEstandarPorKg, costoEstandarM = KPI.costoEstandarPorMetro;
+  // EDS-90: mismo criterio que renderKPIs — "hoy" nunca tiene cierres
+  // capturados el mismo día, se muestra el último cierre real.
+  const fechaRef = KPI.ultimoCierre ? isoADisplayCorto(KPI.ultimoCierre.fecha) : 'sin cierres';
   document.getElementById('costoStats').innerHTML = `
     <div class="stat-tile">
-      <span class="stat-label">Costo real / kg — hoy</span>
+      <span class="stat-label">Costo real / kg — último cierre (${fechaRef})</span>
       <div class="stat-row"><span class="stat-value">$${fmtMoney(costoRealKg)}</span>${costoEstandarKg>0?`<span class="stat-delta ${costoRealKg>costoEstandarKg?'bad':'good'}">${fmtPct((costoRealKg/costoEstandarKg-1)*100)}</span>`:''}</div>
       <span class="stat-sub">${costoEstandarKg>0?`Estándar: $${fmtMoney(costoEstandarKg)} / kg`:'Sin estándar configurado'}</span>
     </div>
     <div class="stat-tile">
-      <span class="stat-label">Costo real / metro — hoy</span>
+      <span class="stat-label">Costo real / metro — último cierre (${fechaRef})</span>
       <div class="stat-row"><span class="stat-value">$${fmtMoney(costoRealM)}</span>${costoEstandarM>0?`<span class="stat-delta ${costoRealM>costoEstandarM?'bad':'good'}">${fmtPct((costoRealM/costoEstandarM-1)*100)}</span>`:''}</div>
       <span class="stat-sub">${costoEstandarM>0?`Estándar: $${fmtMoney(costoEstandarM)} / m`:'Sin estándar configurado'}</span>
     </div>`;

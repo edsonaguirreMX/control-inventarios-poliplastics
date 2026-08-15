@@ -151,7 +151,7 @@ describe('dashboard: getKPIsHoy (tarea 6.1)', () => {
     expect(filaDashboard?.reorderKg).toBeCloseTo(80, 5);
   });
 
-  test('% merma y costo real de hoy usan las 4 combinaciones línea×turno de hoy', async () => {
+  test('% merma y costo real del último cierre usan las combinaciones línea×turno de la fecha de ese cierre', async () => {
     const t = convexTest(schema, modules);
     const { comprasToken, operadorToken, adminId } = await setup(t);
     const matId = await crearMaterialPrueba(t);
@@ -170,11 +170,45 @@ describe('dashboard: getKPIsHoy (tarea 6.1)', () => {
     });
 
     const kpis = await t.query(api.dashboard.getKPIsHoy, { token: comprasToken });
-    expect(kpis.produccionHoyKg).toBe(100);
-    expect(kpis.produccionHoyMetros).toBe(25);
-    expect(kpis.pctMermaHoy).toBeCloseTo((20 / 120) * 100, 5);
-    expect(kpis.costoRealHoy).toBe(240); // 120kg × $2
-    expect(kpis.costoRealPorKgHoy).toBeCloseTo(240 / 100, 5);
+    expect(kpis.produccionUltimoCierreKg).toBe(100);
+    expect(kpis.produccionUltimoCierreMetros).toBe(25);
+    expect(kpis.pctMermaUltimoCierre).toBeCloseTo((20 / 120) * 100, 5);
+    expect(kpis.costoUltimoCierre).toBe(240); // 120kg × $2
+    expect(kpis.costoRealPorKgUltimoCierre).toBeCloseTo(240 / 100, 5);
+  });
+
+  // EDS-90: en la operación real un turno se cierra horas o días después de
+  // que terminó, así que "hoy" casi nunca tenía cierres capturados y estas
+  // tarjetas quedaban en 0 casi todo el tiempo. Este test prueba justo el
+  // caso que el código viejo (filtraba por fecha === hoy) fallaba: un
+  // cierre capturado con fecha de AYER debe seguir poblando los KPIs,
+  // usando esa fecha como referencia en vez de la de hoy.
+  test('EDS-90: KPIs "de hoy" reflejan el último cierre capturado aunque su fecha no sea la de hoy', async () => {
+    const t = convexTest(schema, modules);
+    const { comprasToken, operadorToken, adminId } = await setup(t);
+    const matId = await crearMaterialPrueba(t);
+    const ayer = sumarDiasISO(HOY, -1);
+    await t.run((ctx) =>
+      crearCapaImpl(ctx, {
+        materialId: matId, kgOriginal: 100000, costoUnitario: 2, fechaEntrada: 1000,
+        origen: 'entrada', entradaId: null, cierreTurnoId: null,
+        origenTipo: 'entrada', origenId: 'setup', createdBy: adminId,
+      })
+    );
+    await t.mutation(api.cierres.crearCierreTurno, {
+      fecha: ayer, linea: 1, turno: 1, cargasPreparadas: 1, metrosBuenos: 25,
+      caballetes105Pzas: 0, caballetes106Pzas: 0,
+      consumoPorMaterial: [{ materialId: matId, kgConsumido: 120 }], // kgBuenos=100, merma=20
+      token: operadorToken,
+    });
+
+    const kpis = await t.query(api.dashboard.getKPIsHoy, { token: comprasToken });
+    expect(kpis.fecha).toBe(ayer);
+    expect(kpis.produccionUltimoCierreKg).toBe(100);
+    expect(kpis.produccionUltimoCierreMetros).toBe(25);
+    expect(kpis.pctMermaUltimoCierre).toBeCloseTo((20 / 120) * 100, 5);
+    expect(kpis.costoUltimoCierre).toBe(240); // 120kg × $2
+    expect(kpis.costoRealPorKgUltimoCierre).toBeCloseTo(240 / 100, 5);
   });
 
   // EDS-75: reemplaza el texto estático "Actualizado con el cierre de

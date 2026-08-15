@@ -308,18 +308,22 @@ export const evaluarAlertas = internalMutation({
         }
       }
 
+      // EDS-90: pctMermaHoy/costoRealPorKgHoy se renombraron a
+      // *UltimoCierre — antes casi nunca disparaban porque "hoy" casi
+      // nunca tenía cierres capturados (numerador siempre 0); ahora
+      // evalúan contra el último cierre real capturado.
       if (reglaMerma?.activa) {
         const margenPp = reglaMerma.umbral ?? 1.0;
-        if (kpis.pctMermaHoy > META_MERMA_PCT + margenPp) {
-          await disparar(reglaMerma, '', `${kpis.pctMermaHoy.toFixed(1)}% vs. meta ${META_MERMA_PCT.toFixed(1)}%.`);
+        if (kpis.pctMermaUltimoCierre > META_MERMA_PCT + margenPp) {
+          await disparar(reglaMerma, '', `${kpis.pctMermaUltimoCierre.toFixed(1)}% vs. meta ${META_MERMA_PCT.toFixed(1)}%.`);
         }
       }
 
       if (reglaCosto?.activa && kpis.costoEstandarPorKg > 0) {
         const margenPct = reglaCosto.umbral ?? 5;
-        if (kpis.costoRealPorKgHoy > kpis.costoEstandarPorKg * (1 + margenPct / 100)) {
-          const deltaPct = ((kpis.costoRealPorKgHoy - kpis.costoEstandarPorKg) / kpis.costoEstandarPorKg) * 100;
-          await disparar(reglaCosto, '', `+${deltaPct.toFixed(1)}% sobre estándar ($${kpis.costoRealPorKgHoy.toFixed(2)} vs $${kpis.costoEstandarPorKg.toFixed(2)}/kg).`);
+        if (kpis.costoRealPorKgUltimoCierre > kpis.costoEstandarPorKg * (1 + margenPct / 100)) {
+          const deltaPct = ((kpis.costoRealPorKgUltimoCierre - kpis.costoEstandarPorKg) / kpis.costoEstandarPorKg) * 100;
+          await disparar(reglaCosto, '', `+${deltaPct.toFixed(1)}% sobre estándar ($${kpis.costoRealPorKgUltimoCierre.toFixed(2)} vs $${kpis.costoEstandarPorKg.toFixed(2)}/kg).`);
         }
       }
     }
