@@ -355,6 +355,12 @@ window.__authReady = window.Session.requireRole(['compras', 'admin']);
 const user = await window.__authReady;
 window.usuarioSesion = user.nombre;
 window.rolSesion = user.rol;
+// EDS-92: única pantalla de Configuración con 2 roles posibles — admin
+// vuelve a su pestaña Admin, compras vuelve a la suya (default de
+// panel-control.html, sin parámetro).
+if (user.rol === 'admin') {
+  document.getElementById('breadcrumbLink').href = '/panel-control.html?tab=admin';
+}
 const row = document.getElementById('sessionRow');
 if (row) {
   row.innerHTML = `<span class="role-badge">🔒 ${escapeHtmlSesion(user.nombre)} · ${ROLE_LABEL[user.rol]}</span><a class="logout-link" href="#" id="logoutLink">Cerrar sesión</a>`;

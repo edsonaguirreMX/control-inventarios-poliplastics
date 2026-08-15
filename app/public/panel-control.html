@@ -393,16 +393,16 @@ button{font-family:inherit;}
   </div>
 
   <!-- KPI: Compras -->
-  <div class="kpi-row role-section" data-roles="compras admin" id="kpiCompras"></div>
+  <div class="kpi-row role-section" data-roles="compras" id="kpiCompras"></div>
 
   <!-- KPI: Calidad -->
-  <div class="kpi-row role-section" data-roles="calidad admin" id="kpiCalidad"></div>
+  <div class="kpi-row role-section" data-roles="calidad" id="kpiCalidad"></div>
 
   <!-- KPI: Gerencia -->
-  <div class="kpi-row role-section" data-roles="gerencia admin" id="kpiGerencia"></div>
+  <div class="kpi-row role-section" data-roles="gerencia" id="kpiGerencia"></div>
 
   <!-- Existencias -->
-  <section class="card role-section" data-roles="compras admin">
+  <section class="card role-section" data-roles="compras">
     <div class="card-head">
       <div>
         <h3>Existencias y punto de reorden</h3>
@@ -424,7 +424,7 @@ button{font-family:inherit;}
   </section>
 
   <!-- Producción por turno y línea -->
-  <section class="card role-section" data-roles="calidad admin">
+  <section class="card role-section" data-roles="calidad">
     <div class="card-head">
       <div>
         <h3>Producción por turno y línea</h3>
@@ -460,7 +460,7 @@ button{font-family:inherit;}
   </section>
 
   <!-- Producción acumulada -->
-  <section class="card role-section" data-roles="calidad admin">
+  <section class="card role-section" data-roles="calidad">
     <div class="card-head">
       <div>
         <h3>Producción acumulada</h3>
@@ -498,7 +498,7 @@ button{font-family:inherit;}
   </section>
 
   <!-- Merma trend -->
-  <section class="card role-section" data-roles="calidad admin">
+  <section class="card role-section" data-roles="calidad">
     <div class="card-head">
       <div>
         <h3>% de merma — tendencia</h3>
@@ -514,7 +514,7 @@ button{font-family:inherit;}
   </section>
 
   <!-- Costo real vs estándar -->
-  <section class="card role-section" data-roles="gerencia admin">
+  <section class="card role-section" data-roles="gerencia">
     <div class="card-head">
       <div>
         <h3>Costo real vs. estándar</h3>
@@ -1132,6 +1132,17 @@ document.addEventListener('click', e=>{
   if(wrap && !wrap.contains(e.target)) document.getElementById('bellDropdown').hidden = true;
 });
 
+// EDS-91: cada .role-section matchea por `data-roles.includes(role)`,
+// donde `role` es el tab ACTUALMENTE seleccionado, no sessionUser.rol —
+// admin sigue viendo todo con normalidad al seleccionar Compras/Calidad y
+// Producción/Gerencia y Comercial directamente (esas secciones siguen
+// listando su propio rol en data-roles). Solo se quitó "admin" de la
+// lista de roles de esas secciones, así que cuando el tab seleccionado
+// ES 'admin', ya no matchean — únicamente la sección de Configuración
+// (data-roles="admin" exclusivo) sigue mostrándose ahí. Antes cada
+// sección tenía "<rol> admin", así que el tab Admin mostraba TODO
+// duplicado — información que admin ya puede ver entrando a las otras 3
+// pestañas.
 let currentRole = 'compras';
 function applyRole(role){
   currentRole = role;
@@ -1240,7 +1251,14 @@ async function cargarTodo(){
   // El selector de rol del mockup (para previsualizar las 4 vistas) solo
   // tiene sentido para admin, que sí ve todo el sistema; el resto de los
   // roles queda fijo en su propia vista real, sin poder cambiarla.
-  applyRole(sessionUser.rol === 'admin' ? 'compras' : sessionUser.rol);
+  // EDS-92: ?tab=admin (usado por el breadcrumb "Volver a Admin" de las
+  // pantallas de Configuración) hace que admin aterrice directo en su
+  // propia pestaña en vez del default de Compras — sin el parámetro,
+  // sigue aterrizando en Compras como siempre.
+  const tabInicial = sessionUser.rol === 'admin'
+    ? (new URLSearchParams(location.search).get('tab') === 'admin' ? 'admin' : 'compras')
+    : sessionUser.rol;
+  applyRole(tabInicial);
   if (sessionUser.rol !== 'admin') {
     document.getElementById('roleSwitch').style.display = 'none';
   }
