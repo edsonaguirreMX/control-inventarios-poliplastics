@@ -99,7 +99,8 @@ export default defineSchema({
     origen: v.union(
       v.literal("entrada"),
       v.literal("triturado"),
-      v.literal("inventarioInicial")
+      v.literal("inventarioInicial"),
+      v.literal("ajusteManual") // EDS-93 — ajuste manual de entrada (admin)
     ),
     entradaId: v.union(v.id("entradas"), v.null()),
     cierreTurnoId: v.union(v.id("cierresTurno"), v.null()),
@@ -128,7 +129,8 @@ export default defineSchema({
       v.literal("entrada"),
       v.literal("cierreTurno"),
       v.literal("correccion"),
-      v.literal("inventarioInicial")
+      v.literal("inventarioInicial"),
+      v.literal("ajusteManual") // EDS-93 — ajuste manual de entrada/salida (admin)
     ),
     origenId: v.string(),
     createdAt: v.number(),
@@ -217,6 +219,37 @@ export default defineSchema({
     corregidoPor: v.id("users"),
     corregidoEn: v.number(),
   }).index("by_entidadId", ["entidadId"]),
+
+  // EDS-93 — ajustes manuales de inventario (entrada/salida), capturados
+  // por Admin en cualquier momento, siempre fechados con el día real de
+  // captura (nunca retrofechados, a diferencia de un cierre de turno).
+  // Nada se edita ni se revierte una vez guardado — misma disciplina que
+  // el resto del sistema; un ajuste mal capturado se corrige con uno
+  // contrario, no editando este.
+  ajustesInventario: defineTable({
+    materialId: v.id("materiales"),
+    tipo: v.union(v.literal("entrada"), v.literal("salida")),
+    kg: v.number(), // siempre positivo, el signo lo da `tipo`
+    motivo: v.string(), // obligatorio, no vacío — auditoría
+    fecha: v.string(), // "YYYY-MM-DD", fecha operativa del momento de captura
+    costoUnitario: v.union(v.number(), v.null()), // solo tipo:"entrada" (puede ser 0)
+    costoTotal: v.number(), // entrada: kg×costoUnitario; salida: costo real de las capas consumidas (FIFO)
+    capaId: v.union(v.id("capasCosto"), v.null()), // solo tipo:"entrada" — la capa nueva creada
+    capasDetalle: v.union(
+      v.array(
+        v.object({
+          capaId: v.id("capasCosto"),
+          kgTomado: v.number(),
+          costoUnitario: v.number(),
+        })
+      ),
+      v.null()
+    ), // solo tipo:"salida" — mismo shape que cierreConsumos.capasDetalle
+    registradoPor: v.id("users"),
+    createdAt: v.number(),
+  })
+    .index("by_fecha", ["fecha"])
+    .index("by_materialId", ["materialId"]),
 
   alertasReglas: defineTable({
     slug: v.string(),
