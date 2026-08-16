@@ -260,11 +260,21 @@ export const tendenciaCosto = query({
 // Σcosto/Σkg — nunca un promedio de porcentajes diarios, que subestimaría
 // días de alta producción), pero sobre `cierresEnRango(ctx, dias)` en vez
 // de solo los cierres de la fecha del último cierre.
+// Hallazgo de CodeRabbit (PR EDS-97): un `dias` sin cota superior ni chequeo
+// de entero permite mandar un valor fraccionario o absurdamente grande —
+// `cierresEnRango` hace `Array.from({length: dias}, ...)`, así que un
+// `dias` enorme intenta reservar un arreglo de ese tamaño antes de
+// procesar nada. El selector de la UI solo ofrece 7/14/30 — se restringe
+// la query exactamente a esos 3 valores, no solo a "positivo".
+const PERIODOS_KPI_VALIDOS = [7, 14, 30] as const;
+
 export const kpisPorRango = query({
   args: { dias: v.number(), token: v.string() },
   handler: async (ctx, { dias, token }) => {
     await requireRole(ctx, token, ROLES_DASHBOARD);
-    if (dias <= 0) throw new ConvexError('kpisPorRango: dias debe ser mayor a 0.');
+    if (!PERIODOS_KPI_VALIDOS.includes(dias as (typeof PERIODOS_KPI_VALIDOS)[number])) {
+      throw new ConvexError(`kpisPorRango: dias debe ser uno de ${PERIODOS_KPI_VALIDOS.join(', ')}.`);
+    }
     const params = await requireParametros(ctx);
     const { fechas, cierres } = await cierresEnRango(ctx, dias);
 

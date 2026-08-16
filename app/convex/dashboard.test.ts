@@ -411,10 +411,25 @@ describe('dashboard: kpisPorRango — KPIs agregados por periodo (EDS-97)', () =
     expect(r14.produccionKg).toBe(100); // pero sí entra en una ventana de 14
   });
 
-  test('rechaza dias <= 0', async () => {
+  // CodeRabbit (PR EDS-97): sin cota superior ni chequeo de entero, un
+  // `dias` fraccionario o absurdamente grande llegaba directo a
+  // `cierresEnRango`, que hace `Array.from({length: dias}, ...)` — un
+  // valor enorme intenta reservar un arreglo de ese tamaño antes de
+  // procesar nada. Se restringe a los 3 valores que la UI realmente ofrece.
+  test('rechaza dias que no sea 7, 14 o 30 (incluye 0, fraccionario y absurdamente grande)', async () => {
     const t = convexTest(schema, modules);
     const { comprasToken } = await setup(t);
     await expect(t.query(api.dashboard.kpisPorRango, { dias: 0, token: comprasToken })).rejects.toThrow();
+    await expect(t.query(api.dashboard.kpisPorRango, { dias: 7.5, token: comprasToken })).rejects.toThrow();
+    await expect(t.query(api.dashboard.kpisPorRango, { dias: 1_000_000_000, token: comprasToken })).rejects.toThrow();
+  });
+
+  test('acepta exactamente 7, 14 y 30', async () => {
+    const t = convexTest(schema, modules);
+    const { comprasToken } = await setup(t);
+    for (const dias of [7, 14, 30]) {
+      await expect(t.query(api.dashboard.kpisPorRango, { dias, token: comprasToken })).resolves.toBeDefined();
+    }
   });
 });
 
