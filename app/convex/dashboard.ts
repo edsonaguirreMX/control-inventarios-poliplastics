@@ -252,6 +252,45 @@ export const tendenciaCosto = query({
   },
 });
 
+// EDS-97 — pedido explícito del usuario: las tarjetas de % merma/
+// producción (Calidad) y costo real/kg/metro (Gerencia) solo mostraban el
+// último cierre; ahora se puede elegir un periodo (última semana, últimos
+// 14/30 días) además de "último cierre". Mismo cálculo agregado que ya usa
+// calcularKPIsHoyImpl para su bloque "último cierre" (Σmerma/Σtotal,
+// Σcosto/Σkg — nunca un promedio de porcentajes diarios, que subestimaría
+// días de alta producción), pero sobre `cierresEnRango(ctx, dias)` en vez
+// de solo los cierres de la fecha del último cierre.
+export const kpisPorRango = query({
+  args: { dias: v.number(), token: v.string() },
+  handler: async (ctx, { dias, token }) => {
+    await requireRole(ctx, token, ROLES_DASHBOARD);
+    if (dias <= 0) throw new ConvexError('kpisPorRango: dias debe ser mayor a 0.');
+    const params = await requireParametros(ctx);
+    const { fechas, cierres } = await cierresEnRango(ctx, dias);
+
+    const kgBuenos = cierres.reduce((s, c) => s + c.kgBuenos, 0);
+    const metrosBuenos = cierres.reduce((s, c) => s + c.metrosBuenos, 0);
+    const mermaTotalKg = cierres.reduce((s, c) => s + c.mermaTotalKg, 0);
+    const costoTotal = cierres.reduce((s, c) => s + c.costoTotalConsumido, 0);
+    const totalProcesado = kgBuenos + mermaTotalKg;
+    const pctMerma = totalProcesado > 0 ? (mermaTotalKg / totalProcesado) * 100 : 0;
+    const costoRealPorKg = kgBuenos > 0 ? costoTotal / kgBuenos : 0;
+    const costoRealPorMetro = costoRealPorKg * params.kgPorMetro;
+
+    return {
+      dias,
+      fechaDesde: fechas[0],
+      fechaHasta: fechas[fechas.length - 1],
+      pctMerma,
+      produccionKg: kgBuenos,
+      produccionMetros: metrosBuenos,
+      costoTotal,
+      costoRealPorKg,
+      costoRealPorMetro,
+    };
+  },
+});
+
 // Metas de producción (tarea 6.5) — singleton, igual patrón que
 // parametrosProduccion. Lectura: cualquier rol del dashboard. Escritura:
 // solo admin (el spec de roles no le da a Calidad ni Gerencia edición de

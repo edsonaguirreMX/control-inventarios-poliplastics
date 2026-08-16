@@ -392,6 +392,21 @@ button{font-family:inherit;}
     </div>
   </div>
 
+  <!-- EDS-97: periodo de las tarjetas de % merma/producción (Calidad) y
+       costo real/kg/metro (Gerencia) — independiente del selector de
+       Tendencias de arriba, que controla las gráficas de abajo, no estas
+       tarjetas. "Último cierre" (default) es el comportamiento de EDS-90;
+       7/14/30 días agregan varios cierres con kpisPorRango. -->
+  <div class="filter-row">
+    <span class="filter-label">Periodo de KPIs</span>
+    <div class="range-pick" id="periodoKPIPick">
+      <button class="on" data-periodo="ultimo">Último cierre</button>
+      <button data-periodo="7">Última semana</button>
+      <button data-periodo="14">14 días</button>
+      <button data-periodo="30">Últimos 30 días</button>
+    </div>
+  </div>
+
   <!-- KPI: Compras -->
   <div class="kpi-row role-section" data-roles="compras" id="kpiCompras"></div>
 
@@ -628,6 +643,14 @@ let COSTO_30 = [];                       // api.dashboard.tendenciaCosto({dias:3
 const MERMA_META = 5.0; // referencia fija — no hay una meta de merma persistida todavía (solo metas de producción, tarea 6.5)
 let prodRangeN = 14;
 
+// EDS-97: 'ultimo' (default) usa KPI.*UltimoCierre, ya cargado — sin
+// refetch. '7'/'14'/'30' llaman kpisPorRango({dias}) la primera vez que se
+// eligen y quedan en caché (por eso el objeto, no solo el último valor):
+// cambiar de periodo varias veces no debe volver a pedirle al servidor lo
+// mismo dos veces en la misma sesión de la página.
+let periodoKPI = 'ultimo';
+const KPI_RANGO_CACHE = {}; // { [dias:number]: resultado de kpisPorRango }
+
 const fmt = n => Math.round(n).toLocaleString('es-MX');
 const fmtMoney = n => n.toLocaleString('es-MX', {minimumFractionDigits:2, maximumFractionDigits:2});
 const fmtPct = n => (n>0?'+':'') + n.toFixed(1) + '%';
@@ -685,24 +708,50 @@ function renderUltimoCierre(){
     : 'Sin cierres capturados todavía';
 }
 
+// EDS-97: fuente de las 4 tarjetas de % merma/producción/costo real según
+// el periodo elegido. 'ultimo' usa los campos *UltimoCierre de KPI (ya
+// cargados por getKPIsHoy, EDS-90); un número de días usa lo que haya en
+// caché de kpisPorRango (cargarPeriodoKPI ya lo puso ahí antes de llamar a
+// renderKPIs — nunca llega aquí sin datos).
+function datosKPIPeriodo(){
+  if (periodoKPI === 'ultimo') {
+    return {
+      pctMerma: KPI.pctMermaUltimoCierre,
+      produccionMetros: KPI.produccionUltimoCierreMetros,
+      costoRealPorKg: KPI.costoRealPorKgUltimoCierre,
+      costoRealPorMetro: KPI.costoRealPorMetroUltimoCierre,
+      etiqueta: KPI.ultimoCierre ? `último cierre (${isoADisplayCorto(KPI.ultimoCierre.fecha)})` : 'sin cierres',
+    };
+  }
+  const r = KPI_RANGO_CACHE[periodoKPI];
+  const etiquetas = { 7: 'última semana', 14: 'últimos 14 días', 30: 'últimos 30 días' };
+  return {
+    pctMerma: r.pctMerma,
+    produccionMetros: r.produccionMetros,
+    costoRealPorKg: r.costoRealPorKg,
+    costoRealPorMetro: r.costoRealPorMetro,
+    etiqueta: etiquetas[periodoKPI],
+  };
+}
+
 function renderKPIs(){
   const materialesConReorden = KPI.materiales.filter(m=>m.reorderKg!==null);
   const nCrit = materialesConReorden.filter(m=>m.status==='crit').length;
   const nWarn = materialesConReorden.filter(m=>m.status==='warn').length;
   const masUrgente = materialesConReorden.filter(m=>m.status==='crit').sort((a,b)=>(a.coberturaDias??Infinity)-(b.coberturaDias??Infinity))[0];
-  const mermaHoy = KPI.pctMermaUltimoCierre;
-  const costoRealKg = KPI.costoRealPorKgUltimoCierre;
-  const costoRealM = KPI.costoRealPorMetroUltimoCierre;
+  const periodo = datosKPIPeriodo();
+  const mermaHoy = periodo.pctMerma;
+  const costoRealKg = periodo.costoRealPorKg;
+  const costoRealM = periodo.costoRealPorMetro;
   const costoEstandarKg = KPI.costoEstandarPorKg;
   const costoEstandarM = KPI.costoEstandarPorMetro;
   const semanaTotal = Array.from({length:7},(_,i)=>metrosPlantaDia(23+i)).reduce((a,b)=>a+b,0);
   const semanaPct = OBJETIVOS.semana > 0 ? semanaTotal/OBJETIVOS.semana*100 : 0;
   const tendencia = tendenciaCostoTexto();
-  // EDS-90: "hoy" nunca tiene cierres capturados el mismo día en la
-  // operación real — estas tarjetas ahora muestran el último cierre
-  // capturado (KPI.ultimoCierre, mismo dato que usa renderUltimoCierre)
-  // y lo dejan explícito en la etiqueta en vez de decir "hoy".
-  const fechaRef = KPI.ultimoCierre ? isoADisplayCorto(KPI.ultimoCierre.fecha) : 'sin cierres';
+  // EDS-90/EDS-97: "hoy" nunca tiene cierres capturados el mismo día en la
+  // operación real — estas tarjetas muestran el periodo elegido arriba
+  // (último cierre por default) y lo dejan explícito en la etiqueta.
+  const fechaRef = periodo.etiqueta;
 
   document.getElementById('kpiCompras').innerHTML = `
     <div class="stat-tile">
@@ -728,13 +777,13 @@ function renderKPIs(){
 
   document.getElementById('kpiCalidad').innerHTML = `
     <div class="stat-tile">
-      <div class="stat-row"><span class="stat-label">% merma — último cierre (${fechaRef})</span>${spark(MERMA_30.slice(-12))}</div>
+      <div class="stat-row"><span class="stat-label">% merma — ${fechaRef}</span>${spark(MERMA_30.slice(-12))}</div>
       <span class="stat-value">${mermaHoy.toFixed(1)}<span class="unit">%</span></span>
       <span class="stat-delta ${mermaHoy>MERMA_META?'bad':'good'}" style="width:fit-content;">${mermaHoy>MERMA_META?'+':''}${(mermaHoy-MERMA_META).toFixed(1)}pp vs. meta ${MERMA_META.toFixed(1)}%</span>
     </div>
     <div class="stat-tile">
-      <span class="stat-label">Producción — último cierre (${fechaRef})</span>
-      <span class="stat-value">${fmt(KPI.produccionUltimoCierreMetros)}<span class="unit">m</span></span>
+      <span class="stat-label">Producción — ${fechaRef}</span>
+      <span class="stat-value">${fmt(periodo.produccionMetros)}<span class="unit">m</span></span>
       <span class="stat-sub">Ambas líneas y turnos · objetivo ${fmt((OBJETIVOS.turnoL1+OBJETIVOS.turnoL2)*2)} m/día en planta</span>
     </div>
     <div class="stat-tile">
@@ -745,12 +794,12 @@ function renderKPIs(){
 
   document.getElementById('kpiGerencia').innerHTML = `
     <div class="stat-tile">
-      <div class="stat-row"><span class="stat-label">Costo real / kg — último cierre (${fechaRef})</span>${spark(COSTO_30.slice(-12))}</div>
+      <div class="stat-row"><span class="stat-label">Costo real / kg — ${fechaRef}</span>${spark(COSTO_30.slice(-12))}</div>
       <span class="stat-value">$${fmtMoney(costoRealKg)}</span>
       <span class="stat-delta ${costoEstandarKg>0 && costoRealKg>costoEstandarKg?'bad':'good'}" style="width:fit-content;">${costoEstandarKg>0?fmtPct((costoRealKg/costoEstandarKg-1)*100)+' vs. estándar $'+fmtMoney(costoEstandarKg):'sin estándar configurado'}</span>
     </div>
     <div class="stat-tile">
-      <span class="stat-label">Costo real / metro — último cierre (${fechaRef})</span>
+      <span class="stat-label">Costo real / metro — ${fechaRef}</span>
       <span class="stat-value">$${fmtMoney(costoRealM)}</span>
       <span class="stat-delta ${costoEstandarM>0 && costoRealM>costoEstandarM?'bad':'good'}" style="width:fit-content;">${costoEstandarM>0?fmtPct((costoRealM/costoEstandarM-1)*100)+' vs. estándar $'+fmtMoney(costoEstandarM):'sin estándar configurado'}</span>
     </div>
@@ -1087,6 +1136,38 @@ document.getElementById('rangePick').addEventListener('click', e=>{
   CHARTS['mermaChartWrap'].rangeN = n; drawChart('mermaChartWrap');
   CHARTS['costoChartWrap'].rangeN = n; drawChart('costoChartWrap');
   prodRangeN = n; drawProdCharts();
+});
+
+// EDS-97: cambia el periodo de las 4 tarjetas de % merma/producción/costo
+// real (Calidad y Gerencia) — 'ultimo' ya está en KPI (sin refetch);
+// 7/14/30 piden kpisPorRango la primera vez y quedan en KPI_RANGO_CACHE.
+document.getElementById('periodoKPIPick').addEventListener('click', async e=>{
+  const b = e.target.closest('button'); if(!b) return;
+  const periodo = b.dataset.periodo; // 'ultimo' | '7' | '14' | '30'
+  if (periodo === periodoKPI) return; // ya seleccionado, nada que hacer
+
+  const grupo = b.parentElement;
+  if (periodo !== 'ultimo' && !KPI_RANGO_CACHE[periodo]) {
+    // Solo se deshabilita el grupo mientras falta el fetch — cambiar entre
+    // 'ultimo' y un periodo ya cacheado es instantáneo, sin esta espera.
+    [...grupo.children].forEach(c=>c.disabled = true);
+    try {
+      KPI_RANGO_CACHE[periodo] = await window.Session.call(api.dashboard.kpisPorRango, { dias: +periodo }, 'query');
+    } catch (err) {
+      console.error('[panel-control] Error al cargar KPIs por periodo:', err);
+      const errorBox = document.getElementById('connError');
+      errorBox.hidden = false;
+      errorBox.textContent = '⚠ ' + window.Session.mensajeError(err);
+      [...grupo.children].forEach(c=>c.disabled = false);
+      return;
+    }
+    [...grupo.children].forEach(c=>c.disabled = false);
+  }
+
+  periodoKPI = periodo;
+  [...grupo.children].forEach(c=>c.classList.remove('on'));
+  b.classList.add('on');
+  renderKPIs();
 });
 
 /* ============================================================
