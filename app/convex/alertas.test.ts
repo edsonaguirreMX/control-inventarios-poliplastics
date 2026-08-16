@@ -291,6 +291,60 @@ describe('alertas: evaluarAlertas (tarea 7.2) — motor de evaluación', () => {
     expect(historial.filter((h) => h.reglaSlug === 'merma-alta').length).toBe(2);
   });
 
+  // Cobertura simétrica pedida en revisión (CodeRabbit, PR EDS-90): el test
+  // anterior solo prueba merma-alta — costo-alto comparte exactamente el
+  // mismo mecanismo de disparar()/fechaDedupe, pero es una regla
+  // independiente y una regresión ahí (p.ej. alguien vuelve a pasar `hoy`
+  // en vez de `kpis.fecha` solo en esta rama) no la detectaría el test de
+  // merma-alta.
+  test('costo-alto no duplica alerta si el cierre de referencia no cambia, pero sí alerta de nuevo con un cierre nuevo', async () => {
+    const t = convexTest(schema, modules);
+    const { adminId } = await setup(t);
+    const operadorToken = await crearSesionPrueba(t, await crearUsuarioPrueba(t, 'operador'));
+    // costoEstandar=1 × kgPorCarga=10 (única entrada de fórmula) → costoEstandarPorKg=1.
+    const matId = await crearMaterialPrueba(t, { costoEstandar: 1 });
+    await t.run((ctx) => ctx.db.insert('formulaCarga', { materialId: matId, kgPorCarga: 10, nota: '', updatedAt: Date.now() }));
+    await t.run((ctx) => crearCapaImpl(ctx, {
+      materialId: matId, kgOriginal: 100000, costoUnitario: 5, fechaEntrada: 1000,
+      origen: 'entrada', entradaId: null, cierreTurnoId: null,
+      origenTipo: 'entrada', origenId: 'setup', createdBy: adminId,
+    }));
+    // kgBuenos = 20m × 4kg/m = 80kg; costoTotal = 100kg × $5 = $500 →
+    // costoRealPorKgUltimoCierre = 500/80 = $6.25 — muy por arriba del
+    // estándar ($1) + margen (5% por default).
+    await t.mutation(api.cierres.crearCierreTurno, {
+      fecha: HOY, linea: 1, turno: 1, cargasPreparadas: 1, metrosBuenos: 20,
+      caballetes105Pzas: 0, caballetes106Pzas: 0,
+      consumoPorMaterial: [{ materialId: matId, kgConsumido: 100 }],
+      token: operadorToken,
+    });
+    await t.mutation(internal.alertas.evaluarAlertas, {});
+    let historial = await t.run((ctx) => ctx.db.query('alertasHistorial').collect());
+    expect(historial.filter((h) => h.reglaSlug === 'costo-alto').length).toBe(1);
+
+    // El cron vuelve a correr 2 días después SIN ningún cierre nuevo — no
+    // debe insertar una segunda alerta idéntica.
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.now() + 2 * 24 * 60 * 60 * 1000);
+    await t.mutation(internal.alertas.evaluarAlertas, {});
+    historial = await t.run((ctx) => ctx.db.query('alertasHistorial').collect());
+    expect(historial.filter((h) => h.reglaSlug === 'costo-alto').length).toBe(1);
+
+    // Un cierre NUEVO (fecha distinta), todavía con costo alto, sí debe
+    // generar una segunda alerta.
+    const operadorToken2 = await crearSesionPrueba(t, await crearUsuarioPrueba(t, 'operador'));
+    const hoyFake = fechaOperativa(Date.now(), ZONA, T1);
+    await t.mutation(api.cierres.crearCierreTurno, {
+      fecha: hoyFake, linea: 2, turno: 1, cargasPreparadas: 1, metrosBuenos: 20,
+      caballetes105Pzas: 0, caballetes106Pzas: 0,
+      consumoPorMaterial: [{ materialId: matId, kgConsumido: 100 }],
+      token: operadorToken2,
+    });
+    await t.mutation(internal.alertas.evaluarAlertas, {});
+    historial = await t.run((ctx) => ctx.db.query('alertasHistorial').collect());
+    expect(historial.filter((h) => h.reglaSlug === 'costo-alto').length).toBe(2);
+  });
+
   test('produccion-baja NO dispara si el objetivo semanal es 0 (evita falso positivo por división entre cero)', async () => {
     const t = convexTest(schema, modules);
     await setup(t);
