@@ -277,6 +277,15 @@ document.getElementById('loginForm').addEventListener('submit', (e) => {
   const user = await window.Session.getUser();
   if (user) redirectByRole(user.rol);
 })();
+
+// EDS-89: el monitor de inactividad de session.js redirige aquí con
+// ?motivo=inactividad tras cerrar la sesión sola — sin este aviso, el
+// usuario solo vería "de repente" la pantalla de login sin saber por qué.
+if (new URLSearchParams(location.search).get('motivo') === 'inactividad') {
+  const errorBox = document.getElementById('loginError');
+  errorBox.textContent = 'Tu sesión se cerró por inactividad (10 minutos sin actividad). Inicia sesión de nuevo.';
+  errorBox.style.display = 'block';
+}
 </script>
 
 </body>

@@ -75,18 +75,72 @@ async function getUser() {
   return cachedUser;
 }
 
+// CodeRabbit (PR EDS-89): client.mutation no tiene timeout propio — si la
+// red se degrada a medio camino (se cae sin llegar a rechazar la promesa,
+// p.ej. el cliente de Convex sigue reintentando en silencio), `await
+// client.mutation(...)` podía quedarse colgado indefinidamente y todo lo
+// que espera a `logout()` (el redirect del monitor de inactividad, el
+// "Cerrar sesión" manual en cada pantalla) se quedaba esperando con la
+// sesión ya inválida a ojos del usuario pero la pantalla sin reaccionar.
+// clearToken() ya corre antes del await (línea de abajo), así que lo único
+// que este timeout acota es "avisarle al servidor que invalide la sesión"
+// — si tarda más de 5s se sigue igual, la limpieza local ya sucedió.
+const LOGOUT_TIMEOUT_MS = 5000;
+
 async function logout() {
   const token = getToken();
   clearToken();
   cachedUser = null;
   if (token && client) {
     try {
-      await client.mutation(api.auth.logout, { token });
+      await Promise.race([
+        client.mutation(api.auth.logout, { token }),
+        new Promise((resolve) => setTimeout(resolve, LOGOUT_TIMEOUT_MS)),
+      ]);
     } catch (err) {
       // El token local ya se limpió — un error de red aquí no debe bloquear el logout visual.
       console.warn('[session.js] logout en servidor falló (token local ya se limpió):', err);
     }
   }
+}
+
+// EDS-89: logout automático tras 10 minutos de inactividad — la sesión
+// quedaba abierta indefinidamente mientras el navegador siguiera abierto,
+// sin importar cuánto tiempo llevara sola la pantalla. Se activa una sola
+// vez por carga de página (iniciarMonitorInactividad se llama desde
+// requireRole, que ya corre en las 10 pantallas protegidas — nunca en
+// login-acceso.html, que no llama requireRole y no tiene sesión que
+// cuidar). Revisa por intervalo en vez de resetear un setTimeout en cada
+// evento — mousemove puede disparar cientos de veces por segundo y no
+// hace falta esa precisión para un timeout de 10 minutos.
+const INACTIVIDAD_MS = 10 * 60 * 1000;
+const INTERVALO_CHEQUEO_MS = 15 * 1000;
+let ultimaActividad = Date.now();
+let monitorInactividadIniciado = false;
+
+function marcarActividad() {
+  ultimaActividad = Date.now();
+}
+
+function iniciarMonitorInactividad() {
+  if (monitorInactividadIniciado) return;
+  monitorInactividadIniciado = true;
+  // CodeRabbit (PR EDS-89): ultimaActividad se inicializaba al cargar el
+  // módulo, no al arrancar el monitor — requireRole() es async (espera la
+  // consulta de sesión a Convex), así que si esa consulta tardara más de
+  // INACTIVIDAD_MS, el primer chequeo del intervalo vería una inactividad
+  // "vieja" y cerraría la sesión de inmediato. Se reinicia aquí para que
+  // el conteo arranque justo cuando el monitor realmente empieza a vigilar.
+  ultimaActividad = Date.now();
+  ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'click'].forEach((evento) =>
+    window.addEventListener(evento, marcarActividad, { passive: true })
+  );
+  setInterval(async () => {
+    if (Date.now() - ultimaActividad >= INACTIVIDAD_MS) {
+      await logout();
+      window.location.href = '/login-acceso.html?motivo=inactividad';
+    }
+  }, INTERVALO_CHEQUEO_MS);
 }
 
 /**
@@ -101,6 +155,7 @@ async function requireRole(roles) {
     window.location.href = '/login-acceso.html';
     return new Promise(() => {});
   }
+  iniciarMonitorInactividad();
   return user;
 }
 
