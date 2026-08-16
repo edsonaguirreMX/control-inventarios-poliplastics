@@ -255,15 +255,17 @@ describe('dashboard: getKPIsHoy (tarea 6.1)', () => {
 // — pero solo getKPIsHoy tenía un test explícito de rechazo. Mismo patrón de
 // código no es excusa para dejar sin regresión automática las otras 4
 // funciones: si alguna llegara a perder esa línea en un refactor futuro,
-// nada lo detectaría hasta que alguien probara manualmente.
-describe('dashboard: rechazo de rol — produccionPorRango/tendenciaMerma/tendenciaCosto/getObjetivos (EDS-66)', () => {
-  test('operador (sin vista de Panel de Control) es rechazado por las 4 funciones', async () => {
+// nada lo detectaría hasta que alguien probara manualmente. EDS-97 agrega
+// kpisPorRango a la lista (mismo requireRole).
+describe('dashboard: rechazo de rol — produccionPorRango/tendenciaMerma/tendenciaCosto/getObjetivos/kpisPorRango (EDS-66/97)', () => {
+  test('operador (sin vista de Panel de Control) es rechazado por las 5 funciones', async () => {
     const t = convexTest(schema, modules);
     const { operadorToken } = await setup(t);
     await expect(t.query(api.dashboard.produccionPorRango, { dias: 7, token: operadorToken })).rejects.toThrow();
     await expect(t.query(api.dashboard.tendenciaMerma, { dias: 7, token: operadorToken })).rejects.toThrow();
     await expect(t.query(api.dashboard.tendenciaCosto, { dias: 7, token: operadorToken })).rejects.toThrow();
     await expect(t.query(api.dashboard.getObjetivos, { token: operadorToken })).rejects.toThrow();
+    await expect(t.query(api.dashboard.kpisPorRango, { dias: 7, token: operadorToken })).rejects.toThrow();
   });
 });
 
@@ -325,6 +327,109 @@ describe('dashboard: series históricas (tarea 6.2)', () => {
     const t = convexTest(schema, modules);
     const { comprasToken } = await setup(t);
     await expect(t.query(api.dashboard.produccionPorRango, { dias: 0, token: comprasToken })).rejects.toThrow();
+  });
+});
+
+// EDS-97 — pedido explícito del usuario: las tarjetas de % merma/producción
+// (Calidad) y costo real/kg/metro (Gerencia) deben poder verse agregadas
+// por un periodo (última semana, últimos 14/30 días), no solo el último
+// cierre. kpisPorRango es la query que las alimenta.
+describe('dashboard: kpisPorRango — KPIs agregados por periodo (EDS-97)', () => {
+  test('agrega Σmerma/Σtotal y Σcosto/Σkg de VARIOS cierres — nunca un promedio de porcentajes diarios', async () => {
+    const t = convexTest(schema, modules);
+    const { comprasToken, operadorToken, adminId } = await setup(t);
+    const matId = await crearMaterialPrueba(t);
+    await t.run((ctx) =>
+      crearCapaImpl(ctx, {
+        materialId: matId, kgOriginal: 100000, costoUnitario: 2, fechaEntrada: 1000,
+        origen: 'entrada', entradaId: null, cierreTurnoId: null,
+        origenTipo: 'entrada', origenId: 'setup', createdBy: adminId,
+      })
+    );
+    const ayer = sumarDiasISO(HOY, -1);
+    // Día 1 (ayer): kgBuenos=100, merma=20 (20% del día) — igual que el
+    // test de "último cierre" de arriba.
+    await t.mutation(api.cierres.crearCierreTurno, {
+      fecha: ayer, linea: 1, turno: 1, cargasPreparadas: 1, metrosBuenos: 25,
+      caballetes105Pzas: 0, caballetes106Pzas: 0,
+      consumoPorMaterial: [{ materialId: matId, kgConsumido: 120 }], // kgBuenos=100, merma=20
+      token: operadorToken,
+    });
+    // Día 2 (hoy): kgBuenos=400, merma=0 (0% del día) — un día de mucho
+    // volumen y cero merma. Un promedio simple de "20% y 0%" daría 10%;
+    // el cálculo correcto (Σmerma/Σtotal) da 20/(120+400)=3.8%, muy
+    // distinto — este test falla si algún día alguien "simplifica" a un
+    // promedio de porcentajes diarios.
+    await t.mutation(api.cierres.crearCierreTurno, {
+      fecha: HOY, linea: 1, turno: 2, cargasPreparadas: 1, metrosBuenos: 100,
+      caballetes105Pzas: 0, caballetes106Pzas: 0,
+      consumoPorMaterial: [{ materialId: matId, kgConsumido: 400 }], // kgBuenos=400, merma=0
+      token: operadorToken,
+    });
+
+    const r = await t.query(api.dashboard.kpisPorRango, { dias: 7, token: comprasToken });
+    expect(r.produccionKg).toBe(500); // 100 + 400
+    expect(r.produccionMetros).toBe(125); // 25 + 100
+    expect(r.pctMerma).toBeCloseTo((20 / 520) * 100, 5); // Σmerma/Σtotal, NO (20+0)/2
+    expect(r.costoTotal).toBe(120 * 2 + 400 * 2); // 1040
+    expect(r.costoRealPorKg).toBeCloseTo(1040 / 500, 5);
+    expect(r.costoRealPorMetro).toBeCloseTo(r.costoRealPorKg * 4, 5); // kgPorMetro=4 (crearParametrosPrueba)
+    expect(r.dias).toBe(7);
+    expect(r.fechaHasta).toBe(HOY);
+  });
+
+  test('sin cierres en el rango: todo en 0, sin dividir entre cero', async () => {
+    const t = convexTest(schema, modules);
+    const { comprasToken } = await setup(t);
+    const r = await t.query(api.dashboard.kpisPorRango, { dias: 30, token: comprasToken });
+    expect(r.pctMerma).toBe(0);
+    expect(r.produccionKg).toBe(0);
+    expect(r.produccionMetros).toBe(0);
+    expect(r.costoRealPorKg).toBe(0);
+    expect(r.costoRealPorMetro).toBe(0);
+  });
+
+  test('un cierre fuera del rango pedido (más viejo que "dias") no se incluye', async () => {
+    const t = convexTest(schema, modules);
+    const { comprasToken, adminId } = await setup(t);
+    // Se inserta el cierre directo (no vía crearCierreTurno, que solo
+    // acepta hasta 7 días atrás) — aquí solo interesa que kpisPorRango
+    // filtre bien por fecha, no ejercitar el flujo de captura completo.
+    const hace10 = sumarDiasISO(HOY, -10);
+    await t.run((ctx) => ctx.db.insert('cierresTurno', {
+      fecha: hace10, linea: 1, turno: 1, cargasPreparadas: 1, metrosBuenos: 25,
+      caballetes105Pzas: 0, caballetes106Pzas: 0, kgBuenos: 100, caballetesKg: 0,
+      mermaTotalKg: 0, trituradoKg: 0, costoTotalConsumido: 100, costoRealPorKg: 1, costoRealPorMetro: 4,
+      capturadoPor: adminId, capturadoEn: Date.now(), editado: false, editadoPor: null, editadoEn: null,
+      vecesRecapturado: 0,
+    }));
+
+    const r7 = await t.query(api.dashboard.kpisPorRango, { dias: 7, token: comprasToken });
+    expect(r7.produccionKg).toBe(0); // el cierre de hace 10 días queda fuera de una ventana de 7
+
+    const r14 = await t.query(api.dashboard.kpisPorRango, { dias: 14, token: comprasToken });
+    expect(r14.produccionKg).toBe(100); // pero sí entra en una ventana de 14
+  });
+
+  // CodeRabbit (PR EDS-97): sin cota superior ni chequeo de entero, un
+  // `dias` fraccionario o absurdamente grande llegaba directo a
+  // `cierresEnRango`, que hace `Array.from({length: dias}, ...)` — un
+  // valor enorme intenta reservar un arreglo de ese tamaño antes de
+  // procesar nada. Se restringe a los 3 valores que la UI realmente ofrece.
+  test('rechaza dias que no sea 7, 14 o 30 (incluye 0, fraccionario y absurdamente grande)', async () => {
+    const t = convexTest(schema, modules);
+    const { comprasToken } = await setup(t);
+    await expect(t.query(api.dashboard.kpisPorRango, { dias: 0, token: comprasToken })).rejects.toThrow();
+    await expect(t.query(api.dashboard.kpisPorRango, { dias: 7.5, token: comprasToken })).rejects.toThrow();
+    await expect(t.query(api.dashboard.kpisPorRango, { dias: 1_000_000_000, token: comprasToken })).rejects.toThrow();
+  });
+
+  test('acepta exactamente 7, 14 y 30', async () => {
+    const t = convexTest(schema, modules);
+    const { comprasToken } = await setup(t);
+    for (const dias of [7, 14, 30]) {
+      await expect(t.query(api.dashboard.kpisPorRango, { dias, token: comprasToken })).resolves.toBeDefined();
+    }
   });
 });
 
