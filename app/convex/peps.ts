@@ -28,8 +28,8 @@ import { requireRole } from './lib/auth';
 // expone directo a un rol — siempre las compone algo que ya hizo su propio
 // requireRole antes.
 
-type OrigenCapa = 'entrada' | 'triturado' | 'inventarioInicial';
-type OrigenTipo = 'entrada' | 'cierreTurno' | 'correccion' | 'inventarioInicial';
+type OrigenCapa = 'entrada' | 'triturado' | 'inventarioInicial' | 'ajusteManual';
+type OrigenTipo = 'entrada' | 'cierreTurno' | 'correccion' | 'inventarioInicial' | 'ajusteManual';
 
 export async function crearCapaImpl(
   ctx: MutationCtx,
@@ -225,10 +225,10 @@ export const crearCapa = internalMutation({
     kgOriginal: v.number(),
     costoUnitario: v.number(),
     fechaEntrada: v.number(),
-    origen: v.union(v.literal('entrada'), v.literal('triturado'), v.literal('inventarioInicial')),
+    origen: v.union(v.literal('entrada'), v.literal('triturado'), v.literal('inventarioInicial'), v.literal('ajusteManual')),
     entradaId: v.union(v.id('entradas'), v.null()),
     cierreTurnoId: v.union(v.id('cierresTurno'), v.null()),
-    origenTipo: v.union(v.literal('entrada'), v.literal('cierreTurno'), v.literal('correccion'), v.literal('inventarioInicial')),
+    origenTipo: v.union(v.literal('entrada'), v.literal('cierreTurno'), v.literal('correccion'), v.literal('inventarioInicial'), v.literal('ajusteManual')),
     origenId: v.string(),
     createdBy: v.id('users'),
   },
@@ -239,7 +239,7 @@ export const consumirFIFO = internalMutation({
   args: {
     materialId: v.id('materiales'),
     kgAConsumir: v.number(),
-    origenTipo: v.union(v.literal('entrada'), v.literal('cierreTurno'), v.literal('correccion'), v.literal('inventarioInicial')),
+    origenTipo: v.union(v.literal('entrada'), v.literal('cierreTurno'), v.literal('correccion'), v.literal('inventarioInicial'), v.literal('ajusteManual')),
     origenId: v.string(),
     createdBy: v.id('users'),
   },

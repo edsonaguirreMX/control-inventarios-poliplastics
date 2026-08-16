@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as ajustesInventario from "../ajustesInventario.js";
 import type * as alertas from "../alertas.js";
 import type * as auth from "../auth.js";
 import type * as authActions from "../authActions.js";
@@ -39,6 +40,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  ajustesInventario: typeof ajustesInventario;
   alertas: typeof alertas;
   auth: typeof auth;
   authActions: typeof authActions;
