@@ -8,6 +8,15 @@ import { fechaOperativa, sumarDiasISO } from './lib/fechaOperativa';
 
 const modules = import.meta.glob('./**/*.ts');
 
+// "Hoy" tiene que calcularse igual que crearCierreTurno lo valida
+// (validarFechaOperativaEnVentana, ventana de 7 días atrás desde la fecha
+// operativa REAL) — un literal fijo como '2026-08-08' solo pasa mientras
+// el suite corra dentro de esos 7 días de esa fecha; cualquier día
+// después, cae fuera de la ventana y el test empieza a fallar sin que
+// nada del código real haya cambiado (encontrado real: EDS-95). Mismo
+// patrón ya usado en dashboard.test.ts/alertas.test.ts.
+const HOY = fechaOperativa(Date.now(), 'America/Mexico_City', '06:00');
+
 async function setup(t: Awaited<ReturnType<typeof convexTest>>) {
   await crearParametrosPrueba(t, 4);
   const trituradoId = await crearMaterialPrueba(t, { slug: 'triturado', esInterno: true });
@@ -32,7 +41,7 @@ describe('cierres: crearCierreTurno usa el motor compartido, sin duplicar PEPS (
     const { matAId, operadorToken } = await setup(t);
 
     const r = await t.mutation(api.cierres.crearCierreTurno, {
-      fecha: '2026-08-08', linea: 1, turno: 1, cargasPreparadas: 8, metrosBuenos: 40,
+      fecha: HOY, linea: 1, turno: 1, cargasPreparadas: 8, metrosBuenos: 40,
       caballetes105Pzas: 0, caballetes106Pzas: 0,
       consumoPorMaterial: [{ materialId: matAId, kgConsumido: 180 }],
       token: operadorToken,
@@ -53,14 +62,14 @@ describe('cierres: crearCierreTurno usa el motor compartido, sin duplicar PEPS (
     const { matAId, operadorToken } = await setup(t);
 
     await t.mutation(api.cierres.crearCierreTurno, {
-      fecha: '2026-08-08', linea: 1, turno: 1, cargasPreparadas: 8, metrosBuenos: 40,
+      fecha: HOY, linea: 1, turno: 1, cargasPreparadas: 8, metrosBuenos: 40,
       caballetes105Pzas: 0, caballetes106Pzas: 0,
       consumoPorMaterial: [{ materialId: matAId, kgConsumido: 180 }],
       token: operadorToken,
     });
 
     const r2 = await t.mutation(api.cierres.crearCierreTurno, {
-      fecha: '2026-08-08', linea: 1, turno: 1, cargasPreparadas: 8, metrosBuenos: 40,
+      fecha: HOY, linea: 1, turno: 1, cargasPreparadas: 8, metrosBuenos: 40,
       caballetes105Pzas: 0, caballetes106Pzas: 0,
       consumoPorMaterial: [{ materialId: matAId, kgConsumido: 180 }],
       token: operadorToken, // sin confirmarRecierre
@@ -80,14 +89,14 @@ describe('cierres: crearCierreTurno usa el motor compartido, sin duplicar PEPS (
     const { matAId, operadorToken } = await setup(t);
 
     const r1 = await t.mutation(api.cierres.crearCierreTurno, {
-      fecha: '2026-08-08', linea: 1, turno: 1, cargasPreparadas: 8, metrosBuenos: 40,
+      fecha: HOY, linea: 1, turno: 1, cargasPreparadas: 8, metrosBuenos: 40,
       caballetes105Pzas: 0, caballetes106Pzas: 0,
       consumoPorMaterial: [{ materialId: matAId, kgConsumido: 180 }],
       token: operadorToken,
     });
 
     const r2 = await t.mutation(api.cierres.crearCierreTurno, {
-      fecha: '2026-08-08', linea: 1, turno: 1, cargasPreparadas: 8, metrosBuenos: 35,
+      fecha: HOY, linea: 1, turno: 1, cargasPreparadas: 8, metrosBuenos: 35,
       caballetes105Pzas: 0, caballetes106Pzas: 0,
       consumoPorMaterial: [{ materialId: matAId, kgConsumido: 150 }],
       confirmarRecierre: true, token: operadorToken,
@@ -119,7 +128,7 @@ describe('cierres: crearCierreTurno usa el motor compartido, sin duplicar PEPS (
     const { matAId, operadorToken } = await setup(t);
     await expect(
       t.mutation(api.cierres.crearCierreTurno, {
-        fecha: '2026-08-08', linea: 1, turno: 1, cargasPreparadas: -1, metrosBuenos: 40,
+        fecha: HOY, linea: 1, turno: 1, cargasPreparadas: -1, metrosBuenos: 40,
         caballetes105Pzas: 0, caballetes106Pzas: 0,
         consumoPorMaterial: [{ materialId: matAId, kgConsumido: 10 }],
         token: operadorToken,
@@ -134,7 +143,7 @@ describe('cierres: crearCierreTurno usa el motor compartido, sin duplicar PEPS (
     const gerenciaToken = await crearSesionPrueba(t, gerenciaId);
     await expect(
       t.mutation(api.cierres.crearCierreTurno, {
-        fecha: '2026-08-08', linea: 1, turno: 1, cargasPreparadas: 8, metrosBuenos: 40,
+        fecha: HOY, linea: 1, turno: 1, cargasPreparadas: 8, metrosBuenos: 40,
         caballetes105Pzas: 0, caballetes106Pzas: 0,
         consumoPorMaterial: [{ materialId: matAId, kgConsumido: 10 }],
         token: gerenciaToken,
@@ -148,13 +157,13 @@ describe('cierres: estadoCierresDelDia / consumoEsperado (tarea 4.1)', () => {
     const t = convexTest(schema, modules);
     const { matAId, operadorToken } = await setup(t);
     await t.mutation(api.cierres.crearCierreTurno, {
-      fecha: '2026-08-08', linea: 1, turno: 1, cargasPreparadas: 8, metrosBuenos: 40,
+      fecha: HOY, linea: 1, turno: 1, cargasPreparadas: 8, metrosBuenos: 40,
       caballetes105Pzas: 0, caballetes106Pzas: 0,
       consumoPorMaterial: [{ materialId: matAId, kgConsumido: 10 }],
       token: operadorToken,
     });
 
-    const estado = await t.query(api.cierres.estadoCierresDelDia, { fecha: '2026-08-08', token: operadorToken });
+    const estado = await t.query(api.cierres.estadoCierresDelDia, { fecha: HOY, token: operadorToken });
     expect(estado).toHaveLength(4);
     const l1t1 = estado.find((e) => e.linea === 1 && e.turno === 1);
     const l1t2 = estado.find((e) => e.linea === 1 && e.turno === 2);
