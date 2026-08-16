@@ -247,8 +247,15 @@ export const evaluarAlertas = internalMutation({
     const reglas = await ctx.db.query('alertasReglas').collect();
     const reglaPorSlug = new Map(reglas.map((r) => [r.slug, r]));
 
-    async function disparar(regla: Doc<'alertasReglas'>, entidadKey: string, detalle: string): Promise<void> {
-      const dedupeKey = `${regla.slug}:${entidadKey}:${hoy}`;
+    // fechaDedupe: por default es el día operativo del cron (hoy) — así una
+    // regla que se reevalúa varias veces el mismo día solo dispara una vez.
+    // merma-alta/costo-alto lo sobreescriben con la fecha del ÚLTIMO CIERRE
+    // de referencia (EDS-90): si el cron corre varios días seguidos sin que
+    // se capture un cierre nuevo, es el MISMO evento viejo, no uno nuevo
+    // cada día — dedupear por "hoy" ahí generaría una alerta diaria de
+    // ruido por el mismo cierre ya reportado.
+    async function disparar(regla: Doc<'alertasReglas'>, entidadKey: string, detalle: string, fechaDedupe: string = hoy): Promise<void> {
+      const dedupeKey = `${regla.slug}:${entidadKey}:${fechaDedupe}`;
       const existente = await ctx.db.query('alertasHistorial').withIndex('by_dedupeKey', (q) => q.eq('dedupeKey', dedupeKey)).unique();
       if (existente) return;
       await ctx.db.insert('alertasHistorial', {
@@ -311,11 +318,15 @@ export const evaluarAlertas = internalMutation({
       // EDS-90: pctMermaHoy/costoRealPorKgHoy se renombraron a
       // *UltimoCierre — antes casi nunca disparaban porque "hoy" casi
       // nunca tenía cierres capturados (numerador siempre 0); ahora
-      // evalúan contra el último cierre real capturado.
+      // evalúan contra el último cierre real capturado. Importante:
+      // kpis.fecha es la fecha de ESE cierre de referencia (no la de hoy) —
+      // se usa como fechaDedupe para no generar una alerta nueva cada día
+      // que el cron corre mientras siga siendo el mismo cierre viejo sin
+      // uno nuevo que lo reemplace (ver comentario en disparar()).
       if (reglaMerma?.activa) {
         const margenPp = reglaMerma.umbral ?? 1.0;
         if (kpis.pctMermaUltimoCierre > META_MERMA_PCT + margenPp) {
-          await disparar(reglaMerma, '', `${kpis.pctMermaUltimoCierre.toFixed(1)}% vs. meta ${META_MERMA_PCT.toFixed(1)}%.`);
+          await disparar(reglaMerma, 'ultimo-cierre', `${kpis.pctMermaUltimoCierre.toFixed(1)}% vs. meta ${META_MERMA_PCT.toFixed(1)}%.`, kpis.fecha);
         }
       }
 
@@ -323,7 +334,7 @@ export const evaluarAlertas = internalMutation({
         const margenPct = reglaCosto.umbral ?? 5;
         if (kpis.costoRealPorKgUltimoCierre > kpis.costoEstandarPorKg * (1 + margenPct / 100)) {
           const deltaPct = ((kpis.costoRealPorKgUltimoCierre - kpis.costoEstandarPorKg) / kpis.costoEstandarPorKg) * 100;
-          await disparar(reglaCosto, '', `+${deltaPct.toFixed(1)}% sobre estándar ($${kpis.costoRealPorKgUltimoCierre.toFixed(2)} vs $${kpis.costoEstandarPorKg.toFixed(2)}/kg).`);
+          await disparar(reglaCosto, 'ultimo-cierre', `+${deltaPct.toFixed(1)}% sobre estándar ($${kpis.costoRealPorKgUltimoCierre.toFixed(2)} vs $${kpis.costoEstandarPorKg.toFixed(2)}/kg).`, kpis.fecha);
         }
       }
     }

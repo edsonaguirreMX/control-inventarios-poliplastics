@@ -237,6 +237,60 @@ describe('alertas: evaluarAlertas (tarea 7.2) — motor de evaluación', () => {
     expect(alerta?.detalle).toMatch(/20\.0%/);
   });
 
+  // EDS-90 (revisión post-No-Go): merma-alta/costo-alto ahora evalúan
+  // contra el último cierre real en vez de "hoy" — pero el dedupe original
+  // seguía usando la fecha operativa del CRON, no la del cierre de
+  // referencia. Resultado: si pasaban varios días sin un cierre nuevo, el
+  // cron generaba una alerta idéntica cada día por el mismo cierre viejo
+  // (ruido operativo real). El fix dedupea merma-alta/costo-alto por la
+  // fecha del cierre de referencia — este test prueba ambos lados: no debe
+  // duplicar mientras el cierre de referencia no cambie, pero sí debe
+  // alertar de nuevo cuando SÍ se captura un cierre nuevo con merma alta.
+  test('merma-alta no duplica alerta si el cierre de referencia no cambia, pero sí alerta de nuevo con un cierre nuevo', async () => {
+    const t = convexTest(schema, modules);
+    const { adminId } = await setup(t);
+    const operadorToken = await crearSesionPrueba(t, await crearUsuarioPrueba(t, 'operador'));
+    const matId = await crearMaterialPrueba(t);
+    await t.run((ctx) => crearCapaImpl(ctx, {
+      materialId: matId, kgOriginal: 100000, costoUnitario: 1, fechaEntrada: 1000,
+      origen: 'entrada', entradaId: null, cierreTurnoId: null,
+      origenTipo: 'entrada', origenId: 'setup', createdBy: adminId,
+    }));
+    await t.mutation(api.cierres.crearCierreTurno, {
+      fecha: HOY, linea: 1, turno: 1, cargasPreparadas: 1, metrosBuenos: 20,
+      caballetes105Pzas: 0, caballetes106Pzas: 0,
+      consumoPorMaterial: [{ materialId: matId, kgConsumido: 100 }], // 20% merma
+      token: operadorToken,
+    });
+    await t.mutation(internal.alertas.evaluarAlertas, {});
+
+    // El cron vuelve a correr 2 días después SIN ningún cierre nuevo — el
+    // último cierre de referencia sigue siendo el mismo. No debe insertar
+    // una segunda alerta idéntica.
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.now() + 2 * 24 * 60 * 60 * 1000);
+    await t.mutation(internal.alertas.evaluarAlertas, {});
+    let historial = await t.run((ctx) => ctx.db.query('alertasHistorial').collect());
+    expect(historial.filter((h) => h.reglaSlug === 'merma-alta').length).toBe(1);
+
+    // Ahora sí se captura un cierre NUEVO (fecha distinta), todavía con
+    // merma alta — esto es un evento real y nuevo, sí debe generar una
+    // segunda alerta (la sesión se crea DESPUÉS de fijar la hora falsa,
+    // igual que en los tests de turno-sin-cerrar, para que su expiresAt
+    // quede en el futuro respecto al reloj adelantado).
+    const operadorToken2 = await crearSesionPrueba(t, await crearUsuarioPrueba(t, 'operador'));
+    const hoyFake = fechaOperativa(Date.now(), ZONA, T1);
+    await t.mutation(api.cierres.crearCierreTurno, {
+      fecha: hoyFake, linea: 2, turno: 1, cargasPreparadas: 1, metrosBuenos: 20,
+      caballetes105Pzas: 0, caballetes106Pzas: 0,
+      consumoPorMaterial: [{ materialId: matId, kgConsumido: 100 }], // 20% merma otra vez
+      token: operadorToken2,
+    });
+    await t.mutation(internal.alertas.evaluarAlertas, {});
+    historial = await t.run((ctx) => ctx.db.query('alertasHistorial').collect());
+    expect(historial.filter((h) => h.reglaSlug === 'merma-alta').length).toBe(2);
+  });
+
   test('produccion-baja NO dispara si el objetivo semanal es 0 (evita falso positivo por división entre cero)', async () => {
     const t = convexTest(schema, modules);
     await setup(t);
