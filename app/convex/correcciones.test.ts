@@ -7,6 +7,16 @@ import { fechaOperativa } from './lib/fechaOperativa';
 
 const modules = import.meta.glob('./**/*.ts');
 
+// "Hoy" tiene que calcularse igual que crearCierreTurno lo valida
+// (validarFechaOperativaEnVentana, ventana de 7 días atrás desde la fecha
+// operativa REAL) — un literal fijo como '2026-08-08' solo pasa mientras
+// el suite corra dentro de esos 7 días de esa fecha; cualquier día
+// después, cae fuera de la ventana y el test empieza a fallar sin que
+// nada del código real haya cambiado (encontrado real: EDS-95). Las
+// fechas de `entradas.crearEntrada` (sin ventana — cualquier fecha
+// pasada es válida) se dejan como estaban, no las afecta este bug.
+const HOY = fechaOperativa(Date.now(), 'America/Mexico_City', '06:00');
+
 async function setup(t: Awaited<ReturnType<typeof convexTest>>) {
   await crearParametrosPrueba(t, 4);
   await crearMaterialPrueba(t, { slug: 'triturado', esInterno: true });
@@ -32,7 +42,7 @@ describe('correcciones: actualizarCierreTurno usa el motor compartido (tarea 5.2
     const { matAId, adminToken, operadorToken } = await setup(t);
 
     const { cierreTurnoId } = await t.mutation(api.cierres.crearCierreTurno, {
-      fecha: '2026-08-08', linea: 1, turno: 1, cargasPreparadas: 8, metrosBuenos: 40,
+      fecha: HOY, linea: 1, turno: 1, cargasPreparadas: 8, metrosBuenos: 40,
       caballetes105Pzas: 0, caballetes106Pzas: 0,
       consumoPorMaterial: [{ materialId: matAId, kgConsumido: 180 }],
       token: operadorToken,
@@ -64,7 +74,7 @@ describe('correcciones: actualizarCierreTurno usa el motor compartido (tarea 5.2
     const t = convexTest(schema, modules);
     const { matAId, operadorToken } = await setup(t);
     const { cierreTurnoId } = await t.mutation(api.cierres.crearCierreTurno, {
-      fecha: '2026-08-08', linea: 1, turno: 1, cargasPreparadas: 8, metrosBuenos: 40,
+      fecha: HOY, linea: 1, turno: 1, cargasPreparadas: 8, metrosBuenos: 40,
       caballetes105Pzas: 0, caballetes106Pzas: 0,
       consumoPorMaterial: [{ materialId: matAId, kgConsumido: 180 }],
       token: operadorToken,
@@ -83,13 +93,13 @@ describe('correcciones: actualizarCierreTurno usa el motor compartido (tarea 5.2
     const trituradoId = await t.run((ctx) => ctx.db.query('materiales').withIndex('by_slug', (q) => q.eq('slug', 'triturado')).unique()).then((m) => m!._id);
 
     const { cierreTurnoId: cierre1 } = await t.mutation(api.cierres.crearCierreTurno, {
-      fecha: '2026-08-08', linea: 1, turno: 1, cargasPreparadas: 8, metrosBuenos: 40,
+      fecha: HOY, linea: 1, turno: 1, cargasPreparadas: 8, metrosBuenos: 40,
       caballetes105Pzas: 0, caballetes106Pzas: 0,
       consumoPorMaterial: [{ materialId: matAId, kgConsumido: 180 }], // genera 20kg de Triturado
       token: operadorToken,
     });
     await t.mutation(api.cierres.crearCierreTurno, {
-      fecha: '2026-08-08', linea: 2, turno: 1, cargasPreparadas: 0, metrosBuenos: 0,
+      fecha: HOY, linea: 2, turno: 1, cargasPreparadas: 0, metrosBuenos: 0,
       caballetes105Pzas: 0, caballetes106Pzas: 0,
       consumoPorMaterial: [{ materialId: trituradoId, kgConsumido: 5 }], // consume 5kg de ese Triturado
       token: operadorToken,
@@ -147,7 +157,7 @@ describe('correcciones: actualizarEntrada (tarea 5.3)', () => {
       fecha: '2025-01-01', materialId: matAId, cantidadKg: 100, costoUnitario: 8, token: adminToken,
     });
     await t.mutation(api.cierres.crearCierreTurno, {
-      fecha: '2026-08-08', linea: 1, turno: 1, cargasPreparadas: 1, metrosBuenos: 0,
+      fecha: HOY, linea: 1, turno: 1, cargasPreparadas: 1, metrosBuenos: 0,
       caballetes105Pzas: 0, caballetes106Pzas: 0,
       consumoPorMaterial: [{ materialId: matAId, kgConsumido: 60 }], // toma de la capa más antigua primero (esta)
       token: operadorToken,
@@ -197,7 +207,7 @@ describe('correcciones: actualizarEntradasBatch es atómico (No-Go de auditoría
       fecha: '2025-01-01', materialId: matAId, cantidadKg: 100, costoUnitario: 8, token: adminToken,
     });
     await t.mutation(api.cierres.crearCierreTurno, {
-      fecha: '2026-08-08', linea: 1, turno: 1, cargasPreparadas: 1, metrosBuenos: 0,
+      fecha: HOY, linea: 1, turno: 1, cargasPreparadas: 1, metrosBuenos: 0,
       caballetes105Pzas: 0, caballetes106Pzas: 0,
       consumoPorMaterial: [{ materialId: matAId, kgConsumido: 60 }], // toma de la capa más antigua (e2) primero
       token: operadorToken,
@@ -236,30 +246,25 @@ describe('correcciones: queries de lectura (tarea 5.1)', () => {
   test('listRegistrosUltimos10Dias marca el día de hoy si hay un cierre', async () => {
     const t = convexTest(schema, modules);
     const { matAId, adminToken, operadorToken } = await setup(t);
-    // "Hoy" para la ventana de corrección es la fecha OPERATIVA
-    // (America/Mexico_City, misma regla que cierres/entradas) — no el
-    // UTC crudo, que puede diferir de esto según la hora en que corra el
-    // test (regresión del No-Go de auditoría de PR 3).
-    const hoy = fechaOperativa(Date.now(), 'America/Mexico_City', '06:00');
     await t.mutation(api.cierres.crearCierreTurno, {
-      fecha: hoy, linea: 1, turno: 1, cargasPreparadas: 8, metrosBuenos: 40,
+      fecha: HOY, linea: 1, turno: 1, cargasPreparadas: 8, metrosBuenos: 40,
       caballetes105Pzas: 0, caballetes106Pzas: 0,
       consumoPorMaterial: [{ materialId: matAId, kgConsumido: 10 }], token: operadorToken,
     });
     const dias = await t.query(api.correcciones.listRegistrosUltimos10Dias, { tipo: 'cierre', token: adminToken });
     expect(dias).toHaveLength(10);
-    expect(dias.find((d) => d.fecha === hoy)?.tieneRegistro).toBe(true);
+    expect(dias.find((d) => d.fecha === HOY)?.tieneRegistro).toBe(true);
   });
 
   test('getCierre devuelve el cierre + sus consumos vigentes', async () => {
     const t = convexTest(schema, modules);
     const { matAId, adminToken, operadorToken } = await setup(t);
     await t.mutation(api.cierres.crearCierreTurno, {
-      fecha: '2026-08-08', linea: 1, turno: 1, cargasPreparadas: 8, metrosBuenos: 40,
+      fecha: HOY, linea: 1, turno: 1, cargasPreparadas: 8, metrosBuenos: 40,
       caballetes105Pzas: 0, caballetes106Pzas: 0,
       consumoPorMaterial: [{ materialId: matAId, kgConsumido: 180 }], token: operadorToken,
     });
-    const resultado = await t.query(api.correcciones.getCierre, { fecha: '2026-08-08', linea: 1, turno: 1, token: adminToken });
+    const resultado = await t.query(api.correcciones.getCierre, { fecha: HOY, linea: 1, turno: 1, token: adminToken });
     expect(resultado?.cierre.metrosBuenos).toBe(40);
     expect(resultado?.consumos).toHaveLength(1);
   });
@@ -267,6 +272,6 @@ describe('correcciones: queries de lectura (tarea 5.1)', () => {
   test('compras (rol no permitido) no puede leer correcciones — solo admin', async () => {
     const t = convexTest(schema, modules);
     const { comprasToken } = await setup(t);
-    await expect(t.query(api.correcciones.getEntradasDelDia, { fecha: '2026-08-08', token: comprasToken })).rejects.toThrow();
+    await expect(t.query(api.correcciones.getEntradasDelDia, { fecha: HOY, token: comprasToken })).rejects.toThrow();
   });
 });
