@@ -312,6 +312,11 @@ button{font-family:inherit;}
 .print-table th:first-child,.print-table td:first-child{text-align:left;}
 .print-table th{font-family:'Big Shoulders Display',sans-serif;font-size:.68rem;letter-spacing:.04em;text-transform:uppercase;color:#555;}
 .print-table + .print-table{margin-top:1rem;}
+/* Líneas compactas del resumen ejecutivo (inventario, costo vs. estándar,
+   producción acumulada) — reemplazan tarjetas/gráficas enteras con un
+   solo renglón de texto cada una. */
+.print-line{margin:.5rem 0;font-size:.8rem;line-height:1.5;}
+.print-table + .print-line, .print-line + .print-table{margin-top:1rem;}
 
 /* ---------- config cards (admin) ---------- */
 .config-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;}
@@ -346,7 +351,21 @@ button{font-family:inherit;}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none !important;}}
 
-/* ---------- impresión / exportar PDF (Reporte Directivo, EDS-99) ---------- */
+/* ---------- impresión / exportar PDF (Reporte Directivo, EDS-99) ----------
+   Pedido explícito del usuario tras revisar 3 rondas del PDF real: nada de
+   "pantalla impresa" — un resumen ejecutivo de máximo 2 páginas. Existencias
+   y, desde la 4ª ronda, Producción por turno y línea (acotada a 7 días
+   naturales — ver renderProdTablePrint) sobreviven como tarjeta completa;
+   todo lo demás (KPIs, tendencia de costo, costo real de los últimos 6
+   cierres, producción acumulada) vive condensado en el bloque .print-only
+   de arriba — renderReporteEjecutivo() en el script principal. Las
+   secciones que ya no aportan nada distinto de eso se marcan .no-print
+   directo en su HTML (más simple y confiable que apagar cada gráfica/tabla
+   suelta por su cuenta — así se evita repetir el bug real que ya
+   encontramos aquí: "body.print-all .no-print" necesita la MISMA
+   especificidad que "body.print-all .role-section" (2 clases) y, a
+   especificidad igual, gana la regla que aparece DESPUÉS en la hoja de
+   estilos — por eso este bloque va abajo). ---------- */
 .print-only{display:none;}
 #generadoImpresion{font-size:.72rem;color:#666;margin-top:.2rem;}
 @media print{
@@ -355,40 +374,7 @@ button{font-family:inherit;}
   .bell-wrap, .role-switch, .btn-pdf, .updated-at, .role-badge, .session-row,
   .card-actions .tbl-toggle, .tbl-toggle, .config-cards,
   a[href*="artifact"],
-  /* EDS-99: pedido explícito — estos 2 selectores son controles
-     interactivos (cambian lo que se ve EN PANTALLA), no aportan nada
-     impresos y el usuario los reportó como ruido visual real. */
-  .filter-row,
-  /* La sección "Configuración" de Admin es puro menú de navegación
-     (links a otras pantallas) — nada de lo que hay ahí es un dato que
-     tenga sentido en un reporte. Prefijo "body.print-all" a propósito:
-     sin él, esta regla pierde por especificidad contra
-     "body.print-all .role-section{display:block}" de abajo (2 clases
-     vs. 1 tipo+1 atributo) y la sección se seguía viendo — bug real
-     encontrado verificando el layout de impresión antes de mergear. */
-  body.print-all section[data-roles="admin"],
-  /* Sparklines de 12 puntos: decorativas en pantalla, ilegibles en
-     blanco y negro sobre papel — la tabla-resumen de abajo ya trae el
-     número real. */
-  .spark,
-  /* Las 4 tarjetas de % merma/Producción/Costo real por kg/Costo real
-     por metro dependen del selector "Periodo de KPIs" (EDS-97) — en
-     pantalla solo muestran UN periodo a la vez. El resumen impreso
-     (.print-only más abajo) ya trae último cierre Y última semana
-     lado a lado, así que estas tarjetas quedarían redundantes (y
-     mostrando solo el periodo que alguien haya dejado seleccionado en
-     pantalla, ni siquiera consistente entre impresiones).
-  */
-  .stat-tile-periodo,
-  /* Las gráficas SVG (producción por línea, tendencia de merma, tendencia
-     de costo) son varias pulgadas de alto cada una — la tabla que ya
-     armaba el botón "Ver tabla" (antes oculta por default) dice lo mismo
-     en una fracción del espacio. Pedido explícito del usuario: "tablas o
-     columnas para que no tenga tantas páginas". */
-  .chart-wrap,
-  /* Barras de colores de existencias — no aportan en blanco y negro; la
-     tabla compacta de abajo (print-exist-table) trae las mismas cifras. */
-  #existList
+  .filter-row
   { display:none !important; }
 
   .print-only{display:block !important;}
@@ -397,20 +383,19 @@ button{font-family:inherit;}
   .card-head h3{font-size:1rem !important;}
   .card-sub{font-size:.72rem !important;}
   body.print-all .role-section{ display:block !important; }
-  .kpi-row{display:grid !important;gap:.5rem !important;}
-  .stat-tile{padding:.5rem .65rem !important;gap:.2rem !important;border-radius:8px !important;}
-  .stat-value{font-size:1.2rem !important;}
-  .stat-sub{font-size:.68rem !important;}
-  .chart-table{display:block !important;margin-top:0 !important;}
-  .chart-table table{font-size:.72rem !important;}
-  /* Objetivo/turno, Objetivo (Semana/Mes) — en pantalla son <input>
-     editables; en el PDF no deberían verse como campo de formulario. Se
-     dejan como texto plano en vez de reconstruir el DOM solo para
-     impresión. */
-  .objetivo-field input{
-    border:none !important;background:transparent !important;padding:0 !important;
-    width:auto !important;-webkit-appearance:none;appearance:none;color:#111 !important;
-  }
+  /* Ver comentario de arriba: misma especificidad que la regla de
+     ".role-section" — gana por ir después en la hoja de estilos. */
+  body.print-all .no-print{ display:none !important; }
+  /* Barras de colores de existencias — no aportan en blanco y negro; la
+     tabla compacta (#existListPrint, ya .print-only) trae las mismas
+     cifras. */
+  #existList{display:none !important;}
+  /* Producción por turno y línea (4ª ronda, ya no .no-print): todo
+     .prod-grid (gráficas SVG, títulos "Línea 1/2", campos "Objetivo/turno")
+     y la tabla variable de "Ver tabla" (rango de pantalla, no siempre 7
+     días) no sirven en papel — la tabla fija de 7 días (#prodTablePrint,
+     .print-only) ya trae ambas líneas en sus propias columnas. */
+  .prod-grid, .chart-table{display:none !important;}
 }
 </style>
 </head>
@@ -480,14 +465,16 @@ button{font-family:inherit;}
     </div>
   </div>
 
-  <!-- KPI: Compras -->
-  <div class="kpi-row role-section" data-roles="compras" id="kpiCompras"></div>
+  <!-- KPI: Compras. no-print: EDS-99 — pedido explícito del usuario, el
+       Reporte Directivo no debe pasar de 2 páginas; su contenido vive
+       condensado en el resumen ejecutivo (.print-only) de más arriba. -->
+  <div class="kpi-row role-section no-print" data-roles="compras" id="kpiCompras"></div>
 
   <!-- KPI: Calidad -->
-  <div class="kpi-row role-section" data-roles="calidad" id="kpiCalidad"></div>
+  <div class="kpi-row role-section no-print" data-roles="calidad" id="kpiCalidad"></div>
 
   <!-- KPI: Gerencia -->
-  <div class="kpi-row role-section" data-roles="gerencia" id="kpiGerencia"></div>
+  <div class="kpi-row role-section no-print" data-roles="gerencia" id="kpiGerencia"></div>
 
   <!-- Existencias -->
   <section class="card role-section" data-roles="compras">
@@ -514,7 +501,12 @@ button{font-family:inherit;}
     <div class="insight" id="existInsight"></div>
   </section>
 
-  <!-- Producción por turno y línea -->
+  <!-- Producción por turno y línea. Ya no .no-print (4ª ronda EDS-99, pedido
+       explícito del usuario): vuelve a imprimirse como tarjeta completa,
+       acotada a los últimos 7 días naturales vía #prodTablePrint
+       (renderProdTablePrint) — las gráficas/objetivos/tabla de rango
+       variable son solo de pantalla, .no-print se maneja por CSS
+       (.chart-wrap/.objetivo-field/.chart-table en @media print). -->
   <section class="card role-section" data-roles="calidad">
     <div class="card-head">
       <div>
@@ -548,10 +540,14 @@ button{font-family:inherit;}
     </div>
     <div class="field-warn error" id="objSaveError" hidden></div>
     <div class="chart-table" id="prodL1Table" hidden></div>
+    <!-- EDS-99 (4ª ronda): tabla fija de 7 días naturales, solo impresión —
+         independiente del rango que esté elegido en pantalla (prodRangeN). -->
+    <div class="print-only" id="prodTablePrint"></div>
   </section>
 
-  <!-- Producción acumulada -->
-  <section class="card role-section" data-roles="calidad">
+  <!-- Producción acumulada. no-print: su dato vive condensado como texto
+       plano en el resumen ejecutivo de arriba. -->
+  <section class="card role-section no-print" data-roles="calidad">
     <div class="card-head">
       <div>
         <h3>Producción acumulada</h3>
@@ -588,8 +584,9 @@ button{font-family:inherit;}
     </div>
   </section>
 
-  <!-- Merma trend -->
-  <section class="card role-section" data-roles="calidad">
+  <!-- Merma trend. no-print: su dato vive condensado en la tabla de
+       tendencia (.print-only) de arriba. -->
+  <section class="card role-section no-print" data-roles="calidad">
     <div class="card-head">
       <div>
         <h3>% de merma — tendencia</h3>
@@ -604,8 +601,9 @@ button{font-family:inherit;}
     <div class="chart-table" id="mermaTable" hidden></div>
   </section>
 
-  <!-- Costo real vs estándar -->
-  <section class="card role-section" data-roles="gerencia">
+  <!-- Costo real vs estándar. no-print: su dato vive condensado como
+       texto plano en el resumen ejecutivo de arriba. -->
+  <section class="card role-section no-print" data-roles="gerencia">
     <div class="card-head">
       <div>
         <h3>Costo real vs. estándar</h3>
@@ -621,8 +619,8 @@ button{font-family:inherit;}
     <div class="chart-table" id="costoTable" hidden></div>
   </section>
 
-  <!-- Admin config -->
-  <section class="card role-section" data-roles="admin">
+  <!-- Admin config. no-print: puro menú de navegación, sin datos. -->
+  <section class="card role-section no-print" data-roles="admin">
     <div class="card-head">
       <div>
         <h3>Configuración</h3>
@@ -726,6 +724,7 @@ let prodRangeN = 14;
 // mismo dos veces en la misma sesión de la página.
 let periodoKPI = 'ultimo';
 const KPI_RANGO_CACHE = {}; // { [dias:number]: resultado de kpisPorRango }
+let COSTO_ULTIMOS_6_CIERRES = null; // api.dashboard.costoPromedioUltimosCierres({n:6}) — EDS-99, 4ª ronda
 
 const fmt = n => Math.round(n).toLocaleString('es-MX');
 const fmtMoney = n => n.toLocaleString('es-MX', {minimumFractionDigits:2, maximumFractionDigits:2});
@@ -889,29 +888,89 @@ function renderKPIs(){
     </div>`;
 }
 
-// EDS-99 — pedido explícito del usuario: el Reporte Directivo (PDF) debe
-// mostrar las 4 métricas de periodo (% merma, Producción, Costo real/kg,
-// Costo real/metro) con Último cierre Y Última semana lado a lado, no solo
-// el periodo que haya quedado seleccionado en pantalla (que además ni
-// siquiera es consistente entre una impresión y otra). Requiere que
-// KPI_RANGO_CACHE[7] ya esté precargado (cargarTodo lo hace siempre, no
-// solo cuando alguien toca el selector) — si por lo que sea faltara,
-// muestra "—" en vez de reventar el PDF.
-function renderResumenImpresion(){
-  const semana = KPI_RANGO_CACHE[7];
+// EDS-99 — pedido explícito del usuario, tras 3 rondas de revisión sobre
+// el PDF real: nada de "pantalla completa impresa" — un resumen ejecutivo
+// de máximo 2 páginas. Arma el contenido condensado que reemplaza a las
+// secciones ahora .no-print (KPIs de Compras/Calidad/Gerencia, producción
+// acumulada) — Existencias y, desde la 4ª ronda, Producción por turno y
+// línea (acotada a 7 días) siguen siendo tarjetas completas aparte. La 4ª
+// ronda además quitó % Merma y Producción de la tabla de tendencia (la
+// primera por pedido explícito, la segunda por redundancia con la tarjeta
+// de Producción restaurada) y reemplazó "costo vs. estándar" por el
+// promedio real de los últimos 6 cierres. Requiere KPI_RANGO_CACHE[7] y
+// COSTO_ULTIMOS_6_CIERRES precargados (cargarTodo lo hace siempre, no solo
+// cuando alguien toca el selector de pantalla) — si por lo que sea
+// faltaran, muestra "—" en vez de reventar el PDF.
+function renderReporteEjecutivo(){
   const fechaCierre = KPI.ultimoCierre ? isoADisplayLargo(KPI.ultimoCierre.fecha) : 'sin cierres';
+  const semana = KPI_RANGO_CACHE[7];
+
+  // Último cierre vs. última semana — las 4 métricas de periodo (EDS-97).
   const filas = [
     ['% Merma', `${KPI.pctMermaUltimoCierre.toFixed(1)}%`, semana ? `${semana.pctMerma.toFixed(1)}%` : '—'],
     ['Producción', `${fmt(KPI.produccionUltimoCierreMetros)} m`, semana ? `${fmt(semana.produccionMetros)} m` : '—'],
     ['Costo real / kg', `$${fmtMoney(KPI.costoRealPorKgUltimoCierre)}`, semana ? `$${fmtMoney(semana.costoRealPorKg)}` : '—'],
     ['Costo real / metro', `$${fmtMoney(KPI.costoRealPorMetroUltimoCierre)}`, semana ? `$${fmtMoney(semana.costoRealPorMetro)}` : '—'],
   ];
-  document.getElementById('resumenImpresion').innerHTML = `
+  const resumenHtml = `
     <table class="print-table">
       <caption>Resumen — Último cierre (${fechaCierre}) vs. Última semana</caption>
       <thead><tr><th>Métrica</th><th>Último cierre</th><th>Última semana</th></tr></thead>
       <tbody>${filas.map(([nombre,uc,sem])=>`<tr><td>${nombre}</td><td class="mono">${uc}</td><td class="mono">${sem}</td></tr>`).join('')}</tbody>
     </table>`;
+
+  // Mismo dato que las 3 tarjetas de Compras (valor inventario, alertas,
+  // más urgente), condensado en una línea — mismo cálculo que renderKPIs().
+  const materialesConReorden = KPI.materiales.filter(m=>m.reorderKg!==null);
+  const nCrit = materialesConReorden.filter(m=>m.status==='crit').length;
+  const nWarn = materialesConReorden.filter(m=>m.status==='warn').length;
+  const masUrgente = materialesConReorden.filter(m=>m.status==='crit').sort((a,b)=>(a.coberturaDias??Infinity)-(b.coberturaDias??Infinity))[0];
+  const inventarioHtml = `<p class="print-line">
+    <b>Inventario:</b> $${fmt(KPI.valorInventarioTotal)} MXN (${KPI.materiales.length} materias primas) ·
+    <b>Alertas:</b> ${nCrit} críticos, ${nWarn} por vencer de ${materialesConReorden.length} ·
+    <b>Más urgente:</b> ${masUrgente ? `${masUrgente.nombre} (${masUrgente.coberturaDias!==null ? masUrgente.coberturaDias.toFixed(0)+' días de cobertura' : 'sin fórmula'})` : 'ninguno'}
+  </p>`;
+
+  // Tendencia diaria de costo real — últimos 7 días naturales. % Merma y
+  // Producción salieron de esta tabla en la 4ª ronda (pedido explícito del
+  // usuario: "quitar toda la tabla de porcentaje de merma"; Producción
+  // quedó redundante con la tarjeta "Producción por turno y línea", que
+  // volvió a imprimirse completa — ver renderProdTablePrint).
+  const N = 7;
+  const dates = DATES30.slice(-N);
+  const costoN = COSTO_30.slice(-N);
+  const tendenciaHtml = `
+    <table class="print-table">
+      <caption>Costo real / kg — tendencia diaria (últimos 7 días)</caption>
+      <thead><tr><th>Fecha</th><th>Costo real ($/kg)</th></tr></thead>
+      <tbody>${dates.map((d,i)=>`<tr><td>${d}</td><td class="mono">$${fmtMoney(costoN[i])}</td></tr>`).join('')}</tbody>
+    </table>`;
+
+  // 4ª ronda (pedido explícito del usuario): ya no "real vs. estándar" —
+  // promedio real de los últimos 6 CIERRES (no días naturales, ver
+  // costoPromedioUltimosCierres en dashboard.ts). Requiere
+  // COSTO_ULTIMOS_6_CIERRES precargado en cargarTodo(); si por lo que sea
+  // faltara, muestra "—" en vez de reventar el PDF (mismo criterio que el
+  // resto de este reporte).
+  const seis = COSTO_ULTIMOS_6_CIERRES;
+  const costoHtml = `<p class="print-line">
+    <b>Costo real / kg</b> (promedio últimos ${seis ? seis.n : 6} cierres): ${seis ? '$'+fmtMoney(seis.costoRealPorKg) : '—'} ·
+    <b>Costo real / metro</b> (promedio últimos ${seis ? seis.n : 6} cierres): ${seis ? '$'+fmtMoney(seis.costoRealPorMetro) : '—'}
+  </p>`;
+
+  // Mismo dato que "Producción acumulada" (barras Semana/Mes), condensado
+  // — mismo cálculo que renderMeter().
+  const semanaTotal = Array.from({length:7},(_,i)=>metrosPlantaDia(23+i)).reduce((a,b)=>a+b,0);
+  const mesTotal = Array.from({length:30},(_,i)=>metrosPlantaDia(i)).reduce((a,b)=>a+b,0);
+  const semanaPct = OBJETIVOS.semana>0 ? (semanaTotal/OBJETIVOS.semana*100) : 0;
+  const mesPct = OBJETIVOS.mes>0 ? (mesTotal/OBJETIVOS.mes*100) : 0;
+  const acumuladaHtml = `<p class="print-line">
+    <b>Producción semana:</b> ${fmt(semanaTotal)} m${OBJETIVOS.semana>0?` de ${fmt(OBJETIVOS.semana)} m objetivo (${semanaPct.toFixed(0)}%)`:''} ·
+    <b>Mes:</b> ${fmt(mesTotal)} m${OBJETIVOS.mes>0?` de ${fmt(OBJETIVOS.mes)} m objetivo (${mesPct.toFixed(0)}%)`:''}
+  </p>`;
+
+  document.getElementById('resumenImpresion').innerHTML =
+    resumenHtml + inventarioHtml + tendenciaHtml + costoHtml + acumuladaHtml;
 }
 
 /* ============================================================
@@ -1028,14 +1087,13 @@ function drawProdCharts(){
   renderProdChart('prodL1ChartWrap', 1, prodRangeN);
   renderProdChart('prodL2ChartWrap', 2, prodRangeN);
   renderProdTable();
+  renderProdTablePrint();
 }
 
-// EDS-99: antes esta tabla solo cubría Línea 1 (renderProdChart la
-// llenaba únicamente cuando linea===1) — como el "Ver tabla" de esta
-// tarjeta es el único que se muestra al imprimir (las gráficas SVG se
-// ocultan en @media print), dejar fuera a la Línea 2 habría sido un hueco
-// real en el Reporte Directivo. Se arma aparte, una sola vez, con ambas
-// líneas — mismas columnas que exportProduccionCSV.
+// EDS-99: esta tabla (el "Ver tabla" de pantalla) cubre ambas líneas —
+// antes renderProdChart solo llenaba Línea 1. Sigue usando prodRangeN (el
+// rango que la persona eligió en pantalla, 14 por defecto); no es la que
+// se imprime — ver renderProdTablePrint, siempre a 7 días fijos.
 function renderProdTable(){
   const tbl = document.getElementById('prodL1Table');
   if(!tbl) return;
@@ -1045,6 +1103,28 @@ function renderProdTable(){
     </tr></thead><tbody>${
     dates.map((d,i)=>{
       const idx = 30-prodRangeN+i;
+      const l1t1=metrosTurno(idx,1,1), l1t2=metrosTurno(idx,1,2), l2t1=metrosTurno(idx,2,1), l2t2=metrosTurno(idx,2,2);
+      return `<tr><td>${d}</td><td class="mono">${l1t1}</td><td class="mono">${l1t2}</td><td class="mono">${l2t1}</td><td class="mono">${l2t2}</td><td class="mono">${l1t1+l1t2+l2t1+l2t2}</td></tr>`;
+    }).join('')
+  }</tbody></table>`;
+}
+
+// EDS-99 (4ª ronda) — pedido explícito del usuario: "Producción por turno y
+// línea" vuelve a imprimirse, pero SOLO los últimos 7 días naturales, sin
+// importar qué rango (prodRangeN) esté elegido en pantalla. Tabla
+// independiente de renderProdTable (arriba) por eso mismo — imprimir no
+// debe depender de qué haya tocado la persona en pantalla. Sin <caption>:
+// el <h3> de la tarjeta ya la titula (mismo criterio que #existListPrint).
+function renderProdTablePrint(){
+  const el = document.getElementById('prodTablePrint');
+  if(!el) return;
+  const N = 7;
+  const dates = DATES30.slice(-N);
+  el.innerHTML = `<table class="print-table"><thead><tr>
+      <th>Fecha</th><th>L1 · Turno 1</th><th>L1 · Turno 2</th><th>L2 · Turno 1</th><th>L2 · Turno 2</th><th>Total (m)</th>
+    </tr></thead><tbody>${
+    dates.map((d,i)=>{
+      const idx = 30-N+i;
       const l1t1=metrosTurno(idx,1,1), l1t2=metrosTurno(idx,1,2), l2t1=metrosTurno(idx,2,1), l2t2=metrosTurno(idx,2,2);
       return `<tr><td>${d}</td><td class="mono">${l1t1}</td><td class="mono">${l1t2}</td><td class="mono">${l2t1}</td><td class="mono">${l2t2}</td><td class="mono">${l1t1+l1t2+l2t1+l2t2}</td></tr>`;
     }).join('')
@@ -1471,17 +1551,19 @@ window.addEventListener('afterprint', ()=> {
    que depende de ellos.
    ============================================================ */
 async function cargarTodo(){
-  // EDS-99: kpisPorRango({dias:7}) se precarga SIEMPRE aquí (no solo
-  // cuando alguien toca el selector "Periodo de KPIs") — el resumen del
-  // Reporte Directivo necesita "última semana" lista desde el primer
-  // render, incluso si en pantalla sigue seleccionado "Último cierre".
-  const [kpis, prodSerie, mermaSerie, costoSerie, objetivos, semana] = await Promise.all([
+  // EDS-99: kpisPorRango({dias:7}) y costoPromedioUltimosCierres({n:6}) se
+  // precargan SIEMPRE aquí (no solo cuando alguien toca un selector) — el
+  // Reporte Directivo necesita "última semana" y "últimos 6 cierres"
+  // listos desde el primer render, incluso si en pantalla sigue
+  // seleccionado "Último cierre".
+  const [kpis, prodSerie, mermaSerie, costoSerie, objetivos, semana, seisCierres] = await Promise.all([
     window.Session.call(api.dashboard.getKPIsHoy, {}, 'query'),
     window.Session.call(api.dashboard.produccionPorRango, { dias: 30 }, 'query'),
     window.Session.call(api.dashboard.tendenciaMerma, { dias: 30 }, 'query'),
     window.Session.call(api.dashboard.tendenciaCosto, { dias: 30 }, 'query'),
     window.Session.call(api.dashboard.getObjetivos, {}, 'query'),
     window.Session.call(api.dashboard.kpisPorRango, { dias: 7 }, 'query'),
+    window.Session.call(api.dashboard.costoPromedioUltimosCierres, { n: 6 }, 'query'),
     cargarAlertas(),
   ]);
   KPI = kpis;
@@ -1491,10 +1573,11 @@ async function cargarTodo(){
   COSTO_30 = costoSerie.map(d => d.costoRealPorKg);
   OBJETIVOS = objetivos;
   KPI_RANGO_CACHE[7] = semana;
+  COSTO_ULTIMOS_6_CIERRES = seisCierres;
 
   renderUltimoCierre();
   renderKPIs();
-  renderResumenImpresion();
+  renderReporteEjecutivo();
   renderExistencias();
   renderCostoStats();
   drawProdCharts();

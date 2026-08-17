@@ -256,9 +256,10 @@ describe('dashboard: getKPIsHoy (tarea 6.1)', () => {
 // código no es excusa para dejar sin regresión automática las otras 4
 // funciones: si alguna llegara a perder esa línea en un refactor futuro,
 // nada lo detectaría hasta que alguien probara manualmente. EDS-97 agrega
-// kpisPorRango a la lista (mismo requireRole).
-describe('dashboard: rechazo de rol — produccionPorRango/tendenciaMerma/tendenciaCosto/getObjetivos/kpisPorRango (EDS-66/97)', () => {
-  test('operador (sin vista de Panel de Control) es rechazado por las 5 funciones', async () => {
+// kpisPorRango a la lista (mismo requireRole). EDS-99 agrega
+// costoPromedioUltimosCierres (mismo requireRole, mismo ROLES_DASHBOARD).
+describe('dashboard: rechazo de rol — produccionPorRango/tendenciaMerma/tendenciaCosto/getObjetivos/kpisPorRango/costoPromedioUltimosCierres (EDS-66/97/99)', () => {
+  test('operador (sin vista de Panel de Control) es rechazado por las 6 funciones', async () => {
     const t = convexTest(schema, modules);
     const { operadorToken } = await setup(t);
     await expect(t.query(api.dashboard.produccionPorRango, { dias: 7, token: operadorToken })).rejects.toThrow();
@@ -266,6 +267,7 @@ describe('dashboard: rechazo de rol — produccionPorRango/tendenciaMerma/tenden
     await expect(t.query(api.dashboard.tendenciaCosto, { dias: 7, token: operadorToken })).rejects.toThrow();
     await expect(t.query(api.dashboard.getObjetivos, { token: operadorToken })).rejects.toThrow();
     await expect(t.query(api.dashboard.kpisPorRango, { dias: 7, token: operadorToken })).rejects.toThrow();
+    await expect(t.query(api.dashboard.costoPromedioUltimosCierres, { n: 6, token: operadorToken })).rejects.toThrow();
   });
 });
 
@@ -430,6 +432,85 @@ describe('dashboard: kpisPorRango — KPIs agregados por periodo (EDS-97)', () =
     for (const dias of [7, 14, 30]) {
       await expect(t.query(api.dashboard.kpisPorRango, { dias, token: comprasToken })).resolves.toBeDefined();
     }
+  });
+});
+
+// EDS-99 — "Costo real / kg y / metro" del Reporte Directivo pasó de
+// promediarse por día natural a promediarse por los últimos N *cierres*
+// reales, sin importar en cuántos días cayeron (pedido explícito del
+// usuario tras revisar el PDF).
+describe('dashboard: costoPromedioUltimosCierres (EDS-99)', () => {
+  test('promedia Σcosto/Σkg (y Σcosto/Σmetros) de los últimos N cierres por _creationTime, no un promedio simple', async () => {
+    const t = convexTest(schema, modules);
+    const { comprasToken, adminId } = await setup(t);
+    // 8 cierres insertados directo (orden de inserción = orden de
+    // _creationTime en convex-test) — costoPromedioUltimosCierres debe
+    // tomar solo los ÚLTIMOS 6, ignorando los 2 más viejos.
+    const cierresBase = [
+      { kgBuenos: 100, metrosBuenos: 25, costoTotalConsumido: 100 },  // el más viejo — fuera de los últimos 6
+      { kgBuenos: 100, metrosBuenos: 25, costoTotalConsumido: 100 },  // el 2º más viejo — fuera de los últimos 6
+      { kgBuenos: 100, metrosBuenos: 25, costoTotalConsumido: 200 },
+      { kgBuenos: 200, metrosBuenos: 50, costoTotalConsumido: 300 },
+      { kgBuenos: 50, metrosBuenos: 12.5, costoTotalConsumido: 100 },
+      { kgBuenos: 300, metrosBuenos: 75, costoTotalConsumido: 450 },
+      { kgBuenos: 150, metrosBuenos: 37.5, costoTotalConsumido: 225 },
+      { kgBuenos: 100, metrosBuenos: 25, costoTotalConsumido: 150 },  // el más reciente
+    ];
+    for (const c of cierresBase) {
+      await t.run((ctx) =>
+        ctx.db.insert('cierresTurno', {
+          fecha: HOY, linea: 1, turno: 1, cargasPreparadas: 1,
+          metrosBuenos: c.metrosBuenos, caballetes105Pzas: 0, caballetes106Pzas: 0,
+          kgBuenos: c.kgBuenos, caballetesKg: 0, mermaTotalKg: 0, trituradoKg: 0,
+          costoTotalConsumido: c.costoTotalConsumido, costoRealPorKg: 0, costoRealPorMetro: 0,
+          capturadoPor: adminId, capturadoEn: Date.now(), editado: false, editadoPor: null,
+          editadoEn: null, vecesRecapturado: 0,
+        })
+      );
+    }
+    const ultimos6 = cierresBase.slice(-6);
+    const kgEsperado = ultimos6.reduce((s, c) => s + c.kgBuenos, 0);
+    const metrosEsperado = ultimos6.reduce((s, c) => s + c.metrosBuenos, 0);
+    const costoEsperado = ultimos6.reduce((s, c) => s + c.costoTotalConsumido, 0);
+
+    const r = await t.query(api.dashboard.costoPromedioUltimosCierres, { n: 6, token: comprasToken });
+    expect(r.n).toBe(6);
+    expect(r.costoRealPorKg).toBeCloseTo(costoEsperado / kgEsperado, 5);
+    expect(r.costoRealPorMetro).toBeCloseTo(costoEsperado / metrosEsperado, 5);
+  });
+
+  test('menos de N cierres existentes: usa los que haya, n refleja el conteo real', async () => {
+    const t = convexTest(schema, modules);
+    const { comprasToken, adminId } = await setup(t);
+    await t.run((ctx) =>
+      ctx.db.insert('cierresTurno', {
+        fecha: HOY, linea: 1, turno: 1, cargasPreparadas: 1, metrosBuenos: 25,
+        caballetes105Pzas: 0, caballetes106Pzas: 0, kgBuenos: 100, caballetesKg: 0,
+        mermaTotalKg: 0, trituradoKg: 0, costoTotalConsumido: 200, costoRealPorKg: 0, costoRealPorMetro: 0,
+        capturadoPor: adminId, capturadoEn: Date.now(), editado: false, editadoPor: null,
+        editadoEn: null, vecesRecapturado: 0,
+      })
+    );
+    const r = await t.query(api.dashboard.costoPromedioUltimosCierres, { n: 6, token: comprasToken });
+    expect(r.n).toBe(1);
+    expect(r.costoRealPorKg).toBeCloseTo(2, 5);
+  });
+
+  test('sin cierres: todo en 0, sin dividir entre cero', async () => {
+    const t = convexTest(schema, modules);
+    const { comprasToken } = await setup(t);
+    const r = await t.query(api.dashboard.costoPromedioUltimosCierres, { n: 6, token: comprasToken });
+    expect(r.n).toBe(0);
+    expect(r.costoRealPorKg).toBe(0);
+    expect(r.costoRealPorMetro).toBe(0);
+  });
+
+  test('rechaza n que no sea un entero positivo dentro de la cota (incluye 0, fraccionario y absurdamente grande)', async () => {
+    const t = convexTest(schema, modules);
+    const { comprasToken } = await setup(t);
+    await expect(t.query(api.dashboard.costoPromedioUltimosCierres, { n: 0, token: comprasToken })).rejects.toThrow();
+    await expect(t.query(api.dashboard.costoPromedioUltimosCierres, { n: 6.5, token: comprasToken })).rejects.toThrow();
+    await expect(t.query(api.dashboard.costoPromedioUltimosCierres, { n: 1_000_000_000, token: comprasToken })).rejects.toThrow();
   });
 });
 
