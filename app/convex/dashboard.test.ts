@@ -247,6 +247,106 @@ describe('dashboard: getKPIsHoy (tarea 6.1)', () => {
     const kpis = await t.query(api.dashboard.getKPIsHoy, { token: comprasToken });
     expect(kpis.ultimoCierre).toEqual({ fecha: ayer, linea: 2, turno: 2 });
   });
+
+  // EDS-101 — pedido explícito del usuario, encontrado en producción: un
+  // cierre real capturado con TODO en 0 (domingo/festivo no laborado, mismo
+  // escenario de EDS-100) no debe ser "el último cierre" de referencia para
+  // los KPIs ni el Reporte Directivo, aunque sea el más reciente por
+  // _creationTime — debe saltar al último día que sí tuvo actividad real.
+  test('EDS-101: un cierre en 0 (domingo) capturado como el más reciente no debe ser "el último cierre" — se salta al último día con actividad real', async () => {
+    const t = convexTest(schema, modules);
+    const { comprasToken, operadorToken, adminId } = await setup(t);
+    const matId = await crearMaterialPrueba(t);
+    await t.run((ctx) =>
+      crearCapaImpl(ctx, {
+        materialId: matId, kgOriginal: 100000, costoUnitario: 2, fechaEntrada: 1000,
+        origen: 'entrada', entradaId: null, cierreTurnoId: null,
+        origenTipo: 'entrada', origenId: 'setup', createdBy: adminId,
+      })
+    );
+    const anteayer = sumarDiasISO(HOY, -2);
+    const domingo = sumarDiasISO(HOY, -1);
+
+    // Anteayer: día real de trabajo — kgBuenos=100, merma=20.
+    await t.mutation(api.cierres.crearCierreTurno, {
+      fecha: anteayer, linea: 1, turno: 1, cargasPreparadas: 1, metrosBuenos: 25,
+      caballetes105Pzas: 0, caballetes106Pzas: 0,
+      consumoPorMaterial: [{ materialId: matId, kgConsumido: 120 }],
+      token: operadorToken,
+    });
+    // Domingo: capturado DESPUÉS (más reciente por _creationTime), TODO en
+    // 0 — exactamente el escenario reportado por el usuario en producción.
+    await t.mutation(api.cierres.crearCierreTurno, {
+      fecha: domingo, linea: 1, turno: 1, cargasPreparadas: 0, metrosBuenos: 0,
+      caballetes105Pzas: 0, caballetes106Pzas: 0,
+      consumoPorMaterial: [{ materialId: matId, kgConsumido: 0 }],
+      token: operadorToken,
+    });
+
+    const kpis = await t.query(api.dashboard.getKPIsHoy, { token: comprasToken });
+    // Debe reflejar ANTEAYER (el último día con actividad), NO el domingo.
+    expect(kpis.ultimoCierre).toEqual({ fecha: anteayer, linea: 1, turno: 1 });
+    expect(kpis.fecha).toBe(anteayer);
+    expect(kpis.produccionUltimoCierreKg).toBe(100);
+    expect(kpis.produccionUltimoCierreMetros).toBe(25);
+    expect(kpis.pctMermaUltimoCierre).toBeCloseTo((20 / 120) * 100, 5);
+    expect(kpis.costoRealPorKgUltimoCierre).toBeCloseTo(240 / 100, 5);
+  });
+
+  test('EDS-101: si el domingo tiene VARIOS cierres, todos en 0, se sigue saltando al último día con actividad', async () => {
+    const t = convexTest(schema, modules);
+    const { comprasToken, operadorToken, adminId } = await setup(t);
+    const matId = await crearMaterialPrueba(t);
+    await t.run((ctx) =>
+      crearCapaImpl(ctx, {
+        materialId: matId, kgOriginal: 100000, costoUnitario: 2, fechaEntrada: 1000,
+        origen: 'entrada', entradaId: null, cierreTurnoId: null,
+        origenTipo: 'entrada', origenId: 'setup', createdBy: adminId,
+      })
+    );
+    const anteayer = sumarDiasISO(HOY, -2);
+    const domingo = sumarDiasISO(HOY, -1);
+
+    await t.mutation(api.cierres.crearCierreTurno, {
+      fecha: anteayer, linea: 1, turno: 1, cargasPreparadas: 1, metrosBuenos: 10,
+      caballetes105Pzas: 0, caballetes106Pzas: 0,
+      consumoPorMaterial: [{ materialId: matId, kgConsumido: 40 }],
+      token: operadorToken,
+    });
+    // Domingo: 2 cierres (línea 1 y línea 2), ambos en 0.
+    await t.mutation(api.cierres.crearCierreTurno, {
+      fecha: domingo, linea: 1, turno: 1, cargasPreparadas: 0, metrosBuenos: 0,
+      caballetes105Pzas: 0, caballetes106Pzas: 0,
+      consumoPorMaterial: [{ materialId: matId, kgConsumido: 0 }],
+      token: operadorToken,
+    });
+    await t.mutation(api.cierres.crearCierreTurno, {
+      fecha: domingo, linea: 2, turno: 2, cargasPreparadas: 0, metrosBuenos: 0,
+      caballetes105Pzas: 0, caballetes106Pzas: 0,
+      consumoPorMaterial: [{ materialId: matId, kgConsumido: 0 }],
+      token: operadorToken,
+    });
+
+    const kpis = await t.query(api.dashboard.getKPIsHoy, { token: comprasToken });
+    expect(kpis.ultimoCierre).toEqual({ fecha: anteayer, linea: 1, turno: 1 });
+  });
+
+  test('EDS-101: si TODO el lote reciente está en 0 (caso extremo), cae al comportamiento anterior — el más reciente, sin crashear', async () => {
+    const t = convexTest(schema, modules);
+    const { comprasToken, operadorToken } = await setup(t);
+    const matId = await crearMaterialPrueba(t);
+    const domingo = sumarDiasISO(HOY, -1);
+
+    await t.mutation(api.cierres.crearCierreTurno, {
+      fecha: domingo, linea: 1, turno: 1, cargasPreparadas: 0, metrosBuenos: 0,
+      caballetes105Pzas: 0, caballetes106Pzas: 0,
+      consumoPorMaterial: [{ materialId: matId, kgConsumido: 0 }],
+      token: operadorToken,
+    });
+
+    const kpis = await t.query(api.dashboard.getKPIsHoy, { token: comprasToken });
+    expect(kpis.ultimoCierre).toEqual({ fecha: domingo, linea: 1, turno: 1 });
+  });
 });
 
 // EDS-66 (auditoría final de PR8): produccionPorRango/tendenciaMerma/
