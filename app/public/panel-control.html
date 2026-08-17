@@ -177,6 +177,12 @@ button{font-family:inherit;}
 
 /* ---------- kpi row ---------- */
 .kpi-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1rem;}
+/* Mismo bug ya documentado abajo para .field-warn (PR3): sin esta regla,
+   el display:grid de arriba le gana al [hidden] por defecto del navegador
+   y las .kpi-row (compras/calidad/gerencia) NUNCA se ocultan, ni con el
+   atributo puesto — verificado en vivo al implementar EDS-96 (applyRole()
+   solo pone/quita `hidden`, nunca toca .style.display a propósito). */
+.kpi-row[hidden]{display:none;}
 .stat-tile{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1.05rem 1.2rem;display:flex;flex-direction:column;gap:.5rem;}
 .stat-label{font-size:.76rem;color:var(--ink-muted);}
 .stat-value{font-family:'IBM Plex Mono',monospace;font-size:1.65rem;font-weight:600;color:var(--ink);}
@@ -468,16 +474,16 @@ button{font-family:inherit;}
   <!-- KPI: Compras. no-print: EDS-99 — pedido explícito del usuario, el
        Reporte Directivo no debe pasar de 2 páginas; su contenido vive
        condensado en el resumen ejecutivo (.print-only) de más arriba. -->
-  <div class="kpi-row role-section no-print" data-roles="compras" id="kpiCompras"></div>
+  <div class="kpi-row role-section no-print" hidden data-roles="compras" id="kpiCompras"></div>
 
   <!-- KPI: Calidad -->
-  <div class="kpi-row role-section no-print" data-roles="calidad" id="kpiCalidad"></div>
+  <div class="kpi-row role-section no-print" hidden data-roles="calidad" id="kpiCalidad"></div>
 
   <!-- KPI: Gerencia -->
-  <div class="kpi-row role-section no-print" data-roles="gerencia" id="kpiGerencia"></div>
+  <div class="kpi-row role-section no-print" hidden data-roles="gerencia" id="kpiGerencia"></div>
 
   <!-- Existencias -->
-  <section class="card role-section" data-roles="compras">
+  <section class="card role-section" hidden data-roles="compras">
     <div class="card-head">
       <div>
         <h3>Existencias y punto de reorden</h3>
@@ -507,7 +513,7 @@ button{font-family:inherit;}
        (renderProdTablePrint) — las gráficas/objetivos/tabla de rango
        variable son solo de pantalla, .no-print se maneja por CSS
        (.chart-wrap/.objetivo-field/.chart-table en @media print). -->
-  <section class="card role-section" data-roles="calidad">
+  <section class="card role-section" hidden data-roles="calidad">
     <div class="card-head">
       <div>
         <h3>Producción por turno y línea</h3>
@@ -547,7 +553,7 @@ button{font-family:inherit;}
 
   <!-- Producción acumulada. no-print: su dato vive condensado como texto
        plano en el resumen ejecutivo de arriba. -->
-  <section class="card role-section no-print" data-roles="calidad">
+  <section class="card role-section no-print" hidden data-roles="calidad">
     <div class="card-head">
       <div>
         <h3>Producción acumulada</h3>
@@ -586,7 +592,7 @@ button{font-family:inherit;}
 
   <!-- Merma trend. no-print: su dato vive condensado en la tabla de
        tendencia (.print-only) de arriba. -->
-  <section class="card role-section no-print" data-roles="calidad">
+  <section class="card role-section no-print" hidden data-roles="calidad">
     <div class="card-head">
       <div>
         <h3>% de merma — tendencia</h3>
@@ -603,7 +609,7 @@ button{font-family:inherit;}
 
   <!-- Costo real vs estándar. no-print: su dato vive condensado como
        texto plano en el resumen ejecutivo de arriba. -->
-  <section class="card role-section no-print" data-roles="gerencia">
+  <section class="card role-section no-print" hidden data-roles="gerencia">
     <div class="card-head">
       <div>
         <h3>Costo real vs. estándar</h3>
@@ -620,7 +626,7 @@ button{font-family:inherit;}
   </section>
 
   <!-- Admin config. no-print: puro menú de navegación, sin datos. -->
-  <section class="card role-section no-print" data-roles="admin">
+  <section class="card role-section no-print" hidden data-roles="admin">
     <div class="card-head">
       <div>
         <h3>Configuración</h3>
@@ -1452,13 +1458,24 @@ document.addEventListener('click', e=>{
 // sección tenía "<rol> admin", así que el tab Admin mostraba TODO
 // duplicado — información que admin ya puede ver entrando a las otras 3
 // pestañas.
+// EDS-96 — todo .role-section arranca con el atributo `hidden` puesto
+// directo en el HTML (así el navegador nunca lo pinta visible, ni una
+// fracción de segundo, entre el primer paint y que este script — un
+// <script type="module">, que por naturaleza se ejecuta después del
+// parseo del HTML — corra por primera vez). applyRole() usa `el.hidden`
+// en vez de `el.style.display` a propósito: tocar `style.display`
+// directamente pisaría el `display:grid` que necesita `.kpi-row` (CSS)
+// para su layout — con `hidden`, "mostrar" es simplemente quitar el
+// atributo y el elemento vuelve a su display natural de CSS, sin pelear
+// con la cascada (mismo tipo de trampa de especificidad ya documentada
+// arriba para `.no-print` en impresión, evitada aquí desde el diseño).
 let currentRole = 'compras';
 function applyRole(role){
   currentRole = role;
   document.querySelectorAll('#roleSwitch .role-btn').forEach(c=>c.classList.toggle('active', c.dataset.role===role));
   document.querySelectorAll('.role-section').forEach(el=>{
     const roles = el.dataset.roles.split(' ');
-    el.style.display = roles.includes(role) ? '' : 'none';
+    el.hidden = !roles.includes(role);
   });
 }
 document.getElementById('roleSwitch').addEventListener('click', e=>{
