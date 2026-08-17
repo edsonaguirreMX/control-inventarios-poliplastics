@@ -301,6 +301,38 @@ export const kpisPorRango = query({
   },
 });
 
+// EDS-99 — Reporte Directivo: "costo real por kg / por metro" promedio de
+// los últimos N *cierres* (no días naturales), a pedido explícito del
+// usuario. Con la planta operando 2 líneas y hasta 2 turnos, un promedio
+// por día natural queda diluido por días sin captura (quedan en 0); los
+// últimos N cierres reales reflejan el costo reciente sin importar en
+// cuántos días naturales cayeron. Mismo criterio de "más reciente" que
+// obtenerUltimoCierreImpl (order('desc'), por _creationTime — no por el
+// campo `fecha`, que empata entre línea/turno del mismo día).
+// Cota superior defensiva (mismo criterio que kpisPorRango tras el
+// hallazgo de CodeRabbit en EDS-97): la UI solo pide 6, pero un `n` sin
+// tope permitiría pedir toda la tabla de un jalón.
+const N_CIERRES_MAX = 50;
+
+export const costoPromedioUltimosCierres = query({
+  args: { n: v.number(), token: v.string() },
+  handler: async (ctx, { n, token }) => {
+    await requireRole(ctx, token, ROLES_DASHBOARD);
+    if (!Number.isInteger(n) || n <= 0 || n > N_CIERRES_MAX) {
+      throw new ConvexError(`costoPromedioUltimosCierres: n debe ser un entero entre 1 y ${N_CIERRES_MAX}.`);
+    }
+    const cierres = await ctx.db.query('cierresTurno').order('desc').take(n);
+    const kgBuenos = cierres.reduce((s, c) => s + c.kgBuenos, 0);
+    const metrosBuenos = cierres.reduce((s, c) => s + c.metrosBuenos, 0);
+    const costoTotal = cierres.reduce((s, c) => s + c.costoTotalConsumido, 0);
+    return {
+      n: cierres.length,
+      costoRealPorKg: kgBuenos > 0 ? costoTotal / kgBuenos : 0,
+      costoRealPorMetro: metrosBuenos > 0 ? costoTotal / metrosBuenos : 0,
+    };
+  },
+});
+
 // Metas de producción (tarea 6.5) — singleton, igual patrón que
 // parametrosProduccion. Lectura: cualquier rol del dashboard. Escritura:
 // solo admin (el spec de roles no le da a Calidad ni Gerencia edición de
