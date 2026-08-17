@@ -203,11 +203,37 @@ export const getKPIsHoy = query({
   },
 });
 
+// EDS-98 — hardening: las 4 queries de esta familia ("dame X sobre los
+// últimos `dias`") comparten el mismo riesgo que ya encontró CodeRabbit
+// (Major) en kpisPorRango (PR EDS-97): un `dias` sin cota superior ni
+// chequeo de entero llega directo a cierresEnRango, que hace
+// `Array.from({length: dias}, ...)` — un valor fraccionario o
+// absurdamente grande intenta reservar un arreglo de ese tamaño antes de
+// procesar nada (abuso/DoS trivial). kpisPorRango ya se corrigió
+// restringiendo a exactamente [7, 14, 30] — únicos valores que su selector
+// de UI ofrece. produccionPorRango/tendenciaMerma/tendenciaCosto se
+// llaman hoy siempre con `dias:30` (panel-control.html las trae una sola
+// vez en cargarTodo() y el selector "Tendencias 7/14/30 días" solo
+// recorta ese arreglo ya cargado en el cliente, sin volver a llamar al
+// servidor) — pero por eso mismo se les aplica el mismo conjunto [7,14,30]
+// que kpisPorRango, no solo {30}: son la misma familia de queries de
+// rango del dashboard y ya hay precedente histórico de un selector en
+// pantalla pidiendo 7/14 directo al servidor: restringir a un conjunto más
+// angosto que el resto de la familia sería una trampa a futuro si ese
+// patrón vuelve.
+const DIAS_RANGO_VALIDOS = [7, 14, 30] as const;
+
+function validarDiasRango(nombreFuncion: string, dias: number) {
+  if (!DIAS_RANGO_VALIDOS.includes(dias as (typeof DIAS_RANGO_VALIDOS)[number])) {
+    throw new ConvexError(`${nombreFuncion}: dias debe ser uno de ${DIAS_RANGO_VALIDOS.join(', ')}.`);
+  }
+}
+
 export const produccionPorRango = query({
   args: { dias: v.number(), token: v.string() },
   handler: async (ctx, { dias, token }) => {
     await requireRole(ctx, token, ROLES_DASHBOARD);
-    if (dias <= 0) throw new ConvexError('produccionPorRango: dias debe ser mayor a 0.');
+    validarDiasRango('produccionPorRango', dias);
     const { fechas, cierres } = await cierresEnRango(ctx, dias);
     return fechas.map((fecha) => {
       const delDia = cierres.filter((c) => c.fecha === fecha);
@@ -225,7 +251,7 @@ export const tendenciaMerma = query({
   args: { dias: v.number(), token: v.string() },
   handler: async (ctx, { dias, token }) => {
     await requireRole(ctx, token, ROLES_DASHBOARD);
-    if (dias <= 0) throw new ConvexError('tendenciaMerma: dias debe ser mayor a 0.');
+    validarDiasRango('tendenciaMerma', dias);
     const { fechas, cierres } = await cierresEnRango(ctx, dias);
     return fechas.map((fecha) => {
       const delDia = cierres.filter((c) => c.fecha === fecha);
@@ -241,7 +267,7 @@ export const tendenciaCosto = query({
   args: { dias: v.number(), token: v.string() },
   handler: async (ctx, { dias, token }) => {
     await requireRole(ctx, token, ROLES_DASHBOARD);
-    if (dias <= 0) throw new ConvexError('tendenciaCosto: dias debe ser mayor a 0.');
+    validarDiasRango('tendenciaCosto', dias);
     const { fechas, cierres } = await cierresEnRango(ctx, dias);
     return fechas.map((fecha) => {
       const delDia = cierres.filter((c) => c.fecha === fecha);
@@ -260,21 +286,11 @@ export const tendenciaCosto = query({
 // Σcosto/Σkg — nunca un promedio de porcentajes diarios, que subestimaría
 // días de alta producción), pero sobre `cierresEnRango(ctx, dias)` en vez
 // de solo los cierres de la fecha del último cierre.
-// Hallazgo de CodeRabbit (PR EDS-97): un `dias` sin cota superior ni chequeo
-// de entero permite mandar un valor fraccionario o absurdamente grande —
-// `cierresEnRango` hace `Array.from({length: dias}, ...)`, así que un
-// `dias` enorme intenta reservar un arreglo de ese tamaño antes de
-// procesar nada. El selector de la UI solo ofrece 7/14/30 — se restringe
-// la query exactamente a esos 3 valores, no solo a "positivo".
-const PERIODOS_KPI_VALIDOS = [7, 14, 30] as const;
-
 export const kpisPorRango = query({
   args: { dias: v.number(), token: v.string() },
   handler: async (ctx, { dias, token }) => {
     await requireRole(ctx, token, ROLES_DASHBOARD);
-    if (!PERIODOS_KPI_VALIDOS.includes(dias as (typeof PERIODOS_KPI_VALIDOS)[number])) {
-      throw new ConvexError(`kpisPorRango: dias debe ser uno de ${PERIODOS_KPI_VALIDOS.join(', ')}.`);
-    }
+    validarDiasRango('kpisPorRango', dias);
     const params = await requireParametros(ctx);
     const { fechas, cierres } = await cierresEnRango(ctx, dias);
 

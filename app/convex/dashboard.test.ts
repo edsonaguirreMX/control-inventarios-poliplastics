@@ -325,10 +325,29 @@ describe('dashboard: series históricas (tarea 6.2)', () => {
     expect(costoHoy?.costoRealPorKg).toBeCloseTo(300 / 80, 5); // 100kg*$3 / 80kg buenos
   });
 
-  test('rechaza dias <= 0', async () => {
+  // EDS-98 — mismo hardening que ya tenía kpisPorRango (EDS-97, hallazgo
+  // Major de CodeRabbit): sin cota superior ni chequeo de entero, un `dias`
+  // fraccionario o absurdamente grande llegaba directo a cierresEnRango,
+  // que hace `Array.from({length: dias}, ...)` — un valor enorme intenta
+  // reservar un arreglo de ese tamaño antes de procesar nada.
+  test('produccionPorRango/tendenciaMerma/tendenciaCosto rechazan dias fuera de 7/14/30 (incluye 0, fraccionario y absurdamente grande)', async () => {
     const t = convexTest(schema, modules);
     const { comprasToken } = await setup(t);
-    await expect(t.query(api.dashboard.produccionPorRango, { dias: 0, token: comprasToken })).rejects.toThrow();
+    for (const fn of [api.dashboard.produccionPorRango, api.dashboard.tendenciaMerma, api.dashboard.tendenciaCosto]) {
+      await expect(t.query(fn, { dias: 0, token: comprasToken })).rejects.toThrow();
+      await expect(t.query(fn, { dias: 7.5, token: comprasToken })).rejects.toThrow();
+      await expect(t.query(fn, { dias: 1_000_000_000, token: comprasToken })).rejects.toThrow();
+    }
+  });
+
+  test('produccionPorRango/tendenciaMerma/tendenciaCosto aceptan exactamente 7, 14 y 30', async () => {
+    const t = convexTest(schema, modules);
+    const { comprasToken } = await setup(t);
+    for (const fn of [api.dashboard.produccionPorRango, api.dashboard.tendenciaMerma, api.dashboard.tendenciaCosto]) {
+      for (const dias of [7, 14, 30]) {
+        await expect(t.query(fn, { dias, token: comprasToken })).resolves.toBeDefined();
+      }
+    }
   });
 });
 
