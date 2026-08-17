@@ -791,17 +791,19 @@ function ultimosDiasConActividad(n, finExclusivo){
 // Tendencia de costo de los últimos 5 días CON actividad vs. los 5
 // anteriores (también con actividad) — cálculo real simple (no una
 // etiqueta fabricada) a partir de COSTO_30 ya cargado.
-// Hallazgo de CodeRabbit (PR EDS-100): si no hay NINGÚN día anterior con
-// actividad para comparar, hacer avgAnt=avgUlt (fallback silencioso) daba
-// delta=0 y mostraba "Estable" — una afirmación falsa, no una comparación
-// real (le pasaba exactamente esto a los datos de prueba: solo 2 cierres
-// en 30 días). Ahora ese caso se reporta explícitamente como "Datos
-// insuficientes" en vez de fabricar una tendencia que no existe.
+// Hallazgo de CodeRabbit (PR EDS-100, 2ª vuelta): exigir solo
+// anteriores.length>0 no bastaba — con 1 o 2 días de actividad (no 0,
+// pero tampoco 5) igual se calculaba un promedio de muestra chica que
+// podía coincidir en "Estable" por casualidad, y el detalle seguía
+// diciendo "los últimos 5 días" cuando en realidad comparó menos. Ahora
+// se exige EXACTAMENTE 5 días con actividad de cada lado — si cualquiera
+// de los dos grupos queda incompleto, se reporta "Datos insuficientes"
+// en vez de fabricar (o mal etiquetar) una tendencia.
 function tendenciaCostoTexto(){
   const recientes = ultimosDiasConActividad(5);
-  if(!recientes.length) return { texto:'Sin datos', color:'var(--ink-faint)', detalle:'Aún no hay suficiente historial.' };
+  if(recientes.length < 5) return { texto:'Datos insuficientes', color:'var(--ink-faint)', detalle:'Todavía no hay 5 días con actividad recientes para calcular la tendencia.' };
   const anteriores = ultimosDiasConActividad(5, recientes[0]);
-  if(!anteriores.length) return { texto:'Datos insuficientes', color:'var(--ink-faint)', detalle:'Todavía no hay suficientes días con actividad anteriores para comparar la tendencia.' };
+  if(anteriores.length < 5) return { texto:'Datos insuficientes', color:'var(--ink-faint)', detalle:'Todavía no hay 5 días con actividad anteriores para comparar la tendencia.' };
   const avg = idxs => idxs.reduce((s,i)=>s+COSTO_30[i],0)/idxs.length;
   const avgUlt = avg(recientes);
   const avgAnt = avg(anteriores);
