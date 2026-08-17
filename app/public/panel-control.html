@@ -766,19 +766,51 @@ function spark(values){
   </svg>`;
 }
 
-// Tendencia de costo de los últimos 5 días vs. los 5 anteriores — cálculo
-// real simple (no una etiqueta fabricada) a partir de COSTO_30 ya cargado.
+// EDS-100 — pedido explícito del usuario: un día sin actividad real (todas
+// las líneas y turnos en 0 — domingo, festivo, o simplemente no se
+// trabajó, sin importar el día de la semana ni depender de un calendario
+// de festivos) no debe contarse en ningún cálculo/promedio de tendencia;
+// se asume que ese día fue no laborable. Recorre hacia atrás sobre los 30
+// días ya cargados (mismo índice que DATES30/MERMA_30/COSTO_30/PROD_SERIE)
+// y devuelve los índices de los últimos `n` días CON producción real,
+// sin importar cuántos días naturales tuvo que saltar para juntarlos.
+// `finExclusivo` (índice, no inclusivo) permite pedir "los n días de
+// actividad ANTES de tal punto" para el grupo de comparación.
+// Señal de actividad: metrosPlantaDia(i) > 0 (producción real), NUNCA
+// costoRealPorKg === 0 — un día que solo usó Triturado (material interno,
+// $0/kg por regla de negocio) sí tuvo actividad real aunque su costo sea
+// $0, y se excluiría incorrectamente si se usara el costo como señal.
+function ultimosDiasConActividad(n, finExclusivo){
+  const idxs = [];
+  for (let i = (finExclusivo ?? DATES30.length) - 1; i >= 0 && idxs.length < n; i--) {
+    if (metrosPlantaDia(i) > 0) idxs.push(i);
+  }
+  return idxs.reverse(); // cronológico, del más viejo al más reciente
+}
+
+// Tendencia de costo de los últimos 5 días CON actividad vs. los 5
+// anteriores (también con actividad) — cálculo real simple (no una
+// etiqueta fabricada) a partir de COSTO_30 ya cargado.
+// Hallazgo de CodeRabbit (PR EDS-100, 2ª vuelta): exigir solo
+// anteriores.length>0 no bastaba — con 1 o 2 días de actividad (no 0,
+// pero tampoco 5) igual se calculaba un promedio de muestra chica que
+// podía coincidir en "Estable" por casualidad, y el detalle seguía
+// diciendo "los últimos 5 días" cuando en realidad comparó menos. Ahora
+// se exige EXACTAMENTE 5 días con actividad de cada lado — si cualquiera
+// de los dos grupos queda incompleto, se reporta "Datos insuficientes"
+// en vez de fabricar (o mal etiquetar) una tendencia.
 function tendenciaCostoTexto(){
-  const ultimos5 = COSTO_30.slice(-5);
-  const anteriores5 = COSTO_30.slice(-10,-5);
-  if(!ultimos5.length) return { texto:'Sin datos', color:'var(--ink-faint)', detalle:'Aún no hay suficiente historial.' };
-  const avg = arr => arr.reduce((a,b)=>a+b,0)/arr.length;
-  const avgUlt = avg(ultimos5);
-  const avgAnt = anteriores5.length ? avg(anteriores5) : avgUlt;
+  const recientes = ultimosDiasConActividad(5);
+  if(recientes.length < 5) return { texto:'Datos insuficientes', color:'var(--ink-faint)', detalle:'Todavía no hay 5 días con actividad recientes para calcular la tendencia.' };
+  const anteriores = ultimosDiasConActividad(5, recientes[0]);
+  if(anteriores.length < 5) return { texto:'Datos insuficientes', color:'var(--ink-faint)', detalle:'Todavía no hay 5 días con actividad anteriores para comparar la tendencia.' };
+  const avg = idxs => idxs.reduce((s,i)=>s+COSTO_30[i],0)/idxs.length;
+  const avgUlt = avg(recientes);
+  const avgAnt = avg(anteriores);
   const delta = avgUlt - avgAnt;
-  if(Math.abs(delta) < 0.01) return { texto:'Estable', color:'var(--ink)', detalle:'Sin cambio significativo en los últimos 5 días.' };
-  if(delta > 0) return { texto:'Repunte reciente', color:'var(--danger)', detalle:`Costo real subió $${delta.toFixed(2)}/kg en promedio en los últimos 5 días vs. los 5 anteriores.` };
-  return { texto:'Mejora reciente', color:'var(--positive)', detalle:`Costo real bajó $${Math.abs(delta).toFixed(2)}/kg en promedio en los últimos 5 días vs. los 5 anteriores.` };
+  if(Math.abs(delta) < 0.01) return { texto:'Estable', color:'var(--ink)', detalle:'Sin cambio significativo en los últimos 5 días con actividad.' };
+  if(delta > 0) return { texto:'Repunte reciente', color:'var(--danger)', detalle:`Costo real subió $${delta.toFixed(2)}/kg en promedio en los últimos 5 días con actividad vs. los 5 anteriores.` };
+  return { texto:'Mejora reciente', color:'var(--positive)', detalle:`Costo real bajó $${Math.abs(delta).toFixed(2)}/kg en promedio en los últimos 5 días con actividad vs. los 5 anteriores.` };
 }
 
 // EDS-75: reemplaza el texto estático "Actualizado con el cierre de
