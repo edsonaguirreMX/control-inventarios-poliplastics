@@ -348,6 +348,7 @@ button{font-family:inherit;}
 
 /* ---------- impresión / exportar PDF (Reporte Directivo, EDS-99) ---------- */
 .print-only{display:none;}
+#generadoImpresion{font-size:.72rem;color:#666;margin-top:.2rem;}
 @media print{
   @page{margin:1.1cm;}
   body{background:#fff !important;color:#111 !important;font-size:.82rem;}
@@ -402,6 +403,14 @@ button{font-family:inherit;}
   .stat-sub{font-size:.68rem !important;}
   .chart-table{display:block !important;margin-top:0 !important;}
   .chart-table table{font-size:.72rem !important;}
+  /* Objetivo/turno, Objetivo (Semana/Mes) — en pantalla son <input>
+     editables; en el PDF no deberían verse como campo de formulario. Se
+     dejan como texto plano en vez de reconstruir el DOM solo para
+     impresión. */
+  .objetivo-field input{
+    border:none !important;background:transparent !important;padding:0 !important;
+    width:auto !important;-webkit-appearance:none;appearance:none;color:#111 !important;
+  }
 }
 </style>
 </head>
@@ -413,6 +422,9 @@ button{font-family:inherit;}
     <div>
       <div class="eyebrow">Tejaflex · Control de Materias Primas</div>
       <h1>Panel de Control</h1>
+      <!-- EDS-99: solo visible al imprimir — momento real de generación
+           del PDF, útil si alguien archiva o compara dos reportes. -->
+      <div class="print-only" id="generadoImpresion"></div>
     </div>
     <div class="topbar-right">
       <div class="bell-wrap">
@@ -1440,6 +1452,12 @@ function exportPDF(){
   document.body.classList.add('print-all');
   const fechaArchivo = KPI.ultimoCierre ? isoParaArchivo(KPI.ultimoCierre.fecha) : 'sin-cierres';
   document.title = `Reporte Directivo Tejaflex - ${fechaArchivo}`;
+  // EDS-99: momento REAL de generación (no el de carga de la página) —
+  // se calcula justo antes de imprimir, como el nombre de archivo.
+  const ahora = new Date();
+  const fechaGen = ahora.toLocaleDateString('es-MX', {day:'2-digit', month:'2-digit', year:'numeric'});
+  const horaGen = ahora.toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit'});
+  document.getElementById('generadoImpresion').textContent = `Generado el ${fechaGen} · ${horaGen}`;
   window.print();
 }
 window.addEventListener('afterprint', ()=> {
