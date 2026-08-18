@@ -8,6 +8,7 @@ import {
   crearUsuarioPrueba,
   crearSesionPrueba,
   crearParametrosPrueba,
+  crearRolesPrueba,
 } from './testHelpers';
 
 const modules = import.meta.glob('./**/*.ts');
@@ -33,6 +34,7 @@ const modules = import.meta.glob('./**/*.ts');
 describe('EDS-73: errores de negocio esperados se lanzan como ConvexError (no Error)', () => {
   test('login con credenciales inválidas', async () => {
     const t = convexTest(schema, modules);
+    await crearRolesPrueba(t); // EDS-104: crearUsuario ahora valida rol contra la tabla roles
     const adminId = await crearUsuarioPrueba(t, 'admin');
     const adminToken = await crearSesionPrueba(t, adminId);
     await t.action(api.usuariosActions.crearUsuario, {
@@ -46,6 +48,7 @@ describe('EDS-73: errores de negocio esperados se lanzan como ConvexError (no Er
 
   test('login bloqueado por rate limit', async () => {
     const t = convexTest(schema, modules);
+    await crearRolesPrueba(t); // EDS-104: crearUsuario ahora valida rol contra la tabla roles
     const adminId = await crearUsuarioPrueba(t, 'admin');
     const adminToken = await crearSesionPrueba(t, adminId);
     await t.action(api.usuariosActions.crearUsuario, {
@@ -164,6 +167,7 @@ describe('EDS-73: errores de negocio esperados se lanzan como ConvexError (no Er
 
   test('validación de usuarios: usuario duplicado', async () => {
     const t = convexTest(schema, modules);
+    await crearRolesPrueba(t); // EDS-104: crearUsuario ahora valida rol contra la tabla roles
     const adminId = await crearUsuarioPrueba(t, 'admin');
     const adminToken = await crearSesionPrueba(t, adminId);
     await t.action(api.usuariosActions.crearUsuario, {
@@ -179,6 +183,7 @@ describe('EDS-73: errores de negocio esperados se lanzan como ConvexError (no Er
 
   test('validación de usuarios: dejar al sistema sin ningún admin activo', async () => {
     const t = convexTest(schema, modules);
+    await crearRolesPrueba(t); // EDS-104: updateUsuario ahora valida rol contra la tabla roles
     const adminId = await crearUsuarioPrueba(t, 'admin');
     const adminToken = await crearSesionPrueba(t, adminId);
 

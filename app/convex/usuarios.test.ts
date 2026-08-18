@@ -2,11 +2,16 @@ import { convexTest } from 'convex-test';
 import { describe, expect, test } from 'vitest';
 import schema from './schema';
 import { api } from './_generated/api';
-import { crearUsuarioPrueba, crearSesionPrueba } from './testHelpers';
+import { crearUsuarioPrueba, crearSesionPrueba, crearRolesPrueba } from './testHelpers';
 
 const modules = import.meta.glob('./**/*.ts');
 
+// EDS-104: crearUsuarioImpl/actualizarUsuarioImpl ahora validan que `rol`
+// exista y esté activo en la tabla `roles` (antes lo garantizaba el union
+// fijo del schema) — sin esto, cualquier test que cree/edite un usuario
+// con un rol real (admin/compras/gerencia/calidad/operador) fallaría.
 async function setup(t: Awaited<ReturnType<typeof convexTest>>) {
+  await crearRolesPrueba(t);
   const adminId = await crearUsuarioPrueba(t, 'admin');
   const compradorId = await crearUsuarioPrueba(t, 'compras');
   const adminToken = await crearSesionPrueba(t, adminId);
