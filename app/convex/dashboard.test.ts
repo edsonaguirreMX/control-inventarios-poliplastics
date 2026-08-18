@@ -347,6 +347,63 @@ describe('dashboard: getKPIsHoy (tarea 6.1)', () => {
     const kpis = await t.query(api.dashboard.getKPIsHoy, { token: comprasToken });
     expect(kpis.ultimoCierre).toEqual({ fecha: domingo, linea: 1, turno: 1 });
   });
+
+  // Hallazgo de CodeRabbit (PR EDS-101, Merge Risk moderado): con 2 fechas
+  // con actividad real capturadas fuera de orden cronológico, ¿podría
+  // obtenerUltimoCierreImpl devolver la fecha calendario más VIEJA en vez
+  // de la más nueva? Sí — y es el comportamiento INTENCIONAL y ya probado
+  // desde EDS-75 ("ultimoCierre refleja el cierre insertado más
+  // recientemente (_creationTime), no el de fecha más reciente", arriba):
+  // "último cierre" siempre significa "lo último que el operador
+  // confirmó", no "el día calendario más reciente" — EDS-101 solo le
+  // agregó "salvo que esa captura sea un día sin actividad real". Este
+  // test deja explícito que ese contrato se mantiene incluso con 2 fechas
+  // reales de por medio, no solo con una fecha real y una en cero.
+  test('EDS-101/EDS-75: con 2 fechas con actividad capturadas fuera de orden, gana la CAPTURADA más recientemente, no la fecha calendario más reciente (comportamiento intencional, no un bug)', async () => {
+    const t = convexTest(schema, modules);
+    const { comprasToken, operadorToken, adminId } = await setup(t);
+    const matId = await crearMaterialPrueba(t);
+    await t.run((ctx) =>
+      crearCapaImpl(ctx, {
+        materialId: matId, kgOriginal: 100000, costoUnitario: 2, fechaEntrada: 1000,
+        origen: 'entrada', entradaId: null, cierreTurnoId: null,
+        origenTipo: 'entrada', origenId: 'setup', createdBy: adminId,
+      })
+    );
+    const fechaViejaCalendario = sumarDiasISO(HOY, -3);
+    const fechaNuevaCalendario = sumarDiasISO(HOY, -1);
+    const domingo = HOY;
+
+    // Orden de CAPTURA (no de fecha): primero la fecha calendario NUEVA...
+    await t.mutation(api.cierres.crearCierreTurno, {
+      fecha: fechaNuevaCalendario, linea: 1, turno: 1, cargasPreparadas: 1, metrosBuenos: 10,
+      caballetes105Pzas: 0, caballetes106Pzas: 0,
+      consumoPorMaterial: [{ materialId: matId, kgConsumido: 40 }],
+      token: operadorToken,
+    });
+    // ...después el domingo (en 0)...
+    await t.mutation(api.cierres.crearCierreTurno, {
+      fecha: domingo, linea: 1, turno: 1, cargasPreparadas: 0, metrosBuenos: 0,
+      caballetes105Pzas: 0, caballetes106Pzas: 0,
+      consumoPorMaterial: [{ materialId: matId, kgConsumido: 0 }],
+      token: operadorToken,
+    });
+    // ...y AL FINAL (capturado más recientemente de los 3, aunque su
+    // fecha calendario sea la más vieja) la fecha calendario VIEJA.
+    await t.mutation(api.cierres.crearCierreTurno, {
+      fecha: fechaViejaCalendario, linea: 1, turno: 1, cargasPreparadas: 1, metrosBuenos: 20,
+      caballetes105Pzas: 0, caballetes106Pzas: 0,
+      consumoPorMaterial: [{ materialId: matId, kgConsumido: 80 }],
+      token: operadorToken,
+    });
+
+    const kpis = await t.query(api.dashboard.getKPIsHoy, { token: comprasToken });
+    // Gana fechaViejaCalendario (la CAPTURADA más recientemente con
+    // actividad real) — no fechaNuevaCalendario (calendario más reciente,
+    // pero capturada primero) ni domingo (calendario más reciente de
+    // todas, pero sin actividad).
+    expect(kpis.ultimoCierre).toEqual({ fecha: fechaViejaCalendario, linea: 1, turno: 1 });
+  });
 });
 
 // EDS-66 (auditoría final de PR8): produccionPorRango/tendenciaMerma/

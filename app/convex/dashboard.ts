@@ -200,6 +200,19 @@ export async function calcularKPIsHoyImpl(ctx: QueryCtx) {
 // cierresReferencia) hasta hallar una con actividad real. Mismo criterio
 // de "actividad real" que EDS-100 (kgBuenos + mermaTotalKg > 0 — no
 // depende del costo, un día solo con Triturado a $0 sí cuenta).
+//
+// Nota sobre CAPTURA vs. FECHA (hallazgo de CodeRabbit en la revisión de
+// este PR): con 2 fechas CON actividad real capturadas fuera de orden
+// cronológico, esta función puede devolver la fecha calendario más VIEJA
+// en vez de la más nueva — es intencional, no un bug. "Último cierre"
+// siempre significó "lo último que el operador confirmó" (ver el bloque
+// de EDS-75 arriba y su test "no el de fecha más reciente"), nunca "el
+// día calendario más reciente"; EDS-101 solo le agrega "salvo que esa
+// captura sea un día sin actividad real". Cambiar esto a ordenar por
+// fecha calendario rompería ese contrato ya probado desde EDS-75. Test de
+// regresión que deja esto explícito con 2 fechas reales de por medio (no
+// solo una real y una en cero): "con 2 fechas con actividad capturadas
+// fuera de orden, gana la CAPTURADA más recientemente".
 const LOOKBACK_CIERRES_ULTIMO = 60; // ~15 días asumiendo hasta 4 cierres/día (2 líneas × 2 turnos) — cota generosa para saltar un domingo/festivo aislado sin escanear toda la tabla.
 
 export async function obtenerUltimoCierreImpl(ctx: QueryCtx) {
