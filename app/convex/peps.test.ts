@@ -3,7 +3,7 @@ import { describe, expect, test } from 'vitest';
 import schema from './schema';
 import { api } from './_generated/api';
 import { crearCapaImpl, consumirFIFOImpl, revertirConsumoImpl } from './peps';
-import { crearMaterialPrueba, crearUsuarioPrueba, crearSesionPrueba, getCapa } from './testHelpers';
+import { crearMaterialPrueba, crearUsuarioPrueba, crearSesionPrueba, crearRolesPrueba, getCapa } from './testHelpers';
 
 const modules = import.meta.glob('./**/*.ts');
 
@@ -214,6 +214,7 @@ describe('peps: motor PEPS/FIFO (tarea 3.1)', () => {
 // mismo que "no hace falta que rechacen roles indebidos".
 describe('peps: existenciaMaterial / valorInventarioMaterial — autorización server-side (EDS-66)', () => {
   async function setup(t: Awaited<ReturnType<typeof convexTest>>) {
+    await crearRolesPrueba(t); // EDS-105: requireAcceso (existenciaMaterial) resuelve el rol contra la tabla `roles`
     const matId = await crearMaterialPrueba(t, { esInterno: false });
     const adminId = await crearUsuarioPrueba(t, 'admin');
     const comprasId = await crearUsuarioPrueba(t, 'compras');

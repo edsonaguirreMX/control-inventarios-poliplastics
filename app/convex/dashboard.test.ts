@@ -4,7 +4,7 @@ import schema from './schema';
 import { api } from './_generated/api';
 import { crearCapaImpl } from './peps';
 import {
-  crearMaterialPrueba, crearUsuarioPrueba, crearSesionPrueba, crearParametrosPrueba,
+  crearMaterialPrueba, crearUsuarioPrueba, crearSesionPrueba, crearParametrosPrueba, crearRolesPrueba,
 } from './testHelpers';
 import { fechaOperativa, sumarDiasISO } from './lib/fechaOperativa';
 
@@ -19,6 +19,7 @@ const modules = import.meta.glob('./**/*.ts');
 const HOY = fechaOperativa(Date.now(), 'America/Mexico_City', '06:00');
 
 async function setup(t: Awaited<ReturnType<typeof convexTest>>) {
+  await crearRolesPrueba(t); // EDS-105: requireAcceso resuelve el rol contra la tabla `roles`
   await crearParametrosPrueba(t, 4);
   await crearMaterialPrueba(t, { slug: 'triturado', esInterno: true }); // requerido por aplicarCierreImpl
   const compradorId = await crearUsuarioPrueba(t, 'compras');

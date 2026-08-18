@@ -2,7 +2,7 @@ import { convexTest } from 'convex-test';
 import { describe, expect, test, vi, afterEach } from 'vitest';
 import schema from './schema';
 import { internal, api } from './_generated/api';
-import { crearUsuarioPrueba, crearSesionPrueba, crearParametrosPrueba } from './testHelpers';
+import { crearUsuarioPrueba, crearSesionPrueba, crearParametrosPrueba, crearRolesPrueba } from './testHelpers';
 import { horaLocalAInstante } from './lib/fechaOperativa';
 
 const modules = import.meta.glob('./**/*.ts');
@@ -10,6 +10,7 @@ const ZONA = 'America/Mexico_City';
 const T1 = '06:00';
 
 async function setup(t: Awaited<ReturnType<typeof convexTest>>) {
+  await crearRolesPrueba(t); // EDS-105: requireAcceso resuelve el rol contra la tabla `roles`
   await crearParametrosPrueba(t, 4);
   const adminId = await crearUsuarioPrueba(t, 'admin');
   const compradorId = await crearUsuarioPrueba(t, 'compras');

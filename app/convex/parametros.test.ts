@@ -2,11 +2,12 @@ import { convexTest } from 'convex-test';
 import { describe, expect, test } from 'vitest';
 import schema from './schema';
 import { api } from './_generated/api';
-import { crearMaterialPrueba, crearUsuarioPrueba, crearSesionPrueba, crearParametrosPrueba } from './testHelpers';
+import { crearMaterialPrueba, crearUsuarioPrueba, crearSesionPrueba, crearParametrosPrueba, crearRolesPrueba } from './testHelpers';
 
 const modules = import.meta.glob('./**/*.ts');
 
 async function setup(t: Awaited<ReturnType<typeof convexTest>>) {
+  await crearRolesPrueba(t); // EDS-105: requireAcceso resuelve el rol contra la tabla `roles`
   await crearParametrosPrueba(t, 4);
   const adminId = await crearUsuarioPrueba(t, 'admin');
   const compradorId = await crearUsuarioPrueba(t, 'compras');
@@ -85,6 +86,34 @@ describe('parametros: getParametros/updateParametros (tarea 2.2)', () => {
     await expect(
       t.mutation(api.parametros.updateParametros, { lineasActivas: 1.5, token: adminToken })
     ).rejects.toThrow(/1 o 2/);
+  });
+
+  // EDS-105 (Fase 2, roles personalizables) — decisión explícita del
+  // usuario: acceso a Catálogo NO debe implicar poder editar parámetros
+  // globales de producción, aunque EDS-88 sí deja LEERLOS desde ahí. Rol
+  // de prueba a propósito (no uno de los 5 base) con SOLO
+  // 'catalogo-materiales', sin 'parametros-produccion' — exactamente el
+  // caso que la decisión quiso cerrar.
+  test('EDS-105: un rol con acceso SOLO a catalogo-materiales puede leer parámetros pero no editarlos', async () => {
+    const t = convexTest(schema, modules);
+    await crearParametrosPrueba(t, 4);
+    const now = Date.now();
+    await t.run((ctx) =>
+      ctx.db.insert('roles', {
+        slug: 'solo_catalogo', nombre: 'Solo Catálogo', paginas: ['catalogo-materiales'],
+        protegido: false, bypassAcceso: false, activo: true, orden: 99, updatedAt: now, updatedBy: null,
+      })
+    );
+    const userId = await crearUsuarioPrueba(t, 'solo_catalogo' as any);
+    const token = await crearSesionPrueba(t, userId);
+
+    await expect(t.query(api.parametros.getParametros, { token })).resolves.toBeDefined();
+    await expect(
+      t.mutation(api.parametros.updateParametros, { cargasPorTurno: 10, token })
+    ).rejects.toThrow(/No autorizado/);
+    await expect(
+      t.mutation(api.parametros.updateFormulaCarga, { materialId: await crearMaterialPrueba(t), kgPorCarga: 5, token })
+    ).rejects.toThrow(/No autorizado/);
   });
 });
 

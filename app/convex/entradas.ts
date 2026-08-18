@@ -3,7 +3,7 @@ import { mutation, query } from './_generated/server';
 import type { MutationCtx } from './_generated/server';
 import type { Id } from './_generated/dataModel';
 import { crearCapaImpl } from './peps';
-import { requireRole, requireUser } from './lib/auth';
+import { requireAcceso, requireUser } from './lib/auth';
 import { validarFechaOperativaEnVentana } from './lib/fechaOperativa';
 
 // Flujo de Entradas: el operador (en cierre-turno-propuestas.html, tarea
@@ -125,7 +125,7 @@ export const crearEntrada = mutation({
     token: v.string(),
   },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, args.token, ['operador', 'compras', 'admin']);
+    const user = await requireAcceso(ctx, args.token, ['entradas-costeo', 'cierre-turno']);
     const params = await ctx.db.query('parametrosProduccion').first();
     if (!params) {
       throw new Error('crearEntrada: no hay parámetros de producción configurados.');
@@ -153,7 +153,7 @@ export const crearEntradasBatch = mutation({
     token: v.string(),
   },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, args.token, ['operador', 'compras', 'admin']);
+    const user = await requireAcceso(ctx, args.token, ['entradas-costeo', 'cierre-turno']);
     if (args.materiales.length === 0) {
       throw new ConvexError('crearEntradasBatch: se necesita al menos un material.');
     }
@@ -183,7 +183,7 @@ export const costearEntrada = mutation({
     token: v.string(),
   },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, args.token, ['compras', 'admin']);
+    const user = await requireAcceso(ctx, args.token, 'entradas-costeo');
 
     if (args.costoUnitario < 0) {
       throw new ConvexError('costearEntrada: costoUnitario no puede ser negativo.');
@@ -236,7 +236,7 @@ export const costearEntrada = mutation({
 export const listEntradas = query({
   args: { desde: v.optional(v.string()), hasta: v.optional(v.string()), token: v.string() },
   handler: async (ctx, { desde, hasta, token }) => {
-    await requireRole(ctx, token, ['compras', 'admin']);
+    await requireAcceso(ctx, token, 'entradas-costeo');
     const entradas = await ctx.db
       .query('entradas')
       .withIndex('by_fecha', (q) => {
@@ -254,7 +254,7 @@ export const listEntradas = query({
 export const listCapasVigentes = query({
   args: { materialId: v.optional(v.id('materiales')), token: v.string() },
   handler: async (ctx, { materialId, token }) => {
-    await requireRole(ctx, token, ['compras', 'admin']);
+    await requireAcceso(ctx, token, 'entradas-costeo');
     if (materialId !== undefined) {
       return ctx.db
         .query('capasCosto')
@@ -292,7 +292,7 @@ export const listMaterialesActivos = query({
 export const eliminarEntradaPendiente = mutation({
   args: { entradaId: v.id('entradas'), token: v.string() },
   handler: async (ctx, { entradaId, token }) => {
-    await requireRole(ctx, token, ['compras', 'admin']);
+    await requireAcceso(ctx, token, 'entradas-costeo');
     const entrada = await ctx.db.get(entradaId);
     if (!entrada) {
       throw new ConvexError('eliminarEntradaPendiente: la entrada no existe.');

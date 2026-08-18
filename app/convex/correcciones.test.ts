@@ -2,7 +2,7 @@ import { convexTest } from 'convex-test';
 import { describe, expect, test } from 'vitest';
 import schema from './schema';
 import { api } from './_generated/api';
-import { crearMaterialPrueba, crearUsuarioPrueba, crearSesionPrueba, crearParametrosPrueba } from './testHelpers';
+import { crearMaterialPrueba, crearUsuarioPrueba, crearSesionPrueba, crearParametrosPrueba, crearRolesPrueba } from './testHelpers';
 import { fechaOperativa } from './lib/fechaOperativa';
 
 const modules = import.meta.glob('./**/*.ts');
@@ -18,6 +18,7 @@ const modules = import.meta.glob('./**/*.ts');
 const HOY = fechaOperativa(Date.now(), 'America/Mexico_City', '06:00');
 
 async function setup(t: Awaited<ReturnType<typeof convexTest>>) {
+  await crearRolesPrueba(t); // EDS-105: requireAcceso resuelve el rol contra la tabla `roles`
   await crearParametrosPrueba(t, 4);
   await crearMaterialPrueba(t, { slug: 'triturado', esInterno: true });
   const matAId = await crearMaterialPrueba(t, { esInterno: false });
@@ -117,12 +118,14 @@ describe('correcciones: actualizarCierreTurno usa el motor compartido (tarea 5.2
 describe('correcciones: actualizarEntrada (tarea 5.3)', () => {
   test('entrada pendiente (sin capa): ajuste directo, sin lógica PEPS', async () => {
     const t = convexTest(schema, modules);
-    const { matAId, comprasToken } = await setup(t);
+    const { matAId, comprasToken, adminToken } = await setup(t);
     const entradaId = await t.mutation(api.entradas.crearEntrada, {
       fecha: '2026-08-08', materialId: matAId, cantidadKg: 100, token: comprasToken,
     });
 
-    await t.mutation(api.correcciones.actualizarEntrada, { entradaId, cantidadKg: 150, token: comprasToken });
+    // EDS-105: la corrección misma ya es admin-only (correccion-capturas.html
+    // es admin-only) — compras solo puede CREAR la entrada, no corregirla.
+    await t.mutation(api.correcciones.actualizarEntrada, { entradaId, cantidadKg: 150, token: adminToken });
     const entrada = await t.run((ctx) => ctx.db.get(entradaId));
     expect(entrada?.cantidadKg).toBe(150);
     expect(entrada?.editado).toBe(true);
@@ -168,7 +171,11 @@ describe('correcciones: actualizarEntrada (tarea 5.3)', () => {
     ).rejects.toThrow(/ya se consumieron/);
   });
 
-  test('operador NO puede corregir entradas (solo compras/admin)', async () => {
+  // EDS-105: correccion-capturas es admin-only — ni operador ni compras
+  // pueden corregir entradas, aunque compras sí las pueda crear/costear
+  // desde entradas-costeo (deuda histórica del enum de roles, no perpetuada
+  // en el modelo nuevo — decisión explícita del usuario).
+  test('operador NO puede corregir entradas (solo admin)', async () => {
     const t = convexTest(schema, modules);
     const { matAId, comprasToken, operadorToken } = await setup(t);
     const entradaId = await t.mutation(api.entradas.crearEntrada, {
@@ -178,18 +185,30 @@ describe('correcciones: actualizarEntrada (tarea 5.3)', () => {
       t.mutation(api.correcciones.actualizarEntrada, { entradaId, cantidadKg: 150, token: operadorToken })
     ).rejects.toThrow();
   });
+
+  test('compras tampoco puede corregir entradas (solo admin)', async () => {
+    const t = convexTest(schema, modules);
+    const { matAId, comprasToken } = await setup(t);
+    const entradaId = await t.mutation(api.entradas.crearEntrada, {
+      fecha: '2026-08-08', materialId: matAId, cantidadKg: 100, token: comprasToken,
+    });
+    await expect(
+      t.mutation(api.correcciones.actualizarEntrada, { entradaId, cantidadKg: 150, token: comprasToken })
+    ).rejects.toThrow();
+  });
 });
 
 describe('correcciones: actualizarEntradasBatch es atómico (No-Go de auditoría de PR 3, mayor #3)', () => {
   test('corrige todas las entradas del batch en una sola transacción', async () => {
     const t = convexTest(schema, modules);
-    const { matAId, comprasToken } = await setup(t);
+    const { matAId, comprasToken, adminToken } = await setup(t);
     const e1 = await t.mutation(api.entradas.crearEntrada, { fecha: '2026-08-08', materialId: matAId, cantidadKg: 100, token: comprasToken });
     const e2 = await t.mutation(api.entradas.crearEntrada, { fecha: '2026-08-08', materialId: matAId, cantidadKg: 200, token: comprasToken });
 
+    // EDS-105: la corrección en batch también es admin-only.
     await t.mutation(api.correcciones.actualizarEntradasBatch, {
       entradas: [{ entradaId: e1, cantidadKg: 111 }, { entradaId: e2, cantidadKg: 222 }],
-      token: comprasToken,
+      token: adminToken,
     });
     expect((await t.run((ctx) => ctx.db.get(e1)))?.cantidadKg).toBe(111);
     expect((await t.run((ctx) => ctx.db.get(e2)))?.cantidadKg).toBe(222);
@@ -226,18 +245,27 @@ describe('correcciones: actualizarEntradasBatch es atómico (No-Go de auditoría
 
   test('rechaza un batch vacío', async () => {
     const t = convexTest(schema, modules);
-    const { comprasToken } = await setup(t);
+    const { adminToken } = await setup(t);
     await expect(
-      t.mutation(api.correcciones.actualizarEntradasBatch, { entradas: [], token: comprasToken })
+      t.mutation(api.correcciones.actualizarEntradasBatch, { entradas: [], token: adminToken })
     ).rejects.toThrow(/al menos una entrada/);
   });
 
-  test('operador NO puede usar el batch de corrección (solo compras/admin)', async () => {
+  test('operador NO puede usar el batch de corrección (solo admin)', async () => {
     const t = convexTest(schema, modules);
     const { matAId, comprasToken, operadorToken } = await setup(t);
     const e1 = await t.mutation(api.entradas.crearEntrada, { fecha: '2026-08-08', materialId: matAId, cantidadKg: 100, token: comprasToken });
     await expect(
       t.mutation(api.correcciones.actualizarEntradasBatch, { entradas: [{ entradaId: e1, cantidadKg: 150 }], token: operadorToken })
+    ).rejects.toThrow();
+  });
+
+  test('compras tampoco puede usar el batch de corrección (solo admin)', async () => {
+    const t = convexTest(schema, modules);
+    const { matAId, comprasToken } = await setup(t);
+    const e1 = await t.mutation(api.entradas.crearEntrada, { fecha: '2026-08-08', materialId: matAId, cantidadKg: 100, token: comprasToken });
+    await expect(
+      t.mutation(api.correcciones.actualizarEntradasBatch, { entradas: [{ entradaId: e1, cantidadKg: 150 }], token: comprasToken })
     ).rejects.toThrow();
   });
 });

@@ -3,7 +3,7 @@ import { mutation, query } from './_generated/server';
 import type { MutationCtx } from './_generated/server';
 import type { Id } from './_generated/dataModel';
 import { crearCapaImpl, consumirFIFOImpl } from './peps';
-import { requireRole } from './lib/auth';
+import { requireAcceso } from './lib/auth';
 import { requireParametros } from './dashboard';
 import { fechaOperativa } from './lib/fechaOperativa';
 
@@ -170,7 +170,7 @@ export async function crearAjusteSalidaImpl(
 export const crearAjusteEntrada = mutation({
   args: { materialId: v.id('materiales'), kg: v.number(), costoUnitario: v.number(), motivo: v.string(), token: v.string() },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, args.token, ['admin']);
+    const user = await requireAcceso(ctx, args.token, 'ajustes-inventario');
     const ajusteId = await crearAjusteEntradaImpl(ctx, { ...args, createdBy: user._id });
     return { ok: true, ajusteId };
   },
@@ -179,7 +179,7 @@ export const crearAjusteEntrada = mutation({
 export const crearAjusteSalida = mutation({
   args: { materialId: v.id('materiales'), kg: v.number(), motivo: v.string(), token: v.string() },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, args.token, ['admin']);
+    const user = await requireAcceso(ctx, args.token, 'ajustes-inventario');
     const ajusteId = await crearAjusteSalidaImpl(ctx, { ...args, createdBy: user._id });
     return { ok: true, ajusteId };
   },
@@ -192,7 +192,7 @@ export const crearAjusteSalida = mutation({
 export const listAjustes = query({
   args: { desde: v.string(), hasta: v.string(), token: v.string() },
   handler: async (ctx, { desde, hasta, token }) => {
-    await requireRole(ctx, token, ['admin']);
+    await requireAcceso(ctx, token, 'ajustes-inventario');
     const ajustes = await ctx.db
       .query('ajustesInventario')
       .withIndex('by_fecha', (q) => q.gte('fecha', desde).lte('fecha', hasta))
@@ -234,7 +234,7 @@ export const listAjustes = query({
 export const listMaterialesParaAjuste = query({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {
-    await requireRole(ctx, token, ['admin']);
+    await requireAcceso(ctx, token, 'ajustes-inventario');
     return ctx.db.query('materiales').withIndex('by_activo_orden', (q) => q.eq('activo', true)).collect();
   },
 });

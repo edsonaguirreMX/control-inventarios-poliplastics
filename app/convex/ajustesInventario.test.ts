@@ -4,7 +4,7 @@ import schema from './schema';
 import { api } from './_generated/api';
 import { crearCapaImpl } from './peps';
 import {
-  crearMaterialPrueba, crearUsuarioPrueba, crearSesionPrueba, crearParametrosPrueba,
+  crearMaterialPrueba, crearUsuarioPrueba, crearSesionPrueba, crearParametrosPrueba, crearRolesPrueba,
 } from './testHelpers';
 import { fechaOperativa, sumarDiasISO } from './lib/fechaOperativa';
 
@@ -13,7 +13,11 @@ const ZONA = 'America/Mexico_City';
 const T1 = '06:00';
 const HOY = fechaOperativa(Date.now(), ZONA, T1);
 
+// EDS-105 (Fase 2): estas funciones ahora usan requireAcceso, que resuelve
+// el rol contra la tabla `roles` — necesitan que exista antes de crear
+// sesiones con un rol real.
 async function setup(t: Awaited<ReturnType<typeof convexTest>>) {
+  await crearRolesPrueba(t);
   await crearParametrosPrueba(t, 4);
   const adminId = await crearUsuarioPrueba(t, 'admin');
   const comprasId = await crearUsuarioPrueba(t, 'compras');

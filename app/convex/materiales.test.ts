@@ -2,11 +2,12 @@ import { convexTest } from 'convex-test';
 import { describe, expect, test } from 'vitest';
 import schema from './schema';
 import { api } from './_generated/api';
-import { crearMaterialPrueba, crearUsuarioPrueba, crearSesionPrueba, crearParametrosPrueba } from './testHelpers';
+import { crearMaterialPrueba, crearUsuarioPrueba, crearSesionPrueba, crearParametrosPrueba, crearRolesPrueba } from './testHelpers';
 
 const modules = import.meta.glob('./**/*.ts');
 
 async function setup(t: Awaited<ReturnType<typeof convexTest>>) {
+  await crearRolesPrueba(t); // EDS-105: requireAcceso resuelve el rol contra la tabla `roles`
   await crearParametrosPrueba(t, 4); // cargasPorTurno:8, turnosPorDia:2
   const adminId = await crearUsuarioPrueba(t, 'admin');
   const compradorId = await crearUsuarioPrueba(t, 'compras');
@@ -63,6 +64,7 @@ describe('materiales: listCatalogo (tarea 2.1)', () => {
   // responden al valor configurado, no al hardcode viejo.
   test('lineasActivas configurado a 1 reduce consumoDiario/reorderCalc a la mitad vs. el default de 2', async () => {
     const t = convexTest(schema, modules);
+    await crearRolesPrueba(t); // EDS-105: requireAcceso resuelve el rol contra la tabla `roles`
     const adminId = await crearUsuarioPrueba(t, 'admin');
     const adminToken = await crearSesionPrueba(t, adminId);
     await crearParametrosPrueba(t, 4, 1); // lineasActivas:1 explícito

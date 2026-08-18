@@ -1,18 +1,22 @@
 import { v, ConvexError } from 'convex/values';
 import { mutation, query } from './_generated/server';
 import type { QueryCtx } from './_generated/server';
-import { requireRole } from './lib/auth';
+import { requireRole, requireAcceso } from './lib/auth';
 import { fechaOperativa, sumarDiasISO } from './lib/fechaOperativa';
 import { consumoDiarioTeorico, puntoReordenTeorico } from './lib/puntoReorden';
 
-// Roles que ven Panel de Control (mismo criterio que el guard de la
-// página en panel-control.html) — operador no tiene esta pantalla, su
-// captura vive en Cierre de Turno.
-// Exportado: reporteDiario.ts lo reutiliza como destinatarios de la
-// notificación in-app "reporte generado" — son los mismos roles que
-// pueden ver Panel de Control, así no hace falta un selector de roles
-// aparte en reporteDiarioConfig ni arriesgar que diverja de quién
-// realmente consume el dashboard.
+// EDS-105: este arreglo YA NO gatea el acceso a las queries del
+// dashboard — esas migraron a requireAcceso(ctx, token, 'panel-control'),
+// que resuelve contra la tabla dinámica `roles`. ROLES_DASHBOARD se queda
+// exportado únicamente como DATO: reporteDiario.ts lo reutiliza como lista
+// fija de destinatarios de la notificación in-app "reporte generado". Es
+// un snapshot de los roles base de hoy, no una fuente de verdad dinámica
+// — un rol nuevo creado desde Gestión de Roles con acceso a
+// panel-control SÍ podrá ver el dashboard, pero NO aparecerá aquí como
+// destinatario de esa notificación hasta que alguien actualice esta lista
+// a mano (deuda conocida, fuera de alcance de EDS-105 — el alcance de esta
+// épica es acceso a pantallas, no la lista de destinatarios de
+// notificaciones).
 export const ROLES_DASHBOARD = ['compras', 'calidad', 'gerencia', 'admin'] as const;
 
 export async function requireParametros(ctx: QueryCtx) {
@@ -239,7 +243,7 @@ export async function obtenerUltimoCierreImpl(ctx: QueryCtx) {
 export const getKPIsHoy = query({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {
-    await requireRole(ctx, token, ROLES_DASHBOARD);
+    await requireAcceso(ctx, token, 'panel-control');
     const [kpis, ultimoCierre] = await Promise.all([
       calcularKPIsHoyImpl(ctx),
       obtenerUltimoCierreImpl(ctx),
@@ -277,7 +281,7 @@ function validarDiasRango(nombreFuncion: string, dias: number) {
 export const produccionPorRango = query({
   args: { dias: v.number(), token: v.string() },
   handler: async (ctx, { dias, token }) => {
-    await requireRole(ctx, token, ROLES_DASHBOARD);
+    await requireAcceso(ctx, token, 'panel-control');
     validarDiasRango('produccionPorRango', dias);
     const { fechas, cierres } = await cierresEnRango(ctx, dias);
     return fechas.map((fecha) => {
@@ -295,7 +299,7 @@ export const produccionPorRango = query({
 export const tendenciaMerma = query({
   args: { dias: v.number(), token: v.string() },
   handler: async (ctx, { dias, token }) => {
-    await requireRole(ctx, token, ROLES_DASHBOARD);
+    await requireAcceso(ctx, token, 'panel-control');
     validarDiasRango('tendenciaMerma', dias);
     const { fechas, cierres } = await cierresEnRango(ctx, dias);
     return fechas.map((fecha) => {
@@ -311,7 +315,7 @@ export const tendenciaMerma = query({
 export const tendenciaCosto = query({
   args: { dias: v.number(), token: v.string() },
   handler: async (ctx, { dias, token }) => {
-    await requireRole(ctx, token, ROLES_DASHBOARD);
+    await requireAcceso(ctx, token, 'panel-control');
     validarDiasRango('tendenciaCosto', dias);
     const { fechas, cierres } = await cierresEnRango(ctx, dias);
     return fechas.map((fecha) => {
@@ -334,7 +338,7 @@ export const tendenciaCosto = query({
 export const kpisPorRango = query({
   args: { dias: v.number(), token: v.string() },
   handler: async (ctx, { dias, token }) => {
-    await requireRole(ctx, token, ROLES_DASHBOARD);
+    await requireAcceso(ctx, token, 'panel-control');
     validarDiasRango('kpisPorRango', dias);
     const params = await requireParametros(ctx);
     const { fechas, cierres } = await cierresEnRango(ctx, dias);
@@ -378,7 +382,7 @@ const N_CIERRES_MAX = 50;
 export const costoPromedioUltimosCierres = query({
   args: { n: v.number(), token: v.string() },
   handler: async (ctx, { n, token }) => {
-    await requireRole(ctx, token, ROLES_DASHBOARD);
+    await requireAcceso(ctx, token, 'panel-control');
     if (!Number.isInteger(n) || n <= 0 || n > N_CIERRES_MAX) {
       throw new ConvexError(`costoPromedioUltimosCierres: n debe ser un entero entre 1 y ${N_CIERRES_MAX}.`);
     }
@@ -395,18 +399,26 @@ export const costoPromedioUltimosCierres = query({
 });
 
 // Metas de producción (tarea 6.5) — singleton, igual patrón que
-// parametrosProduccion. Lectura: cualquier rol del dashboard. Escritura:
-// solo admin (el spec de roles no le da a Calidad ni Gerencia edición de
-// metas, solo lectura del dashboard de desviación/costos).
+// parametrosProduccion. Lectura: cualquiera con acceso a panel-control.
+// Escritura: solo admin — ver nota en updateObjetivos.
 export const getObjetivos = query({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {
-    await requireRole(ctx, token, ROLES_DASHBOARD);
+    await requireAcceso(ctx, token, 'panel-control');
     const obj = await ctx.db.query('objetivosProduccion').first();
     return obj ?? { turnoL1: 0, turnoL2: 0, semana: 0, mes: 0 };
   },
 });
 
+// EDS-105: EXCEPCIÓN DELIBERADA — se queda en requireRole(['admin']), NO se
+// amplía a requireAcceso(ctx, token, 'panel-control'). Editar metas es una
+// acción admin-only DENTRO de una pantalla que varios roles pueden abrir
+// (mismo patrón que parametros.ts::updateParametros vs. getParametros, y
+// que peps.ts::valorInventarioMaterial) — el propio panel-control.html ya
+// oculta el control de edición salvo `sessionUser.rol === 'admin'`
+// (líneas ~1204/1214). Mapearlo a 'panel-control' ampliaría la escritura a
+// compras/calidad/gerencia, que hoy NO la tienen — fuera de alcance de
+// EDS-105 (acceso a pantallas, no permisos finos dentro de ellas).
 export const updateObjetivos = mutation({
   args: {
     turnoL1: v.number(), turnoL2: v.number(), semana: v.number(), mes: v.number(),

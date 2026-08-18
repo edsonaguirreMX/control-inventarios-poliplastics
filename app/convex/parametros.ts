@@ -2,16 +2,31 @@ import { v, ConvexError } from 'convex/values';
 import { mutation, query } from './_generated/server';
 import type { MutationCtx } from './_generated/server';
 import type { Id } from './_generated/dataModel';
-import { requireRole } from './lib/auth';
+import { requireAcceso } from './lib/auth';
 
 // Parámetros de Producción y Fórmula — pantalla admin-only. Fuente única
 // de verdad de cargasPorTurno/turnosPorDia/kgPorMetro y de kgPorCarga por
 // material; Catálogo (materiales.ts) y Cierre de turno (cierres.ts) leen
 // de aquí, nunca guardan su propia copia.
+//
+// EDS-105 (Fase 2) — decisión explícita del usuario tras revisar la tabla
+// de equivalencia: SOLO la LECTURA (getParametros) se comparte con
+// catalogo-materiales (EDS-88 ya deja ver/derivar estos valores desde esa
+// pantalla). La ESCRITURA (updateParametros/updateFormulaCarga/
+// guardarParametrosCompleto) NO se comparte — queda restringida solo a
+// 'parametros-produccion', a propósito, aunque hoy Catálogo también tenga
+// un control que llama updateParametros (para lineasActivas, EDS-88): con
+// roles fijos (solo 5, admin ve ambas pantallas) esto nunca importó, pero
+// con roles personalizables un rol con acceso a Catálogo pero NO a
+// Parámetros de Producción no debe poder editar parámetros globales de
+// producción. Ese control de Catálogo queda pendiente de resolver en
+// Fase 3/4 (frontend) — hoy solo admin lo usa y admin tiene bypassAcceso,
+// así que no se rompe nada todavía, solo se cierra el hueco para roles
+// futuros.
 export const getParametros = query({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {
-    await requireRole(ctx, token, ['admin']);
+    await requireAcceso(ctx, token, ['catalogo-materiales', 'parametros-produccion']);
     const params = await ctx.db.query('parametrosProduccion').first();
     if (!params) {
       throw new Error('getParametros: no hay parámetros de producción configurados (parametrosProduccion vacío).');
@@ -139,7 +154,7 @@ export const updateParametros = mutation({
     token: v.string(),
   },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, args.token, ['admin']);
+    const user = await requireAcceso(ctx, args.token, 'parametros-produccion');
     await actualizarParametrosImpl(ctx, user, args);
     return { ok: true };
   },
@@ -153,7 +168,9 @@ export const updateFormulaCarga = mutation({
     token: v.string(),
   },
   handler: async (ctx, args) => {
-    await requireRole(ctx, args.token, ['admin']);
+    // Sin consumidor actual (superseded por guardarParametrosCompleto) —
+    // mismo criterio de escritura restringida que updateParametros arriba.
+    await requireAcceso(ctx, args.token, 'parametros-produccion');
     await actualizarFormulaCargaImpl(ctx, args);
     await verificarFormulaTotalPositiva(ctx);
     return { ok: true };
@@ -182,7 +199,7 @@ export const guardarParametrosCompleto = mutation({
     token: v.string(),
   },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, args.token, ['admin']);
+    const user = await requireAcceso(ctx, args.token, 'parametros-produccion');
     await actualizarParametrosImpl(ctx, user, {
       cargasPorTurno: args.cargasPorTurno,
       turnosPorDia: args.turnosPorDia,

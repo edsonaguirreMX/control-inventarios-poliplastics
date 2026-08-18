@@ -3,7 +3,7 @@ import { mutation } from './_generated/server';
 import type { MutationCtx } from './_generated/server';
 import type { Id } from './_generated/dataModel';
 import { crearCapaImpl } from './peps';
-import { requireRole } from './lib/auth';
+import { requireAcceso } from './lib/auth';
 import { horaLocalAInstante } from './lib/fechaOperativa';
 
 // EDS-41 / tarea 3.5 — Importación de inventario inicial: reemplaza el
@@ -169,7 +169,12 @@ export const importarInventarioInicial = mutation({
     token: v.string(),
   },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, args.token, ['admin']);
+    // EDS-105 (Fase 2): ninguna pantalla llama esta mutation hoy — es de
+    // uso único (EDS-41, ya ejecutada en producción), invocada a mano vía
+    // CLI/dashboard. Se mapea a "ajustes-inventario" por semántica (mismo
+    // dominio: cargar/ajustar inventario), no por un consumidor real —
+    // ver tabla de equivalencia de EDS-105.
+    const user = await requireAcceso(ctx, args.token, 'ajustes-inventario');
 
     validarFechaHoraCorte(args.fechaISO, args.horaCorte);
 

@@ -2,7 +2,7 @@ import { v, ConvexError } from 'convex/values';
 import { mutation, query } from './_generated/server';
 import type { MutationCtx } from './_generated/server';
 import type { Id } from './_generated/dataModel';
-import { requireRole } from './lib/auth';
+import { requireAcceso } from './lib/auth';
 import { recapturarCierreImpl } from './cierreEngine';
 import { fechaOperativa, sumarDiasISO } from './lib/fechaOperativa';
 
@@ -26,7 +26,7 @@ async function ventanaUltimosDias(ctx: { db: { query: any } }, dias: number): Pr
 export const listRegistrosUltimos10Dias = query({
   args: { tipo: v.union(v.literal('cierre'), v.literal('entrada')), token: v.string() },
   handler: async (ctx, { tipo, token }) => {
-    await requireRole(ctx, token, ['admin']);
+    await requireAcceso(ctx, token, 'correccion-capturas');
     const dias = await ventanaUltimosDias(ctx, VENTANA_DIAS);
     const resultado = [];
     for (const fecha of dias) {
@@ -47,7 +47,7 @@ export const listRegistrosUltimos10Dias = query({
 export const getCierre = query({
   args: { fecha: v.string(), linea: v.union(v.literal(1), v.literal(2)), turno: v.union(v.literal(1), v.literal(2)), token: v.string() },
   handler: async (ctx, { fecha, linea, turno, token }) => {
-    await requireRole(ctx, token, ['admin']);
+    await requireAcceso(ctx, token, 'correccion-capturas');
     const cierre = await ctx.db
       .query('cierresTurno')
       .withIndex('by_fecha_linea_turno', (q) => q.eq('fecha', fecha).eq('linea', linea).eq('turno', turno))
@@ -64,7 +64,7 @@ export const getCierre = query({
 export const getEntradasDelDia = query({
   args: { fecha: v.string(), token: v.string() },
   handler: async (ctx, { fecha, token }) => {
-    await requireRole(ctx, token, ['admin']);
+    await requireAcceso(ctx, token, 'correccion-capturas');
     return ctx.db.query('entradas').withIndex('by_fecha', (q) => q.eq('fecha', fecha)).collect();
   },
 });
@@ -81,7 +81,7 @@ export const actualizarCierreTurno = mutation({
     token: v.string(),
   },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, args.token, ['admin']);
+    const user = await requireAcceso(ctx, args.token, 'correccion-capturas');
     // recapturarCierreImpl hace revertir→aplicar→patch→auditoría — el
     // MISMO camino que usa el recierre de 4.2, no una segunda
     // implementación de la misma secuencia.
@@ -210,7 +210,13 @@ export const actualizarEntrada = mutation({
     token: v.string(),
   },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, args.token, ['compras', 'admin']);
+    // EDS-105: solo 'correccion-capturas' — esta es una corrección
+    // administrativa, no una función de captura de entradas normal. Aunque
+    // hoy 'compras' tenía acceso vía el rol viejo, esa pantalla
+    // (correccion-capturas.html) es admin-only; el acceso de 'compras' era
+    // deuda histórica del enum de roles y no se perpetúa aquí (decisión
+    // explícita del usuario, EDS-105).
+    const user = await requireAcceso(ctx, args.token, 'correccion-capturas');
     await actualizarEntradaImpl(ctx, user, args);
     return { ok: true };
   },
@@ -232,7 +238,8 @@ export const actualizarEntradasBatch = mutation({
     token: v.string(),
   },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, args.token, ['compras', 'admin']);
+    // EDS-105: mismo criterio que actualizarEntrada — solo 'correccion-capturas'.
+    const user = await requireAcceso(ctx, args.token, 'correccion-capturas');
     if (args.entradas.length === 0) {
       throw new ConvexError('actualizarEntradasBatch: se necesita al menos una entrada.');
     }

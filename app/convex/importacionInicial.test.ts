@@ -7,6 +7,7 @@ import {
   crearUsuarioPrueba,
   crearSesionPrueba,
   crearParametrosPrueba,
+  crearRolesPrueba,
   getCapa,
 } from './testHelpers';
 
@@ -33,6 +34,7 @@ const modules = import.meta.glob('./**/*.ts');
 
 describe('importacionInicial: importarInventarioInicial (EDS-41 / tarea 3.5)', () => {
   async function setup(t: Awaited<ReturnType<typeof convexTest>>) {
+    await crearRolesPrueba(t); // EDS-105: requireAcceso resuelve el rol contra la tabla `roles`
     await crearParametrosPrueba(t);
     const adminId = await crearUsuarioPrueba(t, 'admin');
     const operadorId = await crearUsuarioPrueba(t, 'operador');
@@ -326,6 +328,7 @@ describe('importacionInicial: importarInventarioInicial (EDS-41 / tarea 3.5)', (
 
   test('rechaza una hora local que no existe por el cambio de horario de primavera (hueco)', async () => {
     const t = convexTest(schema, modules);
+    await crearRolesPrueba(t); // EDS-105: requireAcceso resuelve el rol contra la tabla `roles`
     await crearParametrosPruebaConZona(t, 'America/New_York');
     const adminId = await crearUsuarioPrueba(t, 'admin');
     const adminToken = await crearSesionPrueba(t, adminId);
@@ -348,6 +351,7 @@ describe('importacionInicial: importarInventarioInicial (EDS-41 / tarea 3.5)', (
 
   test('rechaza una hora local ambigua por el cambio de horario de otoño (ocurre dos veces)', async () => {
     const t = convexTest(schema, modules);
+    await crearRolesPrueba(t); // EDS-105: requireAcceso resuelve el rol contra la tabla `roles`
     await crearParametrosPruebaConZona(t, 'America/New_York');
     const adminId = await crearUsuarioPrueba(t, 'admin');
     const adminToken = await crearSesionPrueba(t, adminId);

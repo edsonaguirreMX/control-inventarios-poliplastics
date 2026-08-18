@@ -2,7 +2,7 @@ import { v, ConvexError } from 'convex/values';
 import { mutation, query } from './_generated/server';
 import type { MutationCtx } from './_generated/server';
 import type { Id } from './_generated/dataModel';
-import { requireRole } from './lib/auth';
+import { requireAcceso } from './lib/auth';
 import { consumoDiarioTeorico, puntoReordenTeorico } from './lib/puntoReorden';
 
 // Catálogo de Materiales — pantalla admin-only (mismo guard que la
@@ -21,7 +21,7 @@ import { consumoDiarioTeorico, puntoReordenTeorico } from './lib/puntoReorden';
 export const listCatalogo = query({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {
-    await requireRole(ctx, token, ['admin']);
+    await requireAcceso(ctx, token, 'catalogo-materiales');
     const params = await ctx.db.query('parametrosProduccion').first();
     if (!params) {
       throw new Error('listCatalogo: no hay parámetros de producción configurados (parametrosProduccion vacío).');
@@ -128,7 +128,7 @@ export const updateMaterial = mutation({
     token: v.string(),
   },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, args.token, ['admin']);
+    const user = await requireAcceso(ctx, args.token, 'catalogo-materiales');
     await actualizarMaterialImpl(ctx, user, args);
     return { ok: true };
   },
@@ -153,7 +153,7 @@ export const guardarCatalogoCompleto = mutation({
     token: v.string(),
   },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, args.token, ['admin']);
+    const user = await requireAcceso(ctx, args.token, 'catalogo-materiales');
     if (args.materiales.length === 0) {
       throw new ConvexError('guardarCatalogoCompleto: se necesita al menos un material.');
     }
