@@ -517,8 +517,7 @@ button{font-family:inherit;}
    archivo — un module normal no las haría globales por sí solo.
    ============================================================ */
 const LOGIN_URL = '/login-acceso.html';
-const ROLE_LABEL = { operador:'Operador de piso', admin:'Admin' };
-const sessionUser = await window.Session.requireRole(['operador', 'admin']);
+const sessionUser = await window.Session.requireAcceso('cierre-turno');
 const api = window.api; // expuesto por session.js (bundleado) — ver su comentario
 
 function iniciales(nombre){
@@ -539,7 +538,7 @@ function renderSessionBar(){
   el.innerHTML = `
     <div class="who">
       <span class="avatar">${escapeHtmlSesion(iniciales(sessionUser.nombre))}</span>
-      <span>${escapeHtmlSesion(sessionUser.nombre)}<small>${ROLE_LABEL[sessionUser.rol] || sessionUser.rol}</small></span>
+      <span>${escapeHtmlSesion(sessionUser.nombre)}<small>${sessionUser.rolNombre}</small></span>
     </div>
     <a class="logout-link" href="#" id="logoutLink">Cerrar sesión</a>`;
   document.getElementById('logoutLink').addEventListener('click', async (e) => {

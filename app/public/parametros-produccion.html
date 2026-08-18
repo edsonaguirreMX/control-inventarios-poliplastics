@@ -310,12 +310,11 @@ footer.page-foot{font-size:.78rem;color:var(--ink-faint);border-top:1px solid va
 <script type="module" src="/js/convex-client.js"></script>
 <script type="module">
 /* ============================================================
-   SESIÓN (autenticación real — Épica 1). Session.requireRole
+   SESIÓN (autenticación real — Épica 1). Session.requireAcceso
    redirige a /login-acceso.html si no hay sesión o el rol no
-   está permitido; el resto del script de la página solo corre
-   si esta promesa se resuelve.
+   tiene acceso a esta página (EDS-106); el resto del script de
+   la página solo corre si esta promesa se resuelve.
    ============================================================ */
-const ROLE_LABEL = { operador:'Operador', admin:'Admin', gerencia:'Gerencia y Comercial', compras:'Compras', calidad:'Calidad y Producción' };
 // Este módulo es independiente del segundo <script> de la página (scope
 // propio, sin variables compartidas) — se duplica un escape mínimo aquí
 // en vez de depender del escapeHtml() de allá. Mismo hallazgo de
@@ -330,13 +329,13 @@ function escapeHtmlSesion(str){
 // el segundo <script type="module"> de esta página (con la lógica
 // principal) la espere explícitamente en su primera línea, en vez de
 // depender solo del orden de documento entre módulos independientes.
-window.__authReady = window.Session.requireRole(['admin']);
+window.__authReady = window.Session.requireAcceso('parametros-produccion');
 const user = await window.__authReady;
 window.usuarioSesion = user.nombre;
 window.rolSesion = user.rol;
 const row = document.getElementById('sessionRow');
 if (row) {
-  row.innerHTML = `<span class="role-badge">🔒 ${escapeHtmlSesion(user.nombre)} · ${ROLE_LABEL[user.rol]}</span><a class="logout-link" href="#" id="logoutLink">Cerrar sesión</a>`;
+  row.innerHTML = `<span class="role-badge">🔒 ${escapeHtmlSesion(user.nombre)} · ${user.rolNombre}</span><a class="logout-link" href="#" id="logoutLink">Cerrar sesión</a>`;
   document.getElementById('logoutLink').addEventListener('click', async (e) => {
     e.preventDefault();
     await window.Session.logout();

@@ -159,6 +159,26 @@ async function requireRole(roles) {
   return user;
 }
 
+// EDS-106 (Fase 3 de EDS-103, roles personalizables): reemplaza gradualmente
+// a requireRole en las pantallas que se autorizan por PÁGINA en vez de por
+// un enum fijo de roles — `pagina` (o arreglo, si la función/pantalla es
+// compartida) se compara contra `user.paginasPermitidas`, que ya viene
+// resuelto por el backend (auth.ts::me) contra la tabla dinámica `roles`.
+// requireRole se queda vivo (no se borra) — Gestión de Usuarios y la futura
+// Gestión de Roles siguen con acceso fijo admin-only, mismo criterio que
+// requireRole/requireAcceso en el backend (ver convex/lib/auth.ts).
+async function requireAcceso(pagina) {
+  const user = await getUser();
+  const requeridas = Array.isArray(pagina) ? pagina : [pagina];
+  const paginasPermitidas = user?.paginasPermitidas || [];
+  if (!user || !requeridas.some((p) => paginasPermitidas.includes(p))) {
+    window.location.href = '/login-acceso.html';
+    return new Promise(() => {});
+  }
+  iniciarMonitorInactividad();
+  return user;
+}
+
 /**
  * Wrapper para llamar queries/mutations/actions de Convex inyectando el
  * token automáticamente. `fnRef` es una referencia de api.* (ej.
@@ -198,7 +218,7 @@ function esErrorDeNegocio(err) {
   return err instanceof ConvexError;
 }
 
-window.Session = { login, getUser, logout, requireRole, call, mensajeError, esErrorDeNegocio };
+window.Session = { login, getUser, logout, requireRole, requireAcceso, call, mensajeError, esErrorDeNegocio };
 window.__convexClient = client;
 // Las páginas HTML normales no pasan por esbuild (solo este archivo lo
 // hace) — no pueden hacer `import { api } from '.../_generated/api'` ellas

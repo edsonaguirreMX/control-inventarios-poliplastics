@@ -3,6 +3,7 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import schema from './schema';
 import { api, internal } from './_generated/api';
 import { crearUsuarioPrueba, crearSesionPrueba, crearRolesPrueba } from './testHelpers';
+import { PAGINAS } from './lib/paginas';
 
 const modules = import.meta.glob('./**/*.ts');
 
@@ -312,5 +313,71 @@ describe('auth: limpiarLoginIntentosExpirados (mayor de la auditoría de PR8)', 
     // termina de limpiar en la misma corrida lógica.
     const restantes = await t.run((ctx) => ctx.db.query('loginIntentos').collect());
     expect(restantes).toHaveLength(0);
+  });
+});
+
+// EDS-106 (Fase 3 de EDS-103): auth.me gana rolNombre/paginasPermitidas —
+// el frontend (session.js::requireAcceso) depende de estos dos campos para
+// decidir si redirige a login, así que necesitan cobertura directa, no solo
+// indirecta vía las pruebas de requireAcceso del backend.
+describe('auth.me: rolNombre / paginasPermitidas (EDS-106)', () => {
+  test('admin (bypassAcceso) recibe TODAS las páginas del catálogo, sin importar lo que diga roles.paginas', async () => {
+    const t = convexTest(schema, modules);
+    await crearRolesPrueba(t);
+    const adminId = await crearUsuarioPrueba(t, 'admin');
+    const adminToken = await crearSesionPrueba(t, adminId);
+    const me = await t.query(api.auth.me, { token: adminToken });
+    expect(me?.rolNombre).toBe('Admin');
+    expect(me?.paginasPermitidas.sort()).toEqual([...PAGINAS].sort());
+  });
+
+  test('operador recibe exactamente las páginas de su rol base, ni una más', async () => {
+    const t = convexTest(schema, modules);
+    await crearRolesPrueba(t);
+    const operadorId = await crearUsuarioPrueba(t, 'operador');
+    const operadorToken = await crearSesionPrueba(t, operadorId);
+    const me = await t.query(api.auth.me, { token: operadorToken });
+    expect(me?.rolNombre).toBe('Operador de piso');
+    expect(me?.paginasPermitidas).toEqual(['cierre-turno']);
+  });
+
+  test('compras recibe panel-control + entradas-costeo, no gestion-usuarios ni gestion-roles', async () => {
+    const t = convexTest(schema, modules);
+    await crearRolesPrueba(t);
+    const comprasId = await crearUsuarioPrueba(t, 'compras');
+    const comprasToken = await crearSesionPrueba(t, comprasId);
+    const me = await t.query(api.auth.me, { token: comprasToken });
+    expect(me?.rolNombre).toBe('Compras');
+    expect(me?.paginasPermitidas.sort()).toEqual(['entradas-costeo', 'panel-control'].sort());
+    expect(me?.paginasPermitidas).not.toContain('gestion-usuarios');
+    expect(me?.paginasPermitidas).not.toContain('gestion-roles');
+  });
+
+  test('rol inactivo: me sigue devolviendo al usuario (no lanza), pero paginasPermitidas queda vacío', async () => {
+    const t = convexTest(schema, modules);
+    await crearRolesPrueba(t);
+    const gerenciaId = await crearUsuarioPrueba(t, 'gerencia');
+    const gerenciaToken = await crearSesionPrueba(t, gerenciaId);
+    await t.run(async (ctx) => {
+      const rol = await ctx.db.query('roles').withIndex('by_slug', (q) => q.eq('slug', 'gerencia')).unique();
+      await ctx.db.patch(rol!._id, { activo: false });
+    });
+    const me = await t.query(api.auth.me, { token: gerenciaToken });
+    expect(me).not.toBeNull(); // logueado sigue "logueado" — session.js::requireAcceso es quien redirige
+    expect(me?.paginasPermitidas).toEqual([]);
+    // rolNombre conserva el nombre humano ya conocido aunque el rol esté
+    // inactivo (rol.nombre sigue existiendo en el documento) — solo el
+    // acceso a páginas se anula, no la etiqueta visible.
+    expect(me?.rolNombre).toBe('Gerencia y Comercial');
+  });
+
+  test('rol sin fila correspondiente en `roles` (usuario huérfano): rolNombre cae al slug crudo, paginasPermitidas vacío', async () => {
+    const t = convexTest(schema, modules);
+    await crearRolesPrueba(t);
+    const userId = await crearUsuarioPrueba(t, 'un_rol_que_no_existe' as any);
+    const token = await crearSesionPrueba(t, userId);
+    const me = await t.query(api.auth.me, { token });
+    expect(me?.rolNombre).toBe('un_rol_que_no_existe');
+    expect(me?.paginasPermitidas).toEqual([]);
   });
 });
