@@ -44,7 +44,28 @@ app.get('/config.js', (req, res) => {
 
 app.get('/', (req, res) => res.redirect('/login-acceso.html'));
 
-app.use(express.static(PUBLIC_DIR, { extensions: ['html'] }));
+// EDS-110 — mismo incidente que ya tuvo /config.js (ver comentario arriba,
+// 2026-08-10): el CDN de Railway (Cloudflare) impone `max-age=14400` (4h)
+// por defecto a cualquier respuesta sin Cache-Control explícito.
+// express.static no manda ninguno propio salvo que se lo pidamos, así que
+// /js/convex-client.js (el bundle real de session.js + cliente de Convex)
+// podía quedar cacheado en el edge hasta 4 horas después de un deploy —
+// un usuario que ya hubiera visitado el sitio seguía recibiendo JS viejo
+// contra un backend ya nuevo (encontrado real: EDS-106, pantalla "a
+// medias" tras el deploy de esa fase). `no-cache` (no `no-store`, a
+// diferencia de config.js) porque este SÍ es un archivo estático real que
+// vale la pena poder revalidar por ETag — solo evita que se sirva sin
+// preguntarle primero al origen si cambió.
+app.use(
+  express.static(PUBLIC_DIR, {
+    extensions: ['html'],
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith(path.join('js', 'convex-client.js')) || filePath.endsWith(path.join('js', 'convex-client.js.map'))) {
+        res.set('Cache-Control', 'no-cache, must-revalidate');
+      }
+    },
+  })
+);
 
 app.listen(PORT, () => {
   console.log(`Tejaflex — sirviendo pantallas en http://localhost:${PORT}`);
