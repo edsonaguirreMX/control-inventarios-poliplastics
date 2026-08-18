@@ -229,12 +229,16 @@ export const seedRolesBase = internalMutation({
         // desde Gestión de Roles) dejaba a TODOS sus usuarios sin acceso
         // de forma permanente — volver a correr este seed no lo arreglaba,
         // porque el slug ya existía y se omitía sin más. Reactivar aquí
-        // SOLO toca `activo` — nunca `nombre`/`paginas`/`orden`, que
-        // pudieron haberse editado a mano desde que se sembró la primera
-        // vez; el propósito es restaurar disponibilidad mínima, no
-        // revertir personalizaciones administrativas.
+        // SOLO toca `activo`/`updatedAt` — nunca `nombre`/`paginas`/`orden`,
+        // que pudieron haberse editado a mano desde que se sembró la primera
+        // vez; el propósito es restaurar disponibilidad mínima, no revertir
+        // personalizaciones administrativas. `updatedBy` tampoco se toca
+        // (mismo patrón que reactivarRol, arriba) — sobreescribirlo a
+        // `null` borraría la identidad de quien hizo la última edición real
+        // del rol, degradando el rastro de auditoría sin necesidad
+        // (hallazgo de CodeRabbit en este mismo PR).
         if (!existente.activo) {
-          await ctx.db.patch(existente._id, { activo: true, updatedAt: now, updatedBy: null });
+          await ctx.db.patch(existente._id, { activo: true, updatedAt: now });
           reactivados++;
         }
         continue;

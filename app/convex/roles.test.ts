@@ -258,17 +258,23 @@ describe('roles: seedRolesBase (EDS-104)', () => {
     expect(roles.length).toBe(5);
   });
 
-  test('EDS-109: reactiva un rol base existente pero inactivo, sin pisar nombre/páginas/orden editados', async () => {
+  test('EDS-109: reactiva un rol base existente pero inactivo, sin pisar nombre/páginas/orden/updatedBy editados', async () => {
     const t = convexTest(schema, modules);
     // Simula un rol base que ya existía, activo:false (desactivado a mano,
-    // o eventualmente desde Gestión de Roles), y con nombre/páginas/orden
-    // ya editados respecto al ROLES_BASE original — reactivar debe
-    // restaurar SOLO `activo`, nunca pisar esas personalizaciones.
+    // o eventualmente desde Gestión de Roles), con nombre/páginas/orden
+    // ya editados respecto al ROLES_BASE original y updatedBy apuntando a
+    // quien hizo esa última edición real — reactivar debe restaurar SOLO
+    // `activo`/`updatedAt`, nunca pisar esas personalizaciones ni borrar
+    // el rastro de auditoría de updatedBy (hallazgo de CodeRabbit: el
+    // primer intento de este fix ponía updatedBy:null a mano, un fixture
+    // con updatedBy ya null no habría detectado esa regresión — por eso
+    // aquí se usa un _id real, no null, desde el inicio).
+    const adminId = await crearUsuarioPrueba(t, 'admin');
     await t.run(async (ctx) => {
       const now = Date.now();
       await ctx.db.insert('roles', {
         slug: 'compras', nombre: 'Compras Editado', paginas: ['panel-control'],
-        protegido: false, bypassAcceso: false, activo: false, orden: 99, updatedAt: now, updatedBy: null,
+        protegido: false, bypassAcceso: false, activo: false, orden: 99, updatedAt: now, updatedBy: adminId,
       });
     });
 
@@ -277,7 +283,6 @@ describe('roles: seedRolesBase (EDS-104)', () => {
     expect(r.yaExistian).toBe(1);
     expect(r.reactivados).toBe(1);
 
-    const adminId = await crearUsuarioPrueba(t, 'admin');
     const adminToken = await crearSesionPrueba(t, adminId);
     const roles = await t.query(api.roles.listRoles, { token: adminToken });
     const compras = roles.find((x) => x.slug === 'compras')!;
@@ -285,6 +290,7 @@ describe('roles: seedRolesBase (EDS-104)', () => {
     expect(compras.nombre).toBe('Compras Editado'); // NO se pisó
     expect(compras.paginas).toEqual(['panel-control']); // NO se pisó (ROLES_BASE trae 2 páginas para compras)
     expect(compras.orden).toBe(99); // NO se pisó
+    expect(compras.updatedBy).toBe(adminId); // NO se pisó — sigue apuntando a quien editó de verdad
   });
 
   test('EDS-109: un rol base ya activo no cuenta como reactivado (idempotente, mismo caso que antes)', async () => {
