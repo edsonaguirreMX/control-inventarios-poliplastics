@@ -367,7 +367,7 @@ window.rolSesion = user.rol;
 // apunta a ?tab=admin directo en el HTML, no hace falta ajustarlo por rol.
 const row = document.getElementById('sessionRow');
 if (row) {
-  row.innerHTML = `<span class="role-badge">🔒 ${escapeHtmlSesion(user.nombre)} · ${user.rolNombre}</span><a class="logout-link" href="#" id="logoutLink">Cerrar sesión</a>`;
+  row.innerHTML = `<span class="role-badge">🔒 ${escapeHtmlSesion(user.nombre)} · ${escapeHtmlSesion(user.rolNombre)}</span><a class="logout-link" href="#" id="logoutLink">Cerrar sesión</a>`;
   document.getElementById('logoutLink').addEventListener('click', async (e) => {
     e.preventDefault();
     await window.Session.logout();

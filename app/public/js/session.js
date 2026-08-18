@@ -55,8 +55,19 @@ async function login(usuario, password, remember) {
     remember: !!remember,
   });
   setToken(result.token, !!remember);
-  cachedUser = { nombre: result.nombre, usuario: result.usuario, rol: result.rol };
-  return cachedUser;
+  // CodeRabbit (PR EDS-106): result solo trae nombre/usuario/rol (lo que
+  // devuelve authActions.login) — NO rolNombre/paginasPermitidas (eso solo
+  // lo resuelve auth.me contra la tabla `roles`). Cachear ese objeto
+  // parcial aquí dejaba a cualquier requireAcceso() que corriera en el
+  // MISMO documento justo después de login() sin paginasPermitidas
+  // (undefined → [] → redirige a login a un usuario válido). Hoy ningún
+  // caller hace eso (login-acceso.html navega de página completa antes de
+  // volver a pedir sesión), pero el contrato de getUser()/requireAcceso()
+  // debe sostenerse siempre, no solo para el único caller de hoy —
+  // invalidar el cache y pedir el objeto completo a auth.me en vez de
+  // fabricar uno a mano.
+  cachedUser = undefined;
+  return getUser();
 }
 
 async function getUser() {

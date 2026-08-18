@@ -703,7 +703,7 @@ function escapeHtmlSesion(str){
 function renderSessionRow(){
   const row = document.createElement('div');
   row.className = 'session-row';
-  row.innerHTML = `<span class="role-badge">🔒 ${escapeHtmlSesion(sessionUser.nombre)} · ${sessionUser.rolNombre}</span><a class="logout-link" href="#" id="logoutLink">Cerrar sesión</a>`;
+  row.innerHTML = `<span class="role-badge">🔒 ${escapeHtmlSesion(sessionUser.nombre)} · ${escapeHtmlSesion(sessionUser.rolNombre)}</span><a class="logout-link" href="#" id="logoutLink">Cerrar sesión</a>`;
   document.querySelector('.topbar-right').prepend(row);
   document.getElementById('logoutLink').addEventListener('click', async (e) => {
     e.preventDefault();
