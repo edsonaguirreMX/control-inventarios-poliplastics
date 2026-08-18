@@ -258,6 +258,43 @@ describe('roles: seedRolesBase (EDS-104)', () => {
     expect(roles.length).toBe(5);
   });
 
+  test('EDS-109: reactiva un rol base existente pero inactivo, sin pisar nombre/páginas/orden editados', async () => {
+    const t = convexTest(schema, modules);
+    // Simula un rol base que ya existía, activo:false (desactivado a mano,
+    // o eventualmente desde Gestión de Roles), y con nombre/páginas/orden
+    // ya editados respecto al ROLES_BASE original — reactivar debe
+    // restaurar SOLO `activo`, nunca pisar esas personalizaciones.
+    await t.run(async (ctx) => {
+      const now = Date.now();
+      await ctx.db.insert('roles', {
+        slug: 'compras', nombre: 'Compras Editado', paginas: ['panel-control'],
+        protegido: false, bypassAcceso: false, activo: false, orden: 99, updatedAt: now, updatedBy: null,
+      });
+    });
+
+    const r = await t.mutation(internal.roles.seedRolesBase, {});
+    expect(r.insertados).toBe(4); // los otros 4, "compras" ya existía (inactivo)
+    expect(r.yaExistian).toBe(1);
+    expect(r.reactivados).toBe(1);
+
+    const adminId = await crearUsuarioPrueba(t, 'admin');
+    const adminToken = await crearSesionPrueba(t, adminId);
+    const roles = await t.query(api.roles.listRoles, { token: adminToken });
+    const compras = roles.find((x) => x.slug === 'compras')!;
+    expect(compras.activo).toBe(true); // reactivado
+    expect(compras.nombre).toBe('Compras Editado'); // NO se pisó
+    expect(compras.paginas).toEqual(['panel-control']); // NO se pisó (ROLES_BASE trae 2 páginas para compras)
+    expect(compras.orden).toBe(99); // NO se pisó
+  });
+
+  test('EDS-109: un rol base ya activo no cuenta como reactivado (idempotente, mismo caso que antes)', async () => {
+    const t = convexTest(schema, modules);
+    await t.mutation(internal.roles.seedRolesBase, {});
+    const r2 = await t.mutation(internal.roles.seedRolesBase, {});
+    expect(r2.yaExistian).toBe(5);
+    expect(r2.reactivados).toBe(0);
+  });
+
   test('reporta usuarios huérfanos (rol activo sin fila correspondiente en roles)', async () => {
     const t = convexTest(schema, modules);
     await t.run(async (ctx) => {

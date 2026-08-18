@@ -219,9 +219,26 @@ export const seedRolesBase = internalMutation({
     const now = Date.now();
     let insertados = 0;
     let yaExistian = 0;
+    let reactivados = 0;
     for (const r of ROLES_BASE) {
       const existente = await ctx.db.query('roles').withIndex('by_slug', (q) => q.eq('slug', r.slug)).unique();
-      if (existente) { yaExistian++; continue; }
+      if (existente) {
+        yaExistian++;
+        // EDS-109: seedRolesBase también sirve como reparación segura. Un
+        // rol base que quedó inactivo (borrado a mano, o eventualmente
+        // desde Gestión de Roles) dejaba a TODOS sus usuarios sin acceso
+        // de forma permanente — volver a correr este seed no lo arreglaba,
+        // porque el slug ya existía y se omitía sin más. Reactivar aquí
+        // SOLO toca `activo` — nunca `nombre`/`paginas`/`orden`, que
+        // pudieron haberse editado a mano desde que se sembró la primera
+        // vez; el propósito es restaurar disponibilidad mínima, no
+        // revertir personalizaciones administrativas.
+        if (!existente.activo) {
+          await ctx.db.patch(existente._id, { activo: true, updatedAt: now, updatedBy: null });
+          reactivados++;
+        }
+        continue;
+      }
       const maxOrden = (await ctx.db.query('roles').collect()).reduce((m, x) => Math.max(m, x.orden), -1);
       await ctx.db.insert('roles', { ...r, activo: true, orden: maxOrden + 1, updatedAt: now, updatedBy: null });
       insertados++;
@@ -233,6 +250,6 @@ export const seedRolesBase = internalMutation({
       .filter((u) => u.activo && !rolesVigentes.has(u.rol))
       .map((u) => ({ usuario: u.usuario, rol: u.rol }));
 
-    return { ok: true, insertados, yaExistian, usuariosHuerfanos };
+    return { ok: true, insertados, yaExistian, reactivados, usuariosHuerfanos };
   },
 });
