@@ -19,6 +19,19 @@ const ROL_VALUE = v.string();
 async function validarRolAsignable(ctx: MutationCtx, rolSlug: string): Promise<void> {
   const rol = await ctx.db.query('roles').withIndex('by_slug', (q) => q.eq('slug', rolSlug)).unique();
   if (!rol || !rol.activo) {
+    // Hallazgo de CodeRabbit (PR EDS-104): en un deployment donde
+    // seedRolesBase todavía no corrió (orden de despliegue no
+    // garantizado), CUALQUIER creación/edición de usuario fallaría con un
+    // mensaje genérico de "rol inválido" — confuso, no dice qué hacer.
+    // Se distingue el caso "la tabla roles está completamente vacía" (la
+    // migración no corrió) del caso normal "este slug puntual no existe",
+    // con un mensaje que apunta directo al arreglo.
+    const hayRoles = await ctx.db.query('roles').first();
+    if (!hayRoles) {
+      throw new ConvexError(
+        'La tabla de roles todavía no tiene datos en este deployment — corre `npx convex run roles:seedRolesBase` antes de crear o editar usuarios.'
+      );
+    }
     throw new ConvexError(`"${rolSlug}" no es un rol válido o está inactivo — revisa Gestión de Roles.`);
   }
 }

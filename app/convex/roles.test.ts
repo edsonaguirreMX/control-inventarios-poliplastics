@@ -2,7 +2,7 @@ import { convexTest } from 'convex-test';
 import { ConvexError } from 'convex/values';
 import { describe, expect, test } from 'vitest';
 import schema from './schema';
-import { api } from './_generated/api';
+import { api, internal } from './_generated/api';
 import { requireAcceso } from './lib/auth';
 import {
   crearUsuarioPrueba, crearSesionPrueba, crearRolesPrueba,
@@ -155,7 +155,7 @@ describe('roles: eliminarRol / reactivarRol (EDS-104)', () => {
 describe('roles: seedRolesBase (EDS-104)', () => {
   test('siembra los 5 roles base en una base vacía', async () => {
     const t = convexTest(schema, modules);
-    const r = await t.mutation(api.roles.seedRolesBase, {});
+    const r = await t.mutation(internal.roles.seedRolesBase, {});
     expect(r.insertados).toBe(5);
     expect(r.yaExistian).toBe(0);
     expect(r.usuariosHuerfanos).toEqual([]);
@@ -163,8 +163,8 @@ describe('roles: seedRolesBase (EDS-104)', () => {
 
   test('idempotente por rol: correrlo 2 veces no duplica nada', async () => {
     const t = convexTest(schema, modules);
-    await t.mutation(api.roles.seedRolesBase, {});
-    const r2 = await t.mutation(api.roles.seedRolesBase, {});
+    await t.mutation(internal.roles.seedRolesBase, {});
+    const r2 = await t.mutation(internal.roles.seedRolesBase, {});
     expect(r2.insertados).toBe(0);
     expect(r2.yaExistian).toBe(5);
     // no hay query pública de roles sin sesión — se verifica indirecto:
@@ -186,7 +186,7 @@ describe('roles: seedRolesBase (EDS-104)', () => {
         protegido: true, bypassAcceso: true, activo: true, orden: 0, updatedAt: now, updatedBy: null,
       });
     });
-    const r = await t.mutation(api.roles.seedRolesBase, {});
+    const r = await t.mutation(internal.roles.seedRolesBase, {});
     expect(r.insertados).toBe(4); // los otros 4, "admin" ya existía
     expect(r.yaExistian).toBe(1);
     const adminId = await crearUsuarioPrueba(t, 'admin');
@@ -205,7 +205,7 @@ describe('roles: seedRolesBase (EDS-104)', () => {
         rol: 'rol_que_no_existe', activo: true, createdAt: now, updatedAt: now,
       });
     });
-    const r = await t.mutation(api.roles.seedRolesBase, {});
+    const r = await t.mutation(internal.roles.seedRolesBase, {});
     expect(r.usuariosHuerfanos).toEqual([{ usuario: 'fantasma', rol: 'rol_que_no_existe' }]);
   });
 });

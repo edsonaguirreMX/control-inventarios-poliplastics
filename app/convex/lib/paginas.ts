@@ -2,12 +2,16 @@
 // páginas del sistema. Fuente única de verdad en el BACKEND (segunda
 // ronda de revisión: antes vivía inline en lib/auth.ts, se separa a su
 // propio archivo para que sea inequívoco que esto es el catálogo
-// canónico, no un detalle interno de autenticación). El frontend
-// (public/js/session.js) mantiene su propia copia — igual que
-// `alertasReglas.destinatariosRoles` ya vivía como texto libre sin un
-// archivo compartido real entre cliente/servidor — pero DEBE coincidir
-// slug por slug con esta lista; cualquier cambio aquí se refleja ahí a
-// mano.
+// canónico, no un detalle interno de autenticación).
+//
+// Estado del FRONTEND en esta fase (corregido tras revisión — no hay
+// ningún catálogo ahí todavía): `public/js/session.js` no tiene copia de
+// esta lista. Cada una de las 10 páginas HTML sigue con su propio
+// `Session.requireRole([...])` hardcodeado, sin tocar — Fase 3 (EDS-106)
+// es la que agrega `Session.requireAcceso(pagina)` y migra cada página a
+// usar un slug de ESTA lista. Hasta entonces, este catálogo solo lo
+// consume el backend (requireAcceso, roles.ts) — no hay riesgo de
+// divergencia porque no hay nada del otro lado con qué divergir.
 //
 // El `slug` de cada página es un nombre LÓGICO, no necesariamente el
 // nombre del archivo HTML — mapeo explícito para evitar divergencias

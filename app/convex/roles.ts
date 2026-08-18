@@ -144,7 +144,12 @@ export const reactivarRol = mutation({
 // completo levantado antes de diseñar esta fase) — Fase 2 migra esos
 // guards de requireRole a requireAcceso usando este mismo mapeo, así que
 // debe quedar sincronizado con el que de verdad se usa en Fase 2.
-const ROLES_BASE: Array<{ slug: string; nombre: string; paginas: string[]; protegido: boolean; bypassAcceso: boolean }> = [
+// Exportado (no solo local): seedData.ts::insertSeedData lo reutiliza para
+// sembrar los mismos 5 roles como parte del seed inicial de un deployment
+// NUEVO desde cero (hallazgo de CodeRabbit: sin esto, un deployment recién
+// sembrado quedaba con el usuario admin insertado pero sin ninguna fila en
+// `roles` correspondiente, hasta correr seedRolesBase aparte a mano).
+export const ROLES_BASE: Array<{ slug: string; nombre: string; paginas: string[]; protegido: boolean; bypassAcceso: boolean }> = [
   { slug: 'admin', nombre: 'Admin', paginas: [...PAGINAS], protegido: true, bypassAcceso: true },
   { slug: 'gerencia', nombre: 'Gerencia y Comercial', paginas: ['panel-control'], protegido: false, bypassAcceso: false },
   { slug: 'compras', nombre: 'Compras', paginas: ['panel-control', 'entradas-costeo'], protegido: false, bypassAcceso: false },

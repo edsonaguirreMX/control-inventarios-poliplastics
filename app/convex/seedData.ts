@@ -1,5 +1,6 @@
 import { internalMutation, internalQuery } from './_generated/server';
 import { v } from 'convex/values';
+import { ROLES_BASE } from './roles';
 
 // Datos maestros extraídos tal cual del mockup aprobado (diseno/ y app/public/):
 // catalogo-materiales.html (DEFAULTS), parametros-produccion.html (FORMULA/STATE),
@@ -192,6 +193,20 @@ export const insertSeedData = internalMutation({
       });
     }
 
+    // EDS-104 — hallazgo de CodeRabbit: sembrar los 5 roles base AQUÍ,
+    // ANTES de insertar el usuario admin, para que un deployment NUEVO
+    // desde cero (donde este seed corre una sola vez) quede consistente
+    // de inmediato — sin esto, el usuario admin quedaba insertado con
+    // rol:"admin" pero ninguna fila en `roles` lo respaldaba hasta correr
+    // seedRolesBase aparte a mano (ventana de riesgo real: cualquier
+    // creación/edición de usuario mientras tanto fallaría). Mismo mapeo
+    // que roles.ts::seedRolesBase (que sigue existiendo aparte para
+    // deployments YA sembrados antes de EDS-104, que nunca vuelven a
+    // correr este seed inicial).
+    for (const r of ROLES_BASE) {
+      await ctx.db.insert('roles', { ...r, activo: true, orden: ROLES_BASE.indexOf(r), updatedAt: now, updatedBy: null });
+    }
+
     await ctx.db.insert('users', {
       nombre: 'Edson Aguirre',
       usuario: 'edson',
@@ -202,6 +217,6 @@ export const insertSeedData = internalMutation({
       updatedAt: now,
     });
 
-    return { materiales: MATERIALES.length, alertas: ALERTAS_REGLAS.length };
+    return { materiales: MATERIALES.length, alertas: ALERTAS_REGLAS.length, roles: ROLES_BASE.length };
   },
 });
