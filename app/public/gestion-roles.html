@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Iniciar sesión — Tejaflex</title>
+<title>Gestión de Roles — Tejaflex</title>
 <style>
 @font-face{
   font-family:'Big Shoulders Display';
@@ -34,9 +34,7 @@
   --positive:#3D7A54; --positive-soft:#DCEADB; --positive-ink:#0E3D1F;
   --warning:#A66B12; --warning-soft:#F3E3BE;
   --danger:#B23A2E; --danger-soft:#F3DAD3;
-  --data:#2A6CA8; --data-soft:#DCE9F3;
   --shadow:0 1px 2px rgba(33,28,18,.06), 0 8px 20px -8px rgba(33,28,18,.18);
-  --shadow-lg:0 4px 8px rgba(33,28,18,.08), 0 24px 48px -16px rgba(33,28,18,.26);
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
@@ -46,9 +44,7 @@
     --positive:#6FBE8E; --positive-soft:#1E3B29; --positive-ink:#DFF3E6;
     --warning:#E3AC4E; --warning-soft:#4A3A1A;
     --danger:#E3776A; --danger-soft:#4A2420;
-    --data:#7EB3E3; --data-soft:#243342;
     --shadow:0 1px 2px rgba(0,0,0,.3), 0 12px 24px -10px rgba(0,0,0,.5);
-    --shadow-lg:0 4px 8px rgba(0,0,0,.35), 0 32px 64px -20px rgba(0,0,0,.7);
   }
 }
 :root[data-theme="dark"]{
@@ -58,279 +54,634 @@
   --positive:#6FBE8E; --positive-soft:#1E3B29; --positive-ink:#DFF3E6;
   --warning:#E3AC4E; --warning-soft:#4A3A1A;
   --danger:#E3776A; --danger-soft:#4A2420;
-  --data:#7EB3E3; --data-soft:#243342;
   --shadow:0 1px 2px rgba(0,0,0,.3), 0 12px 24px -10px rgba(0,0,0,.5);
-  --shadow-lg:0 4px 8px rgba(0,0,0,.35), 0 32px 64px -20px rgba(0,0,0,.7);
 }
 
 *{box-sizing:border-box;}
 body{
-  margin:0;min-height:100vh;background:var(--bg);color:var(--ink);
+  margin:0;background:var(--bg);color:var(--ink);
   font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:15.5px;line-height:1.5;
   -webkit-font-smoothing:antialiased;
-  display:flex;align-items:center;justify-content:center;padding:2.5rem 1.25rem;
 }
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
 h1,h2,h3{font-family:'Big Shoulders Display',sans-serif;font-weight:700;text-wrap:balance;margin:0;letter-spacing:.01em;}
 p{margin:0;}
 button{font-family:inherit;}
-.mono{font-family:'IBM Plex Mono','IBM Plex Sans',monospace;}
+.tnum{font-variant-numeric:tabular-nums;}
+.mono{font-family:'IBM Plex Mono','IBM Plex Sans',monospace;font-variant-numeric:tabular-nums;}
 a{color:inherit;}
 
-.stage{width:100%;max-width:27rem;display:flex;flex-direction:column;gap:1.1rem;}
-.brand{display:flex;flex-direction:column;align-items:center;gap:.5rem;text-align:center;margin-bottom:.3rem;}
-.brand-mark{
-  width:3rem;height:3rem;border-radius:12px;background:var(--accent);color:var(--accent-ink);
-  display:flex;align-items:center;justify-content:center;font-family:'Big Shoulders Display',sans-serif;
-  font-size:1.5rem;transform:rotate(-4deg);box-shadow:var(--shadow);
-}
-.brand .eyebrow{
-  font-family:'Big Shoulders Display',sans-serif;font-size:.78rem;letter-spacing:.13em;text-transform:uppercase;
-  color:var(--accent-strong);
-}
-.brand h1{font-size:1.7rem;}
+.page{max-width:1180px;margin:0 auto;padding:2rem 1.75rem 4rem;display:flex;flex-direction:column;gap:1.5rem;}
 
-.card{
-  background:var(--surface);border:1px solid var(--border);border-radius:18px;
-  padding:1.6rem 1.7rem 1.8rem;box-shadow:var(--shadow-lg);
+/* ---------- topbar ---------- */
+.breadcrumb{display:inline-flex;align-items:center;gap:.3rem;font-size:.8rem;color:var(--ink-muted);text-decoration:none;margin-bottom:.7rem;}
+.breadcrumb:hover{color:var(--accent-strong);}
+.topbar{display:flex;justify-content:space-between;align-items:flex-end;gap:1.5rem;flex-wrap:wrap;}
+.eyebrow{
+  display:inline-flex;align-items:center;gap:.5rem;font-family:'Big Shoulders Display',sans-serif;
+  font-size:.78rem;letter-spacing:.13em;text-transform:uppercase;color:var(--accent-strong);margin-bottom:.5rem;
 }
-
-
-.field-group{display:flex;flex-direction:column;gap:.4rem;}
-.field-group label{font-size:.78rem;color:var(--ink-muted);}
-.field-group input{
-  border:1px solid var(--border);background:var(--surface-2);border-radius:9px;padding:.65rem .8rem;
-  font-size:.9rem;color:var(--ink);
+.eyebrow::before{content:"";width:.45rem;height:.45rem;background:var(--accent);transform:rotate(45deg);flex:none;}
+.topbar h1{font-size:clamp(1.7rem,3vw,2.2rem);}
+.topbar p.sub{font-size:.88rem;color:var(--ink-muted);margin-top:.4rem;max-width:38rem;}
+.role-badge{
+  display:inline-flex;align-items:center;gap:.4rem;font-size:.76rem;font-weight:600;color:var(--ink-muted);
+  background:var(--surface-2);border:1px solid var(--border);border-radius:20px;padding:.4rem .8rem;white-space:nowrap;
 }
-.field-group input:focus{outline:none;border-color:var(--accent);background:var(--surface);}
+.session-row{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;justify-content:flex-end;}
+.session-row a.logout-link{font-size:.76rem;color:var(--ink-faint);text-decoration:none;white-space:nowrap;}
+.session-row a.logout-link:hover{color:var(--danger);text-decoration:underline;}
 
-.remember-row{display:flex;align-items:center;gap:.55rem;font-size:.82rem;color:var(--ink-muted);cursor:pointer;}
-.remember-row input{width:16px;height:16px;accent-color:var(--accent);cursor:pointer;}
+/* ---------- stat strip ---------- */
+.kpi-row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1rem;}
+.stat-tile{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1.05rem 1.2rem;display:flex;flex-direction:column;gap:.5rem;}
+.stat-label{font-size:.76rem;color:var(--ink-muted);}
+.stat-value{font-family:'IBM Plex Mono',monospace;font-size:1.55rem;font-weight:600;color:var(--ink);}
+.stat-value .unit{font-size:.9rem;color:var(--ink-faint);font-weight:500;margin-left:.15rem;}
+.stat-sub{font-size:.74rem;color:var(--ink-faint);}
 
-.demo-note{
-  font-size:.72rem;color:var(--ink-faint);background:var(--surface-2);border-radius:10px;padding:.7rem .8rem;
-  display:flex;flex-direction:column;gap:.55rem;
-}
-.role-chips{display:flex;gap:.4rem;flex-wrap:wrap;}
-.role-chip{
-  border:1px solid var(--border);background:var(--surface);color:var(--ink-muted);
-  padding:.32rem .7rem;border-radius:20px;font-size:.72rem;font-weight:600;cursor:pointer;
-}
-.role-chip.sel{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);}
-
-.field-error{
-  display:none;font-size:.8rem;color:#c0392b;background:#fdecea;border-radius:8px;padding:.55rem .75rem;
+/* ---------- card ---------- */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:1.5rem 1.6rem;}
+.card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;flex-wrap:wrap;margin-bottom:1.1rem;}
+.card-head h3{font-size:1.2rem;}
+.card-sub{font-size:.82rem;color:var(--ink-muted);margin-top:.2rem;max-width:36rem;}
+.btn-add{
+  border:none;background:var(--accent);color:var(--accent-ink);
+  padding:.55rem 1rem;border-radius:9px;font-size:.82rem;font-weight:700;cursor:pointer;white-space:nowrap;
 }
 
-.btn-primary{
-  border:none;background:var(--accent);color:var(--accent-ink);border-radius:10px;padding:.8rem;
-  font-family:'Big Shoulders Display',sans-serif;font-size:1rem;letter-spacing:.03em;text-transform:uppercase;cursor:pointer;
+/* ---------- table ---------- */
+.table-scroll{overflow-x:auto;}
+table.roles{border-collapse:collapse;width:100%;min-width:900px;}
+table.roles thead th{
+  text-align:left;font-family:'Big Shoulders Display',sans-serif;font-size:.74rem;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--ink-muted);padding:.6rem .7rem;border-bottom:1.5px solid var(--border);
+  white-space:nowrap;
 }
+table.roles tbody td{padding:.7rem .7rem;border-bottom:1px solid var(--border);vertical-align:top;}
+table.roles tbody tr:last-child td{border-bottom:none;}
+table.roles tbody tr.inactivo td{opacity:.55;}
+table.roles tbody tr.protegido td{opacity:.8;}
+.inactivo-badge{font-size:.72rem;color:var(--ink-faint);white-space:nowrap;}
+.activo-badge{font-size:.72rem;color:var(--positive);font-weight:600;white-space:nowrap;}
+.protegido-badge{font-size:.72rem;color:var(--accent-strong);font-weight:600;white-space:nowrap;}
+
+/* EDS-107 — grid de checkboxes de páginas configurables, una por rol.
+   flex-wrap (no una tabla/grid rígida) porque las 9 etiquetas tienen
+   longitudes muy distintas ("Panel de Control" vs "Cierre de Turno") —
+   mismo criterio que ya usa .footnotes/.modal-actions en esta pantalla. */
+.paginas-grid{display:flex;flex-wrap:wrap;gap:.35rem 1rem;max-width:30rem;}
+.pagina-check{display:inline-flex;align-items:center;gap:.35rem;font-size:.78rem;color:var(--ink);cursor:pointer;white-space:nowrap;}
+.pagina-check input{cursor:pointer;accent-color:var(--accent);width:1rem;height:1rem;}
+.pagina-check input:disabled{cursor:not-allowed;}
+.pagina-check.disabled{color:var(--ink-faint);}
+.protegido-note{display:block;margin-top:.5rem;font-size:.74rem;color:var(--ink-faint);}
+.btn-reactivar{
+  border:1px solid var(--positive);background:var(--positive-soft);color:var(--positive-ink);
+  border-radius:8px;padding:.35rem .6rem;font-size:.74rem;font-weight:700;cursor:pointer;white-space:nowrap;
+}
+
+.field{
+  display:flex;align-items:center;gap:.3rem;background:var(--surface-2);border:1px solid var(--border);
+  border-radius:8px;padding:.3rem .5rem;width:fit-content;
+}
+.field:focus-within{border-color:var(--accent);background:var(--surface);}
+.field input, .field select{
+  border:none;background:none;font-family:'IBM Plex Sans',sans-serif;font-size:.86rem;
+  color:var(--ink);padding:.3rem 0;
+}
+.field input:focus, .field select:focus{outline:none;}
+.field.nombre{width:11rem;}
+.field.nombre input{width:100%;}
+.field.usuario{width:9rem;}
+.field.usuario input{width:100%;font-family:'IBM Plex Mono',monospace;}
+.field.password{width:11.5rem;}
+.field.password input{width:100%;font-family:'IBM Plex Mono',monospace;}
+.field.rol select{width:100%;cursor:pointer;}
+.field.rol{width:10.5rem;}
+
+.icon-btn{
+  border:1px solid var(--border);background:var(--surface-2);color:var(--ink-muted);
+  width:1.9rem;height:1.9rem;border-radius:7px;cursor:pointer;font-size:.85rem;flex:none;
+  display:flex;align-items:center;justify-content:center;
+}
+.icon-btn:hover{border-color:var(--accent);color:var(--accent-strong);}
+.btn-delete{
+  border:1px solid var(--border);background:var(--surface-2);color:var(--danger);
+  width:2rem;height:2rem;border-radius:8px;cursor:pointer;font-size:.9rem;
+  display:flex;align-items:center;justify-content:center;
+}
+.btn-delete:hover{background:var(--danger-soft);border-color:var(--danger);}
+
+/* ---------- modal (agregar usuario / password de un solo vistazo / confirmar desactivar) ---------- */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(20,16,8,.45);display:flex;align-items:center;justify-content:center;
+  padding:1.5rem;z-index:30;
+}
+.modal-overlay[hidden]{display:none;}
+.modal-box{
+  background:var(--surface);border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow);
+  padding:1.6rem;max-width:26rem;width:100%;display:flex;flex-direction:column;gap:1rem;
+}
+.modal-box h3{font-size:1.1rem;}
+.modal-box .field{width:100%;}
+.modal-box .field input, .modal-box .field select{width:100%;}
+.modal-box label{font-size:.76rem;color:var(--ink-muted);display:block;margin-bottom:.3rem;}
+.modal-field-block + .modal-field-block{margin-top:.8rem;}
+.modal-password-display{
+  font-family:'IBM Plex Mono',monospace;font-size:1.1rem;font-weight:600;letter-spacing:.02em;
+  background:var(--surface-2);border:1px solid var(--border);border-radius:9px;padding:.7rem .9rem;
+  text-align:center;color:var(--accent-strong);user-select:all;
+}
+.modal-actions{display:flex;justify-content:flex-end;gap:.6rem;flex-wrap:wrap;}
+.modal-warn{font-size:.78rem;color:var(--warning);background:var(--warning-soft);border-radius:9px;padding:.55rem .7rem;}
+
+.field-warn{
+  margin:.8rem 0 0;padding:.55rem .7rem;border-radius:9px;
+  background:var(--warning-soft);color:var(--warning);font-size:.78rem;line-height:1.4;
+  display:flex;flex-direction:column;gap:.4rem;
+}
+.field-warn.error{background:var(--danger-soft);color:var(--danger);}
+.field-warn[hidden]{display:none;}
+
+/* ---------- action bar ---------- */
+.action-bar{
+  position:sticky;bottom:1.2rem;display:flex;justify-content:flex-end;align-items:center;gap:.8rem;
+  flex-wrap:wrap;
+  background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:.8rem 1.1rem;
+  box-shadow:var(--shadow);
+}
+.dirty-flag{margin-right:auto;font-size:.8rem;color:var(--warning);font-weight:600;display:none;align-items:center;gap:.4rem;}
+.dirty-flag.show{display:flex;}
+.dirty-flag .dot{width:7px;height:7px;border-radius:50%;background:var(--warning);}
+.btn-ghost{border:1px solid var(--border);background:var(--surface-2);color:var(--ink);border-radius:9px;padding:.6rem 1.1rem;font-size:.85rem;font-weight:600;cursor:pointer;}
+.btn-ghost:disabled{opacity:.4;cursor:not-allowed;}
+.btn-primary{border:none;background:var(--accent);color:var(--accent-ink);border-radius:9px;padding:.6rem 1.3rem;font-size:.85rem;font-weight:700;cursor:pointer;}
 .btn-primary:disabled{background:var(--surface-2);color:var(--ink-faint);cursor:not-allowed;}
 
-/* success */
-.success-wrap{display:flex;flex-direction:column;align-items:center;gap:.9rem;text-align:center;padding:.6rem 0;}
-.success-check{
-  width:3.2rem;height:3.2rem;border-radius:50%;background:var(--positive-soft);color:var(--positive);
-  display:flex;align-items:center;justify-content:center;font-size:1.5rem;
+.toast{
+  position:fixed;left:50%;bottom:5.5rem;transform:translateX(-50%) translateY(10px);
+  background:var(--positive);color:var(--positive-ink);border-radius:10px;padding:.7rem 1.1rem;
+  font-size:.86rem;font-weight:600;box-shadow:var(--shadow);opacity:0;pointer-events:none;
+  transition:opacity .18s, transform .18s;z-index:20;
 }
-.success-wrap h3{font-size:1.15rem;}
-.success-wrap .role-tag{
-  font-size:.74rem;font-weight:700;color:var(--ink-muted);background:var(--surface-2);
-  border-radius:20px;padding:.25rem .7rem;
-}
-.btn-link{
-  width:100%;display:block;text-align:center;text-decoration:none;border:none;background:var(--accent);color:var(--accent-ink);
-  border-radius:10px;padding:.8rem;font-family:'Big Shoulders Display',sans-serif;font-size:1rem;letter-spacing:.03em;
-  text-transform:uppercase;
-}
-.link-back{font-size:.78rem;color:var(--ink-muted);text-decoration:none;text-align:center;cursor:pointer;}
-.link-back:hover{color:var(--accent-strong);}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 
-.remembered-tag{
-  display:flex;align-items:center;gap:.4rem;font-size:.74rem;color:var(--positive);background:var(--positive-soft);
-  border-radius:9px;padding:.5rem .7rem;
-}
+.footnotes{list-style:none;margin-top:1.2rem;padding:0;display:flex;flex-direction:column;gap:.4rem;}
+.footnotes li{display:flex;gap:.5rem;font-size:.8rem;color:var(--ink-muted);line-height:1.45;}
+.footnotes li::before{content:"";width:5px;height:5px;border-radius:50%;background:var(--accent);margin-top:.5rem;flex:none;}
 
+footer.page-foot{font-size:.78rem;color:var(--ink-faint);border-top:1px solid var(--border);padding-top:1.2rem;}
+
+@media (max-width:900px){
+  .kpi-row{grid-template-columns:repeat(2,1fr);}
+  .topbar{flex-direction:column;align-items:flex-start;}
+  .dirty-flag{flex:1 1 100%;margin-right:0;}
+}
 @media (prefers-reduced-motion:reduce){*{transition:none !important;}}
 </style>
 </head>
 <body>
 
-<div class="stage">
-  <div class="brand">
-    <div class="brand-mark">T</div>
-    <div class="eyebrow">Tejaflex · Sistema de Operación y Administración</div>
-    <h1>Iniciar sesión</h1>
+<div class="page">
+
+  <div>
+    <a class="breadcrumb" id="breadcrumbLink" href="/panel-control.html?tab=admin">‹ Admin</a>
+    <header class="topbar">
+      <div>
+        <div class="eyebrow">Tejaflex · Control de Materias Primas</div>
+        <h1>Gestión de Roles</h1>
+        <p class="sub">Crea roles nuevos o edita los existentes, y elige exactamente a qué pantallas tiene acceso cada uno. El rol <b>Admin</b> es protegido — siempre ve todo el sistema, no se edita ni se elimina desde aquí.</p>
+      </div>
+      <div class="session-row" id="sessionRow"></div>
+    </header>
   </div>
 
-  <div class="card">
-    <!-- EDS-84: un solo formulario — el rol lo decide el backend al
-         autenticar, nunca una pestaña elegida antes de escribir la
-         contraseña (ver redirectByRole() abajo). <form> real (no <div>)
-         para semántica de envío nativa (Enter en cualquier campo, no
-         solo en el de contraseña) y labels asociados por `for`
-         (auditoría CodeRabbit del PR). -->
-    <form id="loginForm" style="display:flex;flex-direction:column;gap:1.1rem;">
-      <div class="field-group">
-        <label for="loginUsuario">Usuario</label>
-        <input type="text" id="loginUsuario" name="usuario" placeholder="usuario" autocomplete="username">
+  <div class="kpi-row" id="kpiRow"></div>
+
+  <section class="card">
+    <div class="card-head">
+      <div>
+        <h3>Roles</h3>
+        <p class="card-sub">Marca las páginas a las que da acceso cada rol. Un usuario con ese rol podrá abrir cualquiera de las páginas marcadas — y solo esas.</p>
       </div>
-      <div class="field-group">
-        <label for="loginPassword">Contraseña</label>
-        <input type="password" id="loginPassword" name="password" placeholder="••••••••" autocomplete="current-password">
-      </div>
-      <label class="remember-row"><input type="checkbox" id="loginRemember"> Recordar en este dispositivo</label>
-      <div id="loginError" class="field-error"></div>
-      <button class="btn-primary" id="btnLoginEntrar" type="submit" disabled>Entrar</button>
-    </form>
+      <button class="btn-add" onclick="addRole()">+ Nuevo rol</button>
+    </div>
+
+    <div class="table-scroll">
+      <table class="roles">
+        <thead>
+          <tr>
+            <th>Nombre</th>
+            <th>Páginas con acceso</th>
+            <th>Estado</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="rolesBody"></tbody>
+      </table>
+    </div>
+
+    <ul class="footnotes">
+      <li>Gestión de Usuarios y Gestión de Roles quedan siempre fuera de esta lista — ningún rol personalizable puede recibir acceso a ellas, por seguridad (evita que un rol se auto-otorgue el control del sistema).</li>
+      <li>El rol <b>Admin</b> es protegido: tiene acceso a todo el sistema siempre, no aparece editable aquí y no se puede eliminar.</li>
+      <li>Un rol con usuarios <b>activos</b> asignados no se puede eliminar — reasígnalos desde Gestión de Usuarios primero. 🗑 lo desactiva (deja de poder asignarse a nadie nuevo) sin borrar su historial; un rol desactivado puede reactivarse desde la misma tabla.</li>
+    </ul>
+  </section>
+
+  <div class="field-warn error" id="saveError" hidden></div>
+
+  <div class="action-bar">
+    <span class="dirty-flag" id="dirtyFlag"><span class="dot"></span>Cambios sin guardar</span>
+    <button class="btn-ghost" id="btnReset" disabled onclick="resetRoles()">Restablecer</button>
+    <button class="btn-primary" id="btnSave" disabled onclick="saveRoles()">Guardar cambios</button>
   </div>
+
+  <footer class="page-foot">
+    Crear rol, editar nombre/páginas, guardar cambios y desactivar/reactivar son operaciones reales contra la base de datos — el acceso que cada rol otorga se aplica tanto en el frontend como en cada función del backend (EDS-103, roles personalizables).
+  </footer>
+
 </div>
+
+<div class="modal-overlay" id="modalOverlay" hidden>
+  <div class="modal-box" id="modalBox"></div>
+</div>
+
+<div class="toast" id="toast">✓ Roles actualizados</div>
 
 <script src="/config.js?v=2026081001"></script>
 <script type="module" src="/js/convex-client.js?v=2026081802"></script>
 <script type="module">
-// window.Session lo expone convex-client.js (bundle de public/js/session.js,
-// tarea 1.2) — este script corre después porque ambos son type="module" y
-// los módulos se ejecutan en orden de documento tras el parseo del HTML.
-const CIERRE_TURNO_URL = '/cierre-turno-propuestas.html';
-const PANEL_CONTROL_URL = '/panel-control.html';
-// Mapeo slug de página → archivo HTML real — mismo catálogo y mismas
-// excepciones de nombre que convex/lib/paginas.ts (cierre-turno →
-// cierre-turno-propuestas.html, a propósito).
-const PAGINA_URL = {
-  'panel-control': PANEL_CONTROL_URL,
-  'catalogo-materiales': '/catalogo-materiales.html',
-  'parametros-produccion': '/parametros-produccion.html',
-  'entradas-costeo': '/entradas-costeo.html',
-  'correccion-capturas': '/correccion-capturas.html',
-  'alertas-configuracion': '/alertas-configuracion.html',
-  'reporte-diario': '/reporte-diario.html',
-  'ajustes-inventario': '/ajustes-inventario.html',
-  'cierre-turno': CIERRE_TURNO_URL,
-};
+/* ============================================================
+   SESIÓN (autenticación real — Épica 1). Session.requireRole
+   redirige a /login-acceso.html si no hay sesión o el rol no
+   está permitido; el resto del script de la página solo corre
+   si esta promesa se resuelve. Gestión de Roles se queda en
+   requireRole(['admin']) fijo a propósito (EDS-106/EDS-107) —
+   no depende del sistema dinámico de roles que ella misma
+   administra (mismo motivo que Gestión de Usuarios; ambas están
+   en PAGINAS_NO_CONFIGURABLES, ver convex/lib/paginas.ts).
+   ============================================================ */
+// Este módulo es independiente del segundo <script> de la página (scope
+// propio, sin variables compartidas) — se duplica un escape mínimo aquí
+// en vez de depender del escapeHtml() de allá. Hallazgo de la auditoría
+// manual de PR6 (2026-08-10): el mismo patrón sin escapar en catalogo-
+// materiales.html/parametros-produccion.html también existía AQUÍ (y en
+// toda página conectada) — user.nombre viene de Convex/sesión y se
+// interpola en innerHTML sin escapar. El fix de XSS de PR7 solo cubrió
+// tablas/modales, nunca este bloque de sesión.
+function escapeHtmlSesion(str){
+  return String(str ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+}
+// Puerta explícita de autorización: se guarda la promesa en window para que
+// el segundo <script type="module"> de esta página (con la lógica
+// principal) la espere explícitamente en su primera línea, en vez de
+// depender solo del orden de documento entre módulos independientes.
+window.__authReady = window.Session.requireRole(['admin']);
+const user = await window.__authReady;
+window.usuarioSesion = user.nombre;
+window.rolSesion = user.rol;
+// _id (inmutable) de la sesión actual — usado más abajo para detectar cuándo
+// un admin está regenerando SU PROPIA contraseña y avisarle que eso cierra
+// su sesión de inmediato (ver regenerarPwd/mostrarPasswordModal). Comparar
+// por `_id` en vez de por `usuario`: el `usuario` es editable en esta misma
+// pantalla (batch de arriba), así que compararlo se rompía si el admin se
+// renombraba a sí mismo antes de regenerar su password (hallazgo de
+// CodeRabbit sobre el fix anterior — un guard de "soy yo" tiene que anclarse
+// a algo que no cambia con la propia edición que se está protegiendo).
+window.miUsuarioId = user._id;
+const row = document.getElementById('sessionRow');
+if (row) {
+  row.innerHTML = `<span class="role-badge">🔒 ${escapeHtmlSesion(user.nombre)} · ${escapeHtmlSesion(user.rolNombre)}</span><a class="logout-link" href="#" id="logoutLink">Cerrar sesión</a>`;
+  document.getElementById('logoutLink').addEventListener('click', async (e) => {
+    e.preventDefault();
+    await window.Session.logout();
+    window.location.href = '/login-acceso.html';
+  });
+}
+</script>
+<script type="module">
+// Puerta explícita: este módulo depende del de sesión de arriba, no solo
+// del orden de documento — espera la MISMA promesa que ya se está
+// resolviendo ahí (no dispara un requireRole nuevo).
+await window.__authReady;
+const api = window.api; // expuesto por session.js (bundleado) — ver su comentario
 
-// EDS-107: antes esto era un heurístico fijo de 2 caminos (operador →
-// Cierre de Turno, cualquier otro rol → Panel de Control) — funcionaba
-// siempre porque los 5 roles base originales, salvo operador, TODOS
-// incluían panel-control (ver ROLES_BASE en convex/roles.ts). Con roles
-// personalizables (Gestión de Roles, EDS-107) un admin puede crear un rol
-// que no tenga panel-control NI cierre-turno (ej. un rol de acceso solo a
-// Catálogo) — con el heurístico viejo, ese usuario aterrizaba en
-// panel-control.html, requireAcceso lo rechazaba ahí, y esta misma
-// pantalla lo regresaba sin ninguna explicación (encontrado real
-// verificando EDS-107 en navegador: un usuario válido, recién creado,
-// quedaba rebotado a un formulario de login vacío sin pista de qué pasó).
-// Ahora usa paginasPermitidas real (ya viene en el objeto que devuelven
-// tanto login() como getUser(), ver auth.ts::me): cierre-turno tiene
-// preferencia solo para operador (su pantalla "home" tradicional),
-// panel-control es el default para cualquier otro rol que sí lo tenga, y
-// cualquier rol que no tenga ninguna de las dos cae a la PRIMERA página
-// de su propia lista — nunca a una pantalla a la que no tiene acceso.
-function redirectByRole(user) {
-  const paginas = user.paginasPermitidas || [];
-  let destino;
-  if (user.rol === 'operador' && paginas.includes('cierre-turno')) {
-    destino = CIERRE_TURNO_URL;
-  } else if (paginas.includes('panel-control')) {
-    destino = PANEL_CONTROL_URL;
-  } else if (paginas.length > 0) {
-    destino = PAGINA_URL[paginas[0]] || PANEL_CONTROL_URL;
-  } else {
-    // Rol sin ninguna página asignada (caso límite real: un admin crea un
-    // rol y no marca nada) — cae a panel-control como último recurso;
-    // requireAcceso lo rechaza ahí igual, pero al menos con el mensaje
-    // real de "tu rol no tiene acceso", no un rebote silencioso.
-    destino = PANEL_CONTROL_URL;
+// Catálogo LOCAL de páginas configurables — copia intencional de
+// convex/lib/paginas.ts::PAGINAS menos PAGINAS_NO_CONFIGURABLES
+// ('gestion-usuarios','gestion-roles'). No hay endpoint que devuelva
+// esta lista con labels legibles (el backend solo valida slugs, ver
+// roles.ts::validarPaginas), así que se mantiene aquí a mano — si se
+// agrega una pantalla nueva al catálogo del backend, hay que reflejarla
+// aquí también (el backend igual la rechazaría si se intentara asignar
+// sin agregarla acá, así que no hay riesgo de silenciosamente aceptar
+// una página que esta UI no ofrece).
+const PAGINAS = [
+  {slug:'panel-control', label:'Panel de Control'},
+  {slug:'catalogo-materiales', label:'Catálogo de Materiales'},
+  {slug:'parametros-produccion', label:'Parámetros de Producción'},
+  {slug:'entradas-costeo', label:'Entradas con Costeo'},
+  {slug:'correccion-capturas', label:'Corrección de Capturas'},
+  {slug:'alertas-configuracion', label:'Configuración de Alertas'},
+  {slug:'reporte-diario', label:'Reporte Diario'},
+  {slug:'ajustes-inventario', label:'Ajustes de Inventario'},
+  {slug:'cierre-turno', label:'Cierre de Turno'},
+];
+
+// ROLES se llena con datos reales de Convex (cargarRoles, más abajo) —
+// nunca hardcodeado. CAMBIOS acumula solo las ediciones de nombre/páginas
+// de roles NO protegidos pendientes de "Guardar cambios" (batch atómico,
+// mismo patrón que gestion-usuarios.html); crear/eliminar/reactivar son
+// acciones inmediatas, cada una con su propia confirmación.
+let ROLES = [];
+let CAMBIOS = {};
+let dirty = false;
+
+// Hallazgo de CodeRabbit en PR7 (gestion-usuarios.html): nombre/_id se
+// interpolaban sin escapar en HTML armado a mano (innerHTML) — un nombre
+// con `"` o `<` rompía el atributo/tag e inyectaba markup arbitrario. Un
+// solo helper, usado en TODO punto donde un valor de la BD se interpola
+// en una plantilla HTML.
+function escapeHtml(str){
+  return String(str ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+}
+
+function checkboxesHtml(rol, disabled){
+  return PAGINAS.map(p => `
+    <label class="pagina-check${disabled ? ' disabled' : ''}">
+      <input type="checkbox" value="${p.slug}" ${rol.paginas.includes(p.slug) ? 'checked' : ''} ${disabled ? 'disabled' : ''}>
+      <span>${p.label}</span>
+    </label>`).join('');
+}
+
+function rowHtml(r){
+  const id = escapeHtml(r._id);
+  const nombre = escapeHtml(r.nombre);
+  if(r.protegido){
+    return `<tr class="protegido" data-id="${id}">
+      <td><div class="field nombre"><input type="text" value="${nombre}" disabled></div></td>
+      <td>
+        <div class="paginas-grid">${checkboxesHtml(r, true)}</div>
+        <span class="protegido-note">🔒 Rol protegido — siempre tiene acceso a todo el sistema, sin importar qué páginas muestre esta lista.</span>
+      </td>
+      <td><span class="protegido-badge">Protegido</span></td>
+      <td></td>
+    </tr>`;
   }
-  window.location.href = destino;
-}
-
-/* ---------- habilitar "Entrar" solo con usuario + contraseña ---------- */
-function wireEntrarState() {
-  const update = () => {
-    const usuario = document.getElementById('loginUsuario').value.trim();
-    const password = document.getElementById('loginPassword').value;
-    document.getElementById('btnLoginEntrar').disabled = !(usuario && password);
-  };
-  document.getElementById('loginUsuario').addEventListener('input', update);
-  document.getElementById('loginPassword').addEventListener('input', update);
-  // Auditoría CodeRabbit del PR: sin esto, si el navegador autocompleta
-  // ambos campos (autofill guardado, o restaurar la página con "atrás"),
-  // el botón se quedaba deshabilitado hasta que el usuario tocara algo —
-  // 'input' nunca se dispara para un valor que el navegador ya puso ahí
-  // solo. `update()` de entrada sincroniza el estado real; `pageshow`
-  // cubre el caso de bfcache (volver con "atrás" a una página ya
-  // rellenada, sin recargarla).
-  update();
-  window.addEventListener('pageshow', update);
-}
-wireEntrarState();
-
-/* ---------- login real contra Convex ---------- */
-async function login() {
-  const usuario = document.getElementById('loginUsuario').value.trim();
-  const password = document.getElementById('loginPassword').value;
-  const remember = document.getElementById('loginRemember').checked;
-  const btn = document.getElementById('btnLoginEntrar');
-  const errorBox = document.getElementById('loginError');
-
-  errorBox.style.display = 'none';
-  btn.disabled = true;
-  const textoOriginal = btn.textContent;
-  btn.textContent = 'Entrando…';
-
-  try {
-    const user = await window.Session.login(usuario, password, remember);
-    // EDS-84: un solo formulario — el rol siempre lo decide el backend al
-    // autenticar (antes había 2 pestañas idénticas, Operador/Admin, que no
-    // cambiaban nada funcional: cualquiera de las dos mandaba al mismo
-    // redirectByRole()).
-    redirectByRole(user);
-  } catch (err) {
-    btn.disabled = false;
-    btn.textContent = textoOriginal;
-    // EDS-65 (10.1): antes esto siempre decía "credenciales incorrectas",
-    // incluso cuando el problema real era que Convex no respondía — un
-    // mensaje confuso que manda a revisar la contraseña cuando el
-    // problema es de conexión. Los mensajes que sí vienen del backend
-    // (credenciales, rate limit de EDS-70) se muestran tal cual;
-    // cualquier otro error se explica como lo que es.
-    //
-    // EDS-73: el criterio para "¿es un mensaje conocido?" ya no es una
-    // regex frágil sobre el texto — es ConvexError vs Error. authActions.ts
-    // lanza ConvexError precisamente para los 2 mensajes que este login
-    // puede mostrar (credenciales, rate limit); cualquier otra cosa es un
-    // error técnico real (antes se veía como "Server Error" genérico en
-    // producción, sin ni siquiera calzar la regex vieja — la causa real del
-    // bug encontrado en el smoke test de EDS-67).
-    errorBox.textContent = window.Session.esErrorDeNegocio(err)
-      ? window.Session.mensajeError(err)
-      : 'No se pudo conectar con el servidor. Verifica tu conexión e intenta de nuevo.';
-    errorBox.style.display = 'block';
+  if(!r.activo){
+    return `<tr class="inactivo" data-id="${id}">
+      <td><div class="field nombre"><input type="text" value="${nombre}" disabled></div></td>
+      <td><div class="paginas-grid">${checkboxesHtml(r, true)}</div></td>
+      <td><span class="inactivo-badge">Desactivado</span></td>
+      <td><button class="btn-reactivar" onclick="reactivar('${id}')" title="Reactivar rol">↺ Reactivar</button></td>
+    </tr>`;
   }
+  return `<tr data-id="${id}">
+    <td><div class="field nombre"><input type="text" value="${nombre}" data-field="nombre" placeholder="Nombre del rol"></div></td>
+    <td><div class="paginas-grid" data-field="paginas">${checkboxesHtml(r, false)}</div></td>
+    <td><span class="activo-badge">Activo</span></td>
+    <td><button class="btn-delete" onclick="confirmarEliminar('${id}')" title="Eliminar rol">🗑</button></td>
+  </tr>`;
 }
-// <form> real (auditoría CodeRabbit del PR) — 'submit' cubre tanto el
-// clic en el botón como Enter en cualquier campo del formulario, no
-// solo en el de contraseña como antes.
-document.getElementById('loginForm').addEventListener('submit', (e) => {
-  e.preventDefault();
-  login();
+
+function renderTable(){
+  document.getElementById('rolesBody').innerHTML = ROLES.map(rowHtml).join('');
+}
+
+function renderKPI(){
+  const activos = ROLES.filter(r=>r.activo);
+  const inactivos = ROLES.length - activos.length;
+  const protegidos = activos.filter(r=>r.protegido).length;
+  // El rol admin (protegido) trae las 11 páginas del catálogo COMPLETO del
+  // backend, incluidas gestion-usuarios/gestion-roles — que no forman
+  // parte de este PAGINAS local de 9 configurables (a propósito, ver
+  // arriba). Sin este filtro, la unión podía superar el denominador
+  // (encontrado real probando esta pantalla: mostraba "11 / 9").
+  const slugsConfigurables = new Set(PAGINAS.map(p=>p.slug));
+  const totalPaginas = new Set(activos.flatMap(r=>r.paginas).filter(p=>slugsConfigurables.has(p))).size;
+  document.getElementById('kpiRow').innerHTML = `
+    <div class="stat-tile">
+      <span class="stat-label">Roles activos</span>
+      <span class="stat-value">${activos.length}</span>
+      <span class="stat-sub">${inactivos>0 ? `${inactivos} desactivado(s)` : 'Sin roles desactivados'}</span>
+    </div>
+    <div class="stat-tile">
+      <span class="stat-label">Personalizables</span>
+      <span class="stat-value">${activos.length - protegidos}</span>
+      <span class="stat-sub">Editables desde esta pantalla</span>
+    </div>
+    <div class="stat-tile">
+      <span class="stat-label">Protegidos</span>
+      <span class="stat-value">${protegidos}</span>
+      <span class="stat-sub">Admin — acceso total fijo</span>
+    </div>
+    <div class="stat-tile">
+      <span class="stat-label">Páginas en uso</span>
+      <span class="stat-value">${totalPaginas}<span class="unit">/ ${PAGINAS.length}</span></span>
+      <span class="stat-sub">Cubiertas por al menos un rol activo</span>
+    </div>`;
+}
+
+// `opts.preservarCambios`: las acciones de fila (crear/eliminar/reactivar)
+// recargan la tabla para reflejar el cambio que acaban de hacer, pero eso NO
+// debe descartar ediciones de nombre/páginas que el admin ya haya marcado
+// en otras filas y aún no haya guardado con "Guardar cambios" (mismo
+// hallazgo de CodeRabbit que ya motivó este patrón en gestion-usuarios.html:
+// perder trabajo sin confirmación). Guardar y Restablecer sí deben limpiar
+// CAMBIOS de verdad — ahí la llamada por defecto (sin opts).
+async function cargarRoles(opts = {}){
+  ROLES = await window.Session.call(api.roles.listRoles, {}, 'query');
+  if(opts.preservarCambios){
+    for(const [id, cambios] of Object.entries(CAMBIOS)){
+      const r = ROLES.find(x=>x._id===id);
+      if(r) Object.assign(r, cambios);
+    }
+  }else{
+    CAMBIOS = {};
+  }
+  renderTable();
+  renderKPI();
+}
+
+function markDirty(){
+  dirty = true;
+  document.getElementById('dirtyFlag').classList.add('show');
+  document.getElementById('btnSave').disabled = false;
+  document.getElementById('btnReset').disabled = false;
+}
+
+document.getElementById('rolesBody').addEventListener('input', e=>{
+  const tr = e.target.closest('tr');
+  if(!tr) return;
+  const id = tr.dataset.id;
+  const r = ROLES.find(x=>x._id===id);
+  if(!r) return;
+  if(e.target.dataset.field === 'nombre'){
+    r.nombre = e.target.value;
+    CAMBIOS[id] = CAMBIOS[id] || {};
+    CAMBIOS[id].nombre = e.target.value;
+    markDirty();
+    return;
+  }
+  if(e.target.matches('.paginas-grid input[type="checkbox"]')){
+    const grid = e.target.closest('.paginas-grid');
+    const paginas = [...grid.querySelectorAll('input[type="checkbox"]:checked')].map(cb=>cb.value);
+    r.paginas = paginas;
+    CAMBIOS[id] = CAMBIOS[id] || {};
+    CAMBIOS[id].paginas = paginas;
+    renderKPI();
+    markDirty();
+  }
 });
 
-/* ---------- si ya hay una sesión válida (token recordado), saltar el login ---------- */
-(async () => {
-  const user = await window.Session.getUser();
-  if (user) redirectByRole(user);
-})();
+/* ---------- modal: nuevo rol / confirmar eliminar ---------- */
+function abrirModal(html){
+  document.getElementById('modalBox').innerHTML = html;
+  document.getElementById('modalOverlay').hidden = false;
+}
+function cerrarModal(){
+  document.getElementById('modalOverlay').hidden = true;
+  document.getElementById('modalBox').innerHTML = '';
+}
+function mostrarErrorGlobal(err){
+  const errorBox = document.getElementById('saveError');
+  errorBox.hidden = false;
+  errorBox.textContent = '⚠ ' + window.Session.mensajeError(err);
+}
 
-// EDS-89: el monitor de inactividad de session.js redirige aquí con
-// ?motivo=inactividad tras cerrar la sesión sola — sin este aviso, el
-// usuario solo vería "de repente" la pantalla de login sin saber por qué.
-if (new URLSearchParams(location.search).get('motivo') === 'inactividad') {
-  const errorBox = document.getElementById('loginError');
-  errorBox.textContent = 'Tu sesión se cerró por inactividad (10 minutos sin actividad). Inicia sesión de nuevo.';
-  errorBox.style.display = 'block';
+function addRole(){
+  abrirModal(`
+    <h3>Nuevo rol</h3>
+    <div class="modal-field-block"><label>Nombre del rol</label><div class="field nombre"><input type="text" id="modalNombre" placeholder="ej. Mantenimiento" style="width:100%;"></div></div>
+    <div class="modal-field-block">
+      <label>Páginas con acceso</label>
+      <div class="paginas-grid">${PAGINAS.map(p=>`
+        <label class="pagina-check"><input type="checkbox" id="modalPagina-${p.slug}" value="${p.slug}"><span>${p.label}</span></label>
+      `).join('')}</div>
+    </div>
+    <div class="field-warn error" id="modalError" hidden></div>
+    <div class="modal-actions">
+      <button class="btn-ghost" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn-primary" id="modalCrearBtn" onclick="crearRolSubmit()">Crear rol</button>
+    </div>
+  `);
+  document.getElementById('modalNombre').focus();
+}
+
+async function crearRolSubmit(){
+  const nombre = document.getElementById('modalNombre').value;
+  const paginas = [...document.querySelectorAll('#modalBox .paginas-grid input[type="checkbox"]:checked')].map(cb=>cb.value);
+  const btn = document.getElementById('modalCrearBtn');
+  const errorBox = document.getElementById('modalError');
+  errorBox.hidden = true;
+  btn.disabled = true; btn.textContent = 'Creando…';
+  try{
+    await window.Session.call(api.roles.crearRol, { nombre, paginas }, 'mutation');
+    cerrarModal();
+    await cargarRoles({ preservarCambios: true });
+    const t = document.getElementById('toast');
+    t.textContent = `✓ Rol "${nombre}" creado`;
+    t.classList.add('show'); setTimeout(()=>{ t.classList.remove('show'); t.textContent = '✓ Roles actualizados'; }, 2400);
+  }catch(err){
+    btn.disabled = false; btn.textContent = 'Crear rol';
+    errorBox.hidden = false;
+    errorBox.textContent = '⚠ ' + window.Session.mensajeError(err);
+  }
+}
+
+function confirmarEliminar(id){
+  const r = ROLES.find(x=>x._id===id);
+  abrirModal(`
+    <h3>¿Eliminar el rol "${escapeHtml(r?.nombre) || 'este rol'}"?</h3>
+    <p style="font-size:.85rem;color:var(--ink-muted);">Deja de poder asignarse a usuarios nuevos. Si algún usuario ACTIVO todavía lo tiene asignado, el sistema rechazará esta acción — reasígnalo desde Gestión de Usuarios primero. Puedes reactivar el rol después desde esta misma tabla.</p>
+    <div class="modal-actions">
+      <button class="btn-ghost" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn-primary" style="background:var(--danger);" onclick="eliminarConfirmado('${id}')">Sí, eliminar</button>
+    </div>
+  `);
+}
+async function eliminarConfirmado(id){
+  cerrarModal();
+  try{
+    await window.Session.call(api.roles.eliminarRol, { rolId: id }, 'mutation');
+    await cargarRoles({ preservarCambios: true });
+  }catch(err){
+    mostrarErrorGlobal(err);
+  }
+}
+
+async function reactivar(id){
+  try{
+    await window.Session.call(api.roles.reactivarRol, { rolId: id }, 'mutation');
+    await cargarRoles({ preservarCambios: true });
+  }catch(err){
+    mostrarErrorGlobal(err);
+  }
+}
+
+async function saveRoles(){
+  const ids = Object.keys(CAMBIOS);
+  if(ids.length===0) return;
+  const btn = document.getElementById('btnSave');
+  const errorBox = document.getElementById('saveError');
+  errorBox.hidden = true;
+  const textoOriginal = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Guardando…';
+  try{
+    // Una sola mutation atómica para todas las filas editadas — mismo
+    // patrón ya establecido para materiales/usuarios/parámetros (evita
+    // el "guardado parcial" que auditorías anteriores encontraron real
+    // cuando el cliente hacía un loop de mutations independientes).
+    await window.Session.call(api.roles.guardarRolesCompleto, {
+      roles: ids.map(id => ({ rolId: id, ...CAMBIOS[id] })),
+    }, 'mutation');
+    dirty = false;
+    document.getElementById('dirtyFlag').classList.remove('show');
+    btn.disabled = true; btn.textContent = textoOriginal;
+    document.getElementById('btnReset').disabled = true;
+    await cargarRoles();
+    const t = document.getElementById('toast');
+    t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 2400);
+  }catch(err){
+    btn.disabled = false; btn.textContent = textoOriginal;
+    mostrarErrorGlobal(err);
+  }
+}
+async function resetRoles(){
+  // Descarta ediciones locales releyendo de Convex — el servidor es la
+  // única fuente de verdad, no una copia en memoria del cliente.
+  await cargarRoles();
+  dirty = false;
+  document.getElementById('dirtyFlag').classList.remove('show');
+  document.getElementById('btnSave').disabled = true;
+  document.getElementById('btnReset').disabled = true;
+  document.getElementById('saveError').hidden = true; // limpia un error de un intento anterior, si quedó visible
+}
+
+/* El HTML llama estas funciones vía onclick="" — en un <script type="module">
+   quedan en el scope del módulo, no globales, así que hay que exponerlas
+   explícitamente para que esos atributos sigan funcionando. */
+window.addRole = addRole;
+window.crearRolSubmit = crearRolSubmit;
+window.confirmarEliminar = confirmarEliminar;
+window.eliminarConfirmado = eliminarConfirmado;
+window.reactivar = reactivar;
+window.cerrarModal = cerrarModal;
+window.saveRoles = saveRoles;
+window.resetRoles = resetRoles;
+
+// EDS-65 (10.1): mismo patrón ya establecido en el resto de las pantallas
+// de Configuración — si Convex no responde, la tabla se queda vacía con un
+// error controlado en vez de silenciosamente en blanco.
+try {
+  await cargarRoles();
+} catch (err) {
+  console.error('[gestion-roles] Error al cargar roles:', err);
+  mostrarErrorGlobal(new Error('No se pudo conectar con el servidor. Verifica tu conexión y recarga la página.'));
 }
 </script>
 
