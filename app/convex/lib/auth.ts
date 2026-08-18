@@ -1,6 +1,7 @@
 import { ConvexError } from 'convex/values';
 import type { QueryCtx, MutationCtx } from '../_generated/server';
 import type { Doc } from '../_generated/dataModel';
+import type { Pagina } from './paginas';
 
 export type Rol = 'operador' | 'admin' | 'gerencia' | 'compras' | 'calidad';
 
@@ -57,6 +58,43 @@ export async function requireRole(
     throw new ConvexError(
       `No autorizado: se requiere rol ${roles.join(' o ')} (rol actual: ${user.rol}).`
     );
+  }
+  return user;
+}
+
+// EDS-104 — reemplaza gradualmente a requireRole (que se queda vivo, sin
+// tocar y SIN eliminarse nunca — decisión de la 2ª ronda de revisión:
+// Gestión de Usuarios y Gestión de Roles necesitan una autorización FIJA
+// que no dependa del sistema dinámico que ellas mismas administran, así
+// que requireRole no es "código viejo a borrar en Fase 5", es el
+// mecanismo permanente de esas 2 pantallas) para las funciones que
+// existen para servir UNA o VARIAS pantallas concretas. `paginas` es la
+// página (o páginas, si la función es compartida por más de una pantalla
+// — ej. correcciones.ts::actualizarEntrada, usada desde correccion-
+// capturas.html Y entradas-costeo.html) cuyo acceso habilita esta función;
+// basta con que el rol tenga acceso a UNA de ellas. Catálogo de páginas
+// en ./paginas.ts (fuente única, ver ahí el mapeo slug→archivo real).
+export async function requireAcceso(
+  ctx: QueryCtx | MutationCtx,
+  token: string | null | undefined,
+  paginas: Pagina | Pagina[]
+): Promise<Doc<'users'>> {
+  const user = await requireUser(ctx, token);
+  const rol = await ctx.db
+    .query('roles')
+    .withIndex('by_slug', (q) => q.eq('slug', user.rol))
+    .unique();
+  if (!rol || !rol.activo) {
+    throw new ConvexError(`No autenticado: tu rol ("${user.rol}") ya no existe o está inactivo — contacta a un administrador.`);
+  }
+  // bypassAcceso (solo "admin" hoy) siempre pasa, sin importar qué traiga
+  // `paginas` — distinto de `protegido` (que solo bloquea EDITAR el rol
+  // desde Gestión de Roles, ver schema.ts). Mismo espíritu que la vieja
+  // garantía "siempre hay un admin activo".
+  if (rol.bypassAcceso) return user;
+  const requeridas = Array.isArray(paginas) ? paginas : [paginas];
+  if (!requeridas.some((p) => rol.paginas.includes(p))) {
+    throw new ConvexError(`No autorizado: tu rol no tiene acceso a esta función (requiere: ${requeridas.join(' o ')}).`);
   }
   return user;
 }

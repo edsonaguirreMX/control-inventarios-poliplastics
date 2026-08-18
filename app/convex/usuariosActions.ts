@@ -12,9 +12,10 @@ import { internal } from './_generated/api';
 import bcrypt from 'bcryptjs';
 import { randomInt } from 'node:crypto';
 
-const ROL_VALUE = v.union(
-  v.literal('operador'), v.literal('admin'), v.literal('gerencia'), v.literal('compras'), v.literal('calidad')
-);
+// EDS-104: ver mismo comentario en usuarios.ts — antes union fijo de 5
+// literales, ahora string libre validado (existe + activo en `roles`)
+// dentro de crearUsuarioImpl, a donde esta action delega.
+const ROL_VALUE = v.string();
 
 // Mismo alfabeto sin caracteres ambiguos (0/O, 1/l/I) que usa seed.ts para
 // el password temporal del admin inicial — para que un humano pueda

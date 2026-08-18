@@ -11,17 +11,48 @@ export default defineSchema({
     nombre: v.string(),
     usuario: v.string(), // normalizado a minúsculas, único
     passwordHash: v.string(),
-    rol: v.union(
-      v.literal("operador"),
-      v.literal("admin"),
-      v.literal("gerencia"),
-      v.literal("compras"),
-      v.literal("calidad")
-    ),
+    // EDS-104 (Fase 1 de EDS-103, roles personalizables): antes era un
+    // v.union(v.literal(...)) fijo de 5 valores — ahora es el `slug` de un
+    // documento en `roles`. Convex ya no valida en el schema que sea uno
+    // de un conjunto fijo (por definición, ahora es dinámico); la
+    // validación de "existe y está activo en `roles`" se mueve al handler
+    // de crearUsuarioImpl/actualizarUsuarioImpl (usuarios.ts/
+    // usuariosActions.ts).
+    rol: v.string(),
     activo: v.boolean(),
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_usuario", ["usuario"]),
+
+  // EDS-104 — roles personalizables: qué pantallas puede ver cada uno.
+  // Mismo patrón que `materiales`/`alertasReglas` (slug único + by_slug,
+  // activo, orden, updatedAt/updatedBy). `paginas` es una lista de slugs
+  // del catálogo fijo de páginas (ver convex/lib/paginas.ts) — solo 9 de
+  // las 11 páginas son configurables aquí; "gestion-usuarios" y
+  // "gestion-roles" quedan admin-only hardcodeado por seguridad (un rol
+  // personalizable no debe poder auto-otorgarse acceso a Gestión de Roles
+  // y escalar sus propios privilegios).
+  roles: defineTable({
+    slug: v.string(),
+    nombre: v.string(),
+    paginas: v.array(v.string()),
+    // Dos conceptos distintos, aunque hoy coincidan siempre en "admin"
+    // (segunda ronda de revisión — no fusionarlos en un solo booleano):
+    // `protegido` = no se puede editar/desactivar/eliminar desde Gestión
+    // de Roles (candado de EDICIÓN). `bypassAcceso` = pasa cualquier
+    // chequeo de requireAcceso sin importar qué traiga `paginas` (candado
+    // de AUTORIZACIÓN). Evita que el sistema quede sin nadie que pueda
+    // administrar — mismo espíritu que verificarQuedaAlMenosUnAdminActivo
+    // en usuarios.ts, que ahora se replantea en términos de `protegido`
+    // en vez del string 'admin'.
+    protegido: v.boolean(),
+    bypassAcceso: v.boolean(),
+    activo: v.boolean(),
+    orden: v.number(),
+    updatedAt: v.number(),
+    updatedBy: v.union(v.id("users"), v.null()),
+  }).index("by_slug", ["slug"])
+    .index("by_activo_orden", ["activo", "orden"]),
 
   sessions: defineTable({
     userId: v.id("users"),

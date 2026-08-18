@@ -8,9 +8,20 @@ import { requireRole } from './lib/auth';
 // (bcryptjs, runtime Node) vive en usuariosActions.ts, igual patrón que
 // auth.ts/authActions.ts: las mutations/queries normales de este archivo
 // nunca tocan bcrypt directamente, solo reciben el hash ya calculado.
-const ROL_VALUE = v.union(
-  v.literal('operador'), v.literal('admin'), v.literal('gerencia'), v.literal('compras'), v.literal('calidad')
-);
+//
+// EDS-104: antes ROL_VALUE era un v.union(v.literal(...)) de 5 valores —
+// Convex validaba en el schema que `rol` fuera uno de esos 5, gratis. Con
+// roles dinámicos (tabla `roles`, EDS-103) eso ya no es posible en el
+// tipo — la validación de "el slug existe y está activo" se mueve aquí,
+// al handler, explícita.
+const ROL_VALUE = v.string();
+
+async function validarRolAsignable(ctx: MutationCtx, rolSlug: string): Promise<void> {
+  const rol = await ctx.db.query('roles').withIndex('by_slug', (q) => q.eq('slug', rolSlug)).unique();
+  if (!rol || !rol.activo) {
+    throw new ConvexError(`"${rolSlug}" no es un rol válido o está inactivo — revisa Gestión de Roles.`);
+  }
+}
 
 // Nunca se manda passwordHash al cliente, ni siquiera a un admin.
 export const listUsuarios = query({
@@ -39,7 +50,7 @@ type ActualizarUsuarioArgs = {
   userId: Id<'users'>;
   nombre?: string;
   usuario?: string;
-  rol?: 'operador' | 'admin' | 'gerencia' | 'compras' | 'calidad';
+  rol?: string;
 };
 
 async function actualizarUsuarioImpl(ctx: MutationCtx, args: ActualizarUsuarioArgs): Promise<void> {
@@ -68,7 +79,10 @@ async function actualizarUsuarioImpl(ctx: MutationCtx, args: ActualizarUsuarioAr
     }
     patch.usuario = usuario;
   }
-  if (args.rol !== undefined) patch.rol = args.rol;
+  if (args.rol !== undefined) {
+    await validarRolAsignable(ctx, args.rol);
+    patch.rol = args.rol;
+  }
   await ctx.db.patch(args.userId, patch);
 }
 
@@ -82,6 +96,14 @@ async function actualizarUsuarioImpl(ctx: MutationCtx, args: ActualizarUsuarioAr
 // un admin puede quedarse "activo" pero cambiar su propio rol a algo que
 // no es admin vía updateUsuario/guardarUsuariosCompleto — el guard de
 // eliminarUsuario solo mira `activo`, no `rol`.
+//
+// EDS-104: sigue comparando contra el string LITERAL 'admin', a propósito
+// — NO se generaliza a "algún rol con protegido/bypassAcceso" (2ª ronda de
+// revisión). Gestión de Usuarios y Gestión de Roles siguen protegidas con
+// requireRole(['admin']) literal (ver lib/auth.ts), no con el sistema
+// dinámico — así que lo único que de verdad reabre la puerta si el
+// sistema se traba es tener un usuario activo con rol === 'admin', sin
+// importar qué otros roles existan o tengan protegido:true en el futuro.
 async function verificarQuedaAlMenosUnAdminActivo(ctx: MutationCtx): Promise<void> {
   const todos = await ctx.db.query('users').collect();
   const quedaAdmin = todos.some((u) => u.activo && u.rol === 'admin');
@@ -137,6 +159,7 @@ export const crearUsuarioImpl = internalMutation({
     if (existente) {
       throw new ConvexError(`crearUsuario: el usuario "${usuario}" ya existe.`);
     }
+    await validarRolAsignable(ctx, args.rol);
     const now = Date.now();
     return ctx.db.insert('users', { nombre, usuario, passwordHash: args.passwordHash, rol: args.rol, activo: true, createdAt: now, updatedAt: now });
   },

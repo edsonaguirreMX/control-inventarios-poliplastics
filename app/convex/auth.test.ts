@@ -2,7 +2,7 @@ import { convexTest } from 'convex-test';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import schema from './schema';
 import { api, internal } from './_generated/api';
-import { crearUsuarioPrueba, crearSesionPrueba } from './testHelpers';
+import { crearUsuarioPrueba, crearSesionPrueba, crearRolesPrueba } from './testHelpers';
 
 const modules = import.meta.glob('./**/*.ts');
 
@@ -15,6 +15,7 @@ afterEach(() => {
 // reproducen el escenario del hallazgo y verifican el fix.
 describe('authActions.login: rate limiting (EDS-70)', () => {
   async function crearAdminYUsuarioObjetivo(t: Awaited<ReturnType<typeof convexTest>>) {
+    await crearRolesPrueba(t); // EDS-104: crearUsuario ahora valida rol contra la tabla roles
     const adminId = await crearUsuarioPrueba(t, 'admin');
     const adminToken = await crearSesionPrueba(t, adminId);
     const { passwordTemporal } = await t.action(api.usuariosActions.crearUsuario, {
@@ -77,6 +78,7 @@ describe('authActions.login: rate limiting (EDS-70)', () => {
 
   test('el bloqueo es por usuario — atacar a "objetivo.prueba" no bloquea el login de otra cuenta', async () => {
     const t = convexTest(schema, modules);
+    await crearRolesPrueba(t); // EDS-104: crearUsuario ahora valida rol contra la tabla roles
     const adminId = await crearUsuarioPrueba(t, 'admin');
     const adminToken = await crearSesionPrueba(t, adminId);
     await t.action(api.usuariosActions.crearUsuario, {
