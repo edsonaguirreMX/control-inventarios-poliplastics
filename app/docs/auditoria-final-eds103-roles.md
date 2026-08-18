@@ -4,13 +4,13 @@ Cierra la épica EDS-103. No es la primera revisión de este código — cada fa
 
 **Fecha:** 2026-08-18 · **Rama de esta auditoría:** `main` (sin cambios de código — auditoría pura) · **Suite al cierre:** 293/293 tests verdes (`npx vitest run`).
 
-**Cambio respecto al diseño original de EDS-103:** `requireRole`/`Rol` (`convex/lib/auth.ts`) **no se borran** — se quedan permanentemente como el mecanismo de autorización fija de `usuarios.ts`/`roles.ts` (Gestión de Usuarios y Gestión de Roles no pueden depender del sistema dinámico que ellas mismas administran; evita un problema de huevo-gallina y un vector de escalada de privilegios). Ver [[pr-audit-strategy]] / plan original para el detalle de esa decisión (2ª ronda de revisión, antes de EDS-104).
+**Cambio respecto al diseño original de EDS-103:** `requireRole`/`Rol` (`convex/lib/auth.ts`) **no se borran** — se quedan permanentemente como el mecanismo de autorización fija de `usuarios.ts`/`roles.ts` (Gestión de Usuarios y Gestión de Roles no pueden depender del sistema dinámico que ellas mismas administran; evita un problema de huevo-gallina y un vector de escalada de privilegios). Decisión tomada en la 2ª ronda de revisión del plan original, antes de arrancar EDS-104 — ver la descripción de EDS-104 en Linear para el detalle completo.
 
 ---
 
 ## 1. Grep de confirmación: `requireRole` fuera de las excepciones documentadas
 
-```
+```text
 grep -rln "requireRole(" convex/*.ts | grep -v '\.test\.ts$'
 → convex/dashboard.ts
 → convex/peps.ts
@@ -53,13 +53,13 @@ Búsqueda complementaria del tipo `Rol` (el union literal de 5 roles que `requir
 
 11/11 confirmados por inspección directa (`grep -n "requireAcceso\|requireRole" public/*.html`). `login-acceso.html` es el único HTML fuera de este catálogo — correcto, es la pantalla de login misma, sin guard de página.
 
-`PAGINAS_NO_CONFIGURABLES = ['gestion-usuarios', 'gestion-roles']` — confirmado en vivo en la sección 4 (intento de asignar `gestion-roles` a un rol nuevo, rechazado por el backend).
+`PAGINAS_NO_CONFIGURABLES = ['gestion-usuarios', 'gestion-roles']` — confirmado en vivo en la sección 4.4, con las DOS páginas probadas por separado (no solo `gestion-roles`).
 
 ---
 
 ## 3. `gestion-usuarios.html` / `gestion-roles.html` — admin-only fijo, confirmado
 
-```
+```text
 grep -n "requireRole\|requireAcceso" public/gestion-usuarios.html public/gestion-roles.html
 ```
 
@@ -69,32 +69,35 @@ Ambas usan `window.Session.requireRole(['admin'])` — **ninguna usa `requireAcc
 
 ## 4. Casos límite probados contra dev real (`outstanding-guanaco-989`)
 
-Verificación en navegador real (no solo unitaria) de los 4 escenarios pedidos, cada uno con datos de prueba creados y limpiados en la misma sesión:
+Los 4 escenarios pedidos, cada uno con datos de prueba creados y limpiados en la misma sesión. **Corrección tras revisión de CodeRabbit (PR #40):** la redacción original de esta sección decía "verificación en navegador real de los 4 escenarios" — impreciso. Solo 4.1, 4.2 y 4.4 son verificación end-to-end real (navegador y/o llamadas directas a la API contra dev); 4.3 verifica en vivo el *guardrail que previene* llegar al estado, pero el comportamiento del estado en sí (`requireAcceso`/`auth.me` ante un rol YA inactivo) sigue cubierto solo por prueba unitaria, no por el navegador — ver el detalle en esa subsección.
 
-### 4.1 — Rol con 1-2 páginas permitidas
+### 4.1 — Rol con 1-2 páginas permitidas (verificado en navegador)
 Rol `auditoria_eds108_dos_paginas` (`catalogo-materiales` + `reporte-diario`), usuario asignado. Confirmado: login aterriza en la primera página de su lista; ambas páginas permitidas cargan con normalidad; intentar `panel-control.html` (no permitida) redirige de vuelta a su página real, sin bucle. `auth.me` devolvió `paginasPermitidas: ["catalogo-materiales","reporte-diario"]` y `rolNombre: "Auditoria EDS108 dos paginas"` — exactos.
 
-### 4.2 — Rol con 0 páginas
+### 4.2 — Rol con 0 páginas (verificado en navegador)
 Rol `auditoria_eds108_cero_paginas` (`paginas: []`), usuario asignado. Confirmado: `login-acceso.html` muestra el mensaje real ("tu rol ... no tiene acceso a ninguna pantalla") con botón "Cerrar sesión" — sin bucle de redirección (fix de EDS-107, PR #39 commit `1b2e19e`, reconfirmado aquí en un caso nuevo e independiente).
 
-### 4.3 — Rol desactivado (con usuario activo asignado)
-El sistema **previene por diseño** llegar a este estado a través de la UI/API normal — `eliminarRol` rechaza desactivar un rol mientras tenga usuarios activos asignados. Confirmado en vivo:
-```
+### 4.3 — Rol desactivado (con usuario activo asignado) — verificación mixta, alcance limitado a propósito
+El sistema **previene por diseño** llegar a este estado a través de la UI/API normal — `crearUsuario`/`updateUsuario` (`validarRolAsignable`) rechazan asignar un rol inactivo, y `eliminarRol` rechaza desactivar un rol mientras tenga usuarios activos asignados. **Lo único confirmado en vivo aquí es ese rechazo** (la invariante "no puedes llegar a este estado"), no el comportamiento del estado en sí:
+```text
 roles:eliminarRol sobre "Auditoria EDS108 dos paginas" (con auditoria.a activo)
 → ConvexError: "no se puede eliminar ... hay usuarios activos con ese rol"
 ```
-El comportamiento de `requireAcceso`/`auth.me` cuando SÍ existe un rol inactivo (alcanzable solo por datos preexistentes/migración, no por el flujo normal de la app) ya está cubierto por pruebas unitarias directas: `auth.test.ts` ("rol inactivo: me sigue devolviendo al usuario, pero paginasPermitidas queda vacío") y `roles.test.ts` ("rechaza sin token / con rol inactivo o inexistente"). No se fuerza el estado vía manipulación directa de base de datos para esta auditoría — sería probar un escenario que la propia app no permite alcanzar por su diseño.
+El comportamiento de `requireAcceso`/`auth.me` cuando SÍ existe un rol inactivo (alcanzable solo por datos preexistentes/migración/un `ctx.db.patch` directo, nunca por la API pública) **no se verificó contra dev en esta auditoría** — se apoya exclusivamente en las pruebas unitarias que sí fuerzan ese estado vía `t.run` + `ctx.db.patch` directo: `auth.test.ts` ("rol inactivo: me sigue devolviendo al usuario, pero paginasPermitidas queda vacío") y `roles.test.ts` ("rechaza sin token / con rol inactivo o inexistente"). No se fuerza el estado en dev vía manipulación directa de base de datos para esta auditoría — sería replicar en un deployment real algo que la app deliberadamente no deja alcanzar por su propia API, y el mismo `ctx.db.patch` que ya lo prueba en unitarias no tiene un equivalente seguro fuera de `convexTest`.
 
-### 4.4 — Rol protegido (admin) no editable
-Confirmado en vivo, 3 intentos directos vía API contra el rol `admin` real:
-```
+### 4.4 — Rol protegido (admin) y páginas no configurables — verificado contra la API real
+Confirmado en vivo, 4 intentos directos vía API contra el rol `admin` real y el catálogo de páginas no configurables (las DOS, no solo una):
+```text
 roles:actualizarRol  → ConvexError: "Admin" es un rol protegido, no se puede editar.
 roles:eliminarRol    → ConvexError: "Admin" es un rol protegido, no se puede eliminar.
-roles:crearRol con paginas:["gestion-roles"] → ConvexError: "gestion-roles" no es asignable
-                                                  desde aquí — Gestión de Usuarios y Gestión
-                                                  de Roles quedan siempre admin-only.
+roles:crearRol con paginas:["gestion-roles"]    → ConvexError: "gestion-roles" no es asignable
+                                                    desde aquí — Gestión de Usuarios y Gestión
+                                                    de Roles quedan siempre admin-only.
+roles:crearRol con paginas:["gestion-usuarios"] → ConvexError: "gestion-usuarios" no es asignable
+                                                    desde aquí — Gestión de Usuarios y Gestión
+                                                    de Roles quedan siempre admin-only.
 ```
-Los 3 guardrails de seguridad (protegido, no-configurable) responden exactamente como está documentado en el código — no solo en tests, en el deployment real.
+Los 2 guardrails de seguridad (protegido, no-configurable — ambos slugs de `PAGINAS_NO_CONFIGURABLES` probados por separado) responden exactamente como está documentado en el código — no solo en tests, en el deployment real.
 
 Todos los usuarios/roles de prueba de esta sección (`auditoria.a`, `auditoria.b`, sus 2 roles, el intento fallido "Intento Escalada") quedaron limpiados (desactivados) al terminar; ninguno persiste activo en dev.
 
@@ -125,4 +128,6 @@ Confirmado en 4.1/4.2 (arriba) con datos reales, y cubierto por 5 pruebas unitar
 | EDS-107 (Fase 4 — pantalla `gestion-roles.html`) | ✅ Done, en producción, validado con rol de prueba real |
 | EDS-108 (Fase 5 — esta auditoría) | ✅ Done — sin hallazgos, 0 cambios de código requeridos |
 
-Sin hallazgos bloqueantes ni menores pendientes. Único ticket de seguimiento abierto, no bloqueante: [[EDS-109]] (`seedRolesBase` no reactiva un rol base existente-pero-inactivo — Minor, aceptado explícitamente como no bloqueante en su momento, sigue en Backlog).
+Sin hallazgos bloqueantes ni menores pendientes sobre el sistema de roles en sí. Único ticket de seguimiento abierto, no bloqueante: EDS-109 (`seedRolesBase` no reactiva un rol base existente-pero-inactivo — Minor, aceptado explícitamente como no bloqueante en su momento, sigue en Backlog).
+
+**Nota de proceso (ronda de revisión de CodeRabbit sobre este mismo PR, #40):** la primera versión de este documento sobreclamaba en la sección 4 ("verificación en navegador real de los 4 escenarios") y solo probaba en vivo una de las dos páginas no configurables en 4.4. Ambos son defectos de redacción del documento, no del sistema auditado — corregidos en la misma PR: se agregó la evidencia en vivo faltante (`gestion-usuarios`, 4.4) y se acotó explícitamente el alcance real de 4.3 (guardrail verificado en vivo, comportamiento del estado en sí cubierto solo por prueba unitaria, por diseño de la app). Mismo estándar de honestidad que el resto de esta épica: reportar el alcance exacto de cada verificación, no inflarlo.
