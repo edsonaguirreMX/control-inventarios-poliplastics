@@ -52,16 +52,26 @@ app.get('/', (req, res) => res.redirect('/login-acceso.html'));
 // podía quedar cacheado en el edge hasta 4 horas después de un deploy —
 // un usuario que ya hubiera visitado el sitio seguía recibiendo JS viejo
 // contra un backend ya nuevo (encontrado real: EDS-106, pantalla "a
-// medias" tras el deploy de esa fase). `no-cache` (no `no-store`, a
-// diferencia de config.js) porque este SÍ es un archivo estático real que
-// vale la pena poder revalidar por ETag — solo evita que se sirva sin
-// preguntarle primero al origen si cambió.
+// medias" tras el deploy de esa fase).
+//
+// Primer intento (mismo commit del hallazgo, ya reemplazado): solo
+// `no-cache, must-revalidate` — sin `no-store`, para poder revalidar por
+// ETag en vez de forzar red completa en cada carga. Verificado en LOCAL
+// que Express sí mandaba ese header, pero en PRODUCCIÓN el edge de
+// Cloudflare lo ignoraba y seguía sirviendo `max-age=14400` de todos
+// modos (confirmado con curls a query strings nunca antes vistas,
+// cf-cache-status: MISS igual devolvía el valor viejo) — ese edge
+// concreto solo respeta `no-store` como señal real de "no cachear"; es
+// el mismo motivo por el que /config.js ya usaba `no-store` desde el
+// incidente de 2026-08-10. Se alinea aquí al mismo patrón, aceptando el
+// costo (mínimo, app de bajo tráfico) de perder la revalidación por ETag
+// a cambio de que el edge definitivamente no lo cachee.
 app.use(
   express.static(PUBLIC_DIR, {
     extensions: ['html'],
     setHeaders: (res, filePath) => {
       if (filePath.endsWith(path.join('js', 'convex-client.js')) || filePath.endsWith(path.join('js', 'convex-client.js.map'))) {
-        res.set('Cache-Control', 'no-cache, must-revalidate');
+        res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
       }
     },
   })
