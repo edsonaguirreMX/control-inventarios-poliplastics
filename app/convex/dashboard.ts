@@ -178,17 +178,62 @@ export async function calcularKPIsHoyImpl(ctx: QueryCtx) {
 // `capturadoEn` (`Date.now()` de la app — dos mutations seguidas pueden
 // empatar al milisegundo, sobre todo en pruebas).
 //
-// Hallazgo de CodeRabbit en la revisión de este PR: la primera versión
+// Hallazgo de CodeRabbit en la revisión de PR EDS-75: la primera versión
 // hacía `.collect()` de toda la tabla y reducía a mano — un table scan
 // completo en cada carga del Panel de Control. `cierresTurno` no tiene
 // política de borrado (convención "nada se borra" del proyecto), así que
 // crece indefinidamente; el índice `by_creation_time` que Convex ya trae
 // por default resuelve exactamente "el documento más reciente" con
-// `.order('desc').first()`, sin escanear nada.
+// `.order('desc')`, sin escanear nada.
+//
+// EDS-101 — pedido explícito del usuario, encontrado en validación de
+// producción tras EDS-100: en producción se capturó un cierre real para
+// un domingo con TODAS las líneas/turnos en 0 (día no laborado, mismo
+// escenario de EDS-100), y ese cierre quedó siendo "el último" — todos
+// los KPIs y el Reporte Directivo (EDS-99, que lee estos mismos campos)
+// mostraban 0 y la fecha del domingo en vez de los datos reales del
+// último día que sí trabajó. Ya no basta `.first()`: se recorre hacia
+// atrás un LOTE ACOTADO de cierres recientes (mismo criterio de "sin
+// table scan" de arriba) y, para cada FECHA distinta encontrada, se
+// revisa el total de ESA fecha completa (todas sus líneas/turnos vía
+// by_fecha — mismo patrón que calcularKPIsHoyImpl usa para
+// cierresReferencia) hasta hallar una con actividad real. Mismo criterio
+// de "actividad real" que EDS-100 (kgBuenos + mermaTotalKg > 0 — no
+// depende del costo, un día solo con Triturado a $0 sí cuenta).
+//
+// Nota sobre CAPTURA vs. FECHA (hallazgo de CodeRabbit en la revisión de
+// este PR): con 2 fechas CON actividad real capturadas fuera de orden
+// cronológico, esta función puede devolver la fecha calendario más VIEJA
+// en vez de la más nueva — es intencional, no un bug. "Último cierre"
+// siempre significó "lo último que el operador confirmó" (ver el bloque
+// de EDS-75 arriba y su test "no el de fecha más reciente"), nunca "el
+// día calendario más reciente"; EDS-101 solo le agrega "salvo que esa
+// captura sea un día sin actividad real". Cambiar esto a ordenar por
+// fecha calendario rompería ese contrato ya probado desde EDS-75. Test de
+// regresión que deja esto explícito con 2 fechas reales de por medio (no
+// solo una real y una en cero): "con 2 fechas con actividad capturadas
+// fuera de orden, gana la CAPTURADA más recientemente".
+const LOOKBACK_CIERRES_ULTIMO = 60; // ~15 días asumiendo hasta 4 cierres/día (2 líneas × 2 turnos) — cota generosa para saltar un domingo/festivo aislado sin escanear toda la tabla.
+
 export async function obtenerUltimoCierreImpl(ctx: QueryCtx) {
-  const ultimo = await ctx.db.query('cierresTurno').order('desc').first();
-  if (ultimo === null) return null;
-  return { fecha: ultimo.fecha, linea: ultimo.linea, turno: ultimo.turno };
+  const recientes = await ctx.db.query('cierresTurno').order('desc').take(LOOKBACK_CIERRES_ULTIMO);
+  if (recientes.length === 0) return null;
+
+  const fechasEvaluadas = new Set<string>();
+  for (const candidato of recientes) {
+    if (fechasEvaluadas.has(candidato.fecha)) continue;
+    fechasEvaluadas.add(candidato.fecha);
+    const cierresDeLaFecha = await ctx.db.query('cierresTurno').withIndex('by_fecha', (q) => q.eq('fecha', candidato.fecha)).collect();
+    const huboActividad = cierresDeLaFecha.some((c) => c.kgBuenos + c.mermaTotalKg > 0);
+    if (huboActividad) {
+      return { fecha: candidato.fecha, linea: candidato.linea, turno: candidato.turno };
+    }
+  }
+  // Si TODO el lote está en cero (caso extremo — varias semanas seguidas
+  // sin actividad), mejor mostrar el cierre más reciente capturado
+  // (aunque sea 0) que no mostrar nada.
+  const masReciente = recientes[0];
+  return { fecha: masReciente.fecha, linea: masReciente.linea, turno: masReciente.turno };
 }
 
 export const getKPIsHoy = query({
