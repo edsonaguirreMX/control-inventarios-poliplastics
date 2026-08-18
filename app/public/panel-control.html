@@ -675,20 +675,19 @@ button{font-family:inherit;}
 <script type="module" src="/js/convex-client.js"></script>
 <script type="module">
 /* Este script pasó a type="module" solo para poder usar el
-   top-level await de Session.requireRole (Épica 1). Las funciones
-   que el HTML llama por onclick="" se exponen a window al final
+   top-level await de Session.requireAcceso (Épica 1 / EDS-106). Las
+   funciones que el HTML llama por onclick="" se exponen a window al final
    del archivo — un module normal no las haría globales por sí solo. */
 /* ============================================================
    SESIÓN (autenticación real — Épica 1) — primero que nada: todo lo
    demás depende de sessionUser/api ya resueltos.
    ============================================================ */
 const LOGIN_URL = '/login-acceso.html';
-const ROLE_LABELS = {compras:'Compras', calidad:'Calidad y Producción', gerencia:'Gerencia y Comercial', admin:'Admin'};
 
 // Operador no tiene vista de Panel de Control (su pantalla es Cierre de
-// Turno) — si de algún modo llega aquí, requireRole lo manda a login, y
+// Turno) — si de algún modo llega aquí, requireAcceso lo manda a login, y
 // login-acceso.html ya lo redirige de vuelta a su pantalla correcta.
-const sessionUser = await window.Session.requireRole(['compras', 'calidad', 'gerencia', 'admin']);
+const sessionUser = await window.Session.requireAcceso('panel-control');
 const api = window.api; // expuesto por session.js (bundleado) — ver su comentario
 
 // Hallazgo de la auditoría manual de PR6 (2026-08-10): sessionUser.nombre
@@ -704,7 +703,7 @@ function escapeHtmlSesion(str){
 function renderSessionRow(){
   const row = document.createElement('div');
   row.className = 'session-row';
-  row.innerHTML = `<span class="role-badge">🔒 ${escapeHtmlSesion(sessionUser.nombre)} · ${ROLE_LABELS[sessionUser.rol] || sessionUser.rol}</span><a class="logout-link" href="#" id="logoutLink">Cerrar sesión</a>`;
+  row.innerHTML = `<span class="role-badge">🔒 ${escapeHtmlSesion(sessionUser.nombre)} · ${escapeHtmlSesion(sessionUser.rolNombre)}</span><a class="logout-link" href="#" id="logoutLink">Cerrar sesión</a>`;
   document.querySelector('.topbar-right').prepend(row);
   document.getElementById('logoutLink').addEventListener('click', async (e) => {
     e.preventDefault();

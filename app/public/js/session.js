@@ -55,8 +55,19 @@ async function login(usuario, password, remember) {
     remember: !!remember,
   });
   setToken(result.token, !!remember);
-  cachedUser = { nombre: result.nombre, usuario: result.usuario, rol: result.rol };
-  return cachedUser;
+  // CodeRabbit (PR EDS-106): result solo trae nombre/usuario/rol (lo que
+  // devuelve authActions.login) — NO rolNombre/paginasPermitidas (eso solo
+  // lo resuelve auth.me contra la tabla `roles`). Cachear ese objeto
+  // parcial aquí dejaba a cualquier requireAcceso() que corriera en el
+  // MISMO documento justo después de login() sin paginasPermitidas
+  // (undefined → [] → redirige a login a un usuario válido). Hoy ningún
+  // caller hace eso (login-acceso.html navega de página completa antes de
+  // volver a pedir sesión), pero el contrato de getUser()/requireAcceso()
+  // debe sostenerse siempre, no solo para el único caller de hoy —
+  // invalidar el cache y pedir el objeto completo a auth.me en vez de
+  // fabricar uno a mano.
+  cachedUser = undefined;
+  return getUser();
 }
 
 async function getUser() {
@@ -159,6 +170,26 @@ async function requireRole(roles) {
   return user;
 }
 
+// EDS-106 (Fase 3 de EDS-103, roles personalizables): reemplaza gradualmente
+// a requireRole en las pantallas que se autorizan por PÁGINA en vez de por
+// un enum fijo de roles — `pagina` (o arreglo, si la función/pantalla es
+// compartida) se compara contra `user.paginasPermitidas`, que ya viene
+// resuelto por el backend (auth.ts::me) contra la tabla dinámica `roles`.
+// requireRole se queda vivo (no se borra) — Gestión de Usuarios y la futura
+// Gestión de Roles siguen con acceso fijo admin-only, mismo criterio que
+// requireRole/requireAcceso en el backend (ver convex/lib/auth.ts).
+async function requireAcceso(pagina) {
+  const user = await getUser();
+  const requeridas = Array.isArray(pagina) ? pagina : [pagina];
+  const paginasPermitidas = user?.paginasPermitidas || [];
+  if (!user || !requeridas.some((p) => paginasPermitidas.includes(p))) {
+    window.location.href = '/login-acceso.html';
+    return new Promise(() => {});
+  }
+  iniciarMonitorInactividad();
+  return user;
+}
+
 /**
  * Wrapper para llamar queries/mutations/actions de Convex inyectando el
  * token automáticamente. `fnRef` es una referencia de api.* (ej.
@@ -198,7 +229,7 @@ function esErrorDeNegocio(err) {
   return err instanceof ConvexError;
 }
 
-window.Session = { login, getUser, logout, requireRole, call, mensajeError, esErrorDeNegocio };
+window.Session = { login, getUser, logout, requireRole, requireAcceso, call, mensajeError, esErrorDeNegocio };
 window.__convexClient = client;
 // Las páginas HTML normales no pasan por esbuild (solo este archivo lo
 // hace) — no pueden hacer `import { api } from '.../_generated/api'` ellas
