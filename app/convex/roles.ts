@@ -1,5 +1,7 @@
 import { v, ConvexError } from 'convex/values';
 import { mutation, query, internalMutation } from './_generated/server';
+import type { MutationCtx } from './_generated/server';
+import type { Id } from './_generated/dataModel';
 import { requireRole } from './lib/auth';
 import { PAGINAS, PAGINAS_NO_CONFIGURABLES } from './lib/paginas';
 
@@ -77,6 +79,34 @@ export const crearRol = mutation({
   },
 });
 
+// Cuerpo compartido de "editar un rol" — usado tanto por `actualizarRol`
+// (uno solo) como por `guardarRolesCompleto` (varios a la vez, para cuando
+// Gestión de Roles guarda en lote las ediciones de nombre/páginas de la
+// tabla). El rol admin ya viene resuelto por el caller — se valida UNA vez
+// por llamada a la mutation pública, no una vez por rol del batch.
+async function actualizarRolImpl(
+  ctx: MutationCtx,
+  admin: { _id: Id<'users'> },
+  args: { rolId: Id<'roles'>; nombre?: string; paginas?: string[] }
+): Promise<void> {
+  const existente = await ctx.db.get(args.rolId);
+  if (!existente) throw new ConvexError('actualizarRol: el rol no existe.');
+  if (existente.protegido) {
+    throw new ConvexError(`actualizarRol: "${existente.nombre}" es un rol protegido, no se puede editar.`);
+  }
+  const patch: Record<string, unknown> = { updatedAt: Date.now(), updatedBy: admin._id };
+  if (args.nombre !== undefined) {
+    const nombre = args.nombre.trim();
+    if (!nombre) throw new ConvexError('actualizarRol: el nombre no puede estar vacío.');
+    patch.nombre = nombre;
+  }
+  if (args.paginas !== undefined) {
+    validarPaginas(args.paginas);
+    patch.paginas = args.paginas;
+  }
+  await ctx.db.patch(args.rolId, patch);
+}
+
 export const actualizarRol = mutation({
   args: {
     rolId: v.id('roles'), nombre: v.optional(v.string()), paginas: v.optional(v.array(v.string())),
@@ -84,22 +114,33 @@ export const actualizarRol = mutation({
   },
   handler: async (ctx, args) => {
     const admin = await requireRole(ctx, args.token, ['admin']);
-    const existente = await ctx.db.get(args.rolId);
-    if (!existente) throw new ConvexError('actualizarRol: el rol no existe.');
-    if (existente.protegido) {
-      throw new ConvexError(`actualizarRol: "${existente.nombre}" es un rol protegido, no se puede editar.`);
+    await actualizarRolImpl(ctx, admin, args);
+    return { ok: true };
+  },
+});
+
+// EDS-107 (Fase 4) — batch atómico para "Guardar cambios" de
+// gestion-roles.html, mismo patrón ya establecido en
+// usuarios.ts::guardarUsuariosCompleto / materiales.ts::guardarCatalogoCompleto:
+// una sola mutation transaccional para todas las filas editadas, en vez de
+// un loop de mutations independientes desde el cliente (ese patrón viejo
+// dejaba guardados parciales reales si una fila a mitad del lote fallaba
+// su validación — ya encontrado y corregido varias veces en este proyecto).
+export const guardarRolesCompleto = mutation({
+  args: {
+    roles: v.array(v.object({
+      rolId: v.id('roles'), nombre: v.optional(v.string()), paginas: v.optional(v.array(v.string())),
+    })),
+    token: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const admin = await requireRole(ctx, args.token, ['admin']);
+    if (args.roles.length === 0) {
+      throw new ConvexError('guardarRolesCompleto: no hay cambios que guardar.');
     }
-    const patch: Record<string, unknown> = { updatedAt: Date.now(), updatedBy: admin._id };
-    if (args.nombre !== undefined) {
-      const nombre = args.nombre.trim();
-      if (!nombre) throw new ConvexError('actualizarRol: el nombre no puede estar vacío.');
-      patch.nombre = nombre;
+    for (const r of args.roles) {
+      await actualizarRolImpl(ctx, admin, r);
     }
-    if (args.paginas !== undefined) {
-      validarPaginas(args.paginas);
-      patch.paginas = args.paginas;
-    }
-    await ctx.db.patch(args.rolId, patch);
     return { ok: true };
   },
 });

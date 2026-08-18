@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Panel de Control — Tejaflex</title>
+<title>Gestión de Roles — Tejaflex</title>
 <style>
 @font-face{
   font-family:'Big Shoulders Display';
@@ -28,74 +28,32 @@
 }
 
 :root{
-  --bg:#EEE8DB;
-  --surface:#FBF8F1;
-  --surface-2:#E7DFCB;
-  --border:#D2C6A8;
-  --ink:#211C12;
-  --ink-muted:#6B6048;
-  --ink-faint:#9C927A;
-  --accent:#D9560F;
-  --accent-strong:#B8460A;
-  --accent-ink:#FFF6EA;
-  --accent-soft:#F6DFC7;
-  --positive:#3D7A54;
-  --positive-soft:#DCEADB;
-  --positive-ink:#0E3D1F;
-  --warning:#A66B12;
-  --warning-soft:#F3E3BE;
-  --danger:#B23A2E;
-  --danger-soft:#F3DAD3;
-  --data:#2A6CA8;
-  --data-soft:#DCE9F3;
+  --bg:#EEE8DB; --surface:#FBF8F1; --surface-2:#E7DFCB; --border:#D2C6A8;
+  --ink:#211C12; --ink-muted:#6B6048; --ink-faint:#9C927A;
+  --accent:#D9560F; --accent-strong:#B8460A; --accent-ink:#FFF6EA; --accent-soft:#F6DFC7;
+  --positive:#3D7A54; --positive-soft:#DCEADB; --positive-ink:#0E3D1F;
+  --warning:#A66B12; --warning-soft:#F3E3BE;
+  --danger:#B23A2E; --danger-soft:#F3DAD3;
   --shadow:0 1px 2px rgba(33,28,18,.06), 0 8px 20px -8px rgba(33,28,18,.18);
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
-    --bg:#161310;
-    --surface:#201B15;
-    --surface-2:#2B241C;
-    --border:#3E3527;
-    --ink:#F2EADC;
-    --ink-muted:#B3A68C;
-    --ink-faint:#7C7259;
-    --accent:#FF7A33;
-    --accent-strong:#FFA366;
-    --accent-ink:#241000;
-    --accent-soft:#4A2A15;
-    --positive:#6FBE8E;
-    --positive-soft:#1E3B29;
-    --positive-ink:#DFF3E6;
-    --warning:#E3AC4E;
-    --warning-soft:#4A3A1A;
-    --danger:#E3776A;
-    --danger-soft:#4A2420;
-    --data:#7EB3E3;
-    --data-soft:#243342;
+    --bg:#161310; --surface:#201B15; --surface-2:#2B241C; --border:#3E3527;
+    --ink:#F2EADC; --ink-muted:#B3A68C; --ink-faint:#7C7259;
+    --accent:#FF7A33; --accent-strong:#FFA366; --accent-ink:#241000; --accent-soft:#4A2A15;
+    --positive:#6FBE8E; --positive-soft:#1E3B29; --positive-ink:#DFF3E6;
+    --warning:#E3AC4E; --warning-soft:#4A3A1A;
+    --danger:#E3776A; --danger-soft:#4A2420;
     --shadow:0 1px 2px rgba(0,0,0,.3), 0 12px 24px -10px rgba(0,0,0,.5);
   }
 }
 :root[data-theme="dark"]{
-  --bg:#161310;
-  --surface:#201B15;
-  --surface-2:#2B241C;
-  --border:#3E3527;
-  --ink:#F2EADC;
-  --ink-muted:#B3A68C;
-  --ink-faint:#7C7259;
-  --accent:#FF7A33;
-  --accent-strong:#FFA366;
-  --accent-ink:#241000;
-  --accent-soft:#4A2A15;
-  --positive:#6FBE8E;
-  --positive-soft:#1E3B29;
-  --positive-ink:#DFF3E6;
-  --warning:#E3AC4E;
-  --warning-soft:#4A3A1A;
-  --danger:#E3776A;
-  --danger-soft:#4A2420;
-  --data:#7EB3E3;
-  --data-soft:#243342;
+  --bg:#161310; --surface:#201B15; --surface-2:#2B241C; --border:#3E3527;
+  --ink:#F2EADC; --ink-muted:#B3A68C; --ink-faint:#7C7259;
+  --accent:#FF7A33; --accent-strong:#FFA366; --accent-ink:#241000; --accent-soft:#4A2A15;
+  --positive:#6FBE8E; --positive-soft:#1E3B29; --positive-ink:#DFF3E6;
+  --warning:#E3AC4E; --warning-soft:#4A3A1A;
+  --danger:#E3776A; --danger-soft:#4A2420;
   --shadow:0 1px 2px rgba(0,0,0,.3), 0 12px 24px -10px rgba(0,0,0,.5);
 }
 
@@ -111,19 +69,21 @@ p{margin:0;}
 button{font-family:inherit;}
 .tnum{font-variant-numeric:tabular-nums;}
 .mono{font-family:'IBM Plex Mono','IBM Plex Sans',monospace;font-variant-numeric:tabular-nums;}
+a{color:inherit;}
 
-.page{max-width:1320px;margin:0 auto;padding:2rem 1.75rem 4rem;display:flex;flex-direction:column;gap:1.5rem;}
+.page{max-width:1180px;margin:0 auto;padding:2rem 1.75rem 4rem;display:flex;flex-direction:column;gap:1.5rem;}
 
 /* ---------- topbar ---------- */
+.breadcrumb{display:inline-flex;align-items:center;gap:.3rem;font-size:.8rem;color:var(--ink-muted);text-decoration:none;margin-bottom:.7rem;}
+.breadcrumb:hover{color:var(--accent-strong);}
 .topbar{display:flex;justify-content:space-between;align-items:flex-end;gap:1.5rem;flex-wrap:wrap;}
 .eyebrow{
   display:inline-flex;align-items:center;gap:.5rem;font-family:'Big Shoulders Display',sans-serif;
   font-size:.78rem;letter-spacing:.13em;text-transform:uppercase;color:var(--accent-strong);margin-bottom:.5rem;
 }
 .eyebrow::before{content:"";width:.45rem;height:.45rem;background:var(--accent);transform:rotate(45deg);flex:none;}
-.topbar h1{font-size:clamp(1.8rem,3vw,2.3rem);}
-.topbar-right{display:flex;flex-direction:column;align-items:flex-end;gap:.55rem;}
-.updated-at{font-size:.76rem;color:var(--ink-faint);}
+.topbar h1{font-size:clamp(1.7rem,3vw,2.2rem);}
+.topbar p.sub{font-size:.88rem;color:var(--ink-muted);margin-top:.4rem;max-width:38rem;}
 .role-badge{
   display:inline-flex;align-items:center;gap:.4rem;font-size:.76rem;font-weight:600;color:var(--ink-muted);
   background:var(--surface-2);border:1px solid var(--border);border-radius:20px;padding:.4rem .8rem;white-space:nowrap;
@@ -132,1560 +92,597 @@ button{font-family:inherit;}
 .session-row a.logout-link{font-size:.76rem;color:var(--ink-faint);text-decoration:none;white-space:nowrap;}
 .session-row a.logout-link:hover{color:var(--danger);text-decoration:underline;}
 
-.bell-wrap{position:relative;}
-.bell-btn{
-  position:relative;border:1px solid var(--border);background:var(--surface-2);border-radius:10px;
-  width:2.4rem;height:2.4rem;font-size:1.05rem;cursor:pointer;display:flex;align-items:center;justify-content:center;
-}
-.bell-btn:hover{border-color:var(--accent);}
-.bell-badge{
-  position:absolute;top:-5px;right:-5px;background:var(--accent);color:var(--accent-ink);
-  font-family:'IBM Plex Mono',monospace;font-size:.65rem;font-weight:700;border-radius:20px;
-  min-width:1.1rem;height:1.1rem;display:flex;align-items:center;justify-content:center;padding:0 .25rem;
-}
-.bell-dropdown{
-  position:absolute;top:calc(100% + .5rem);right:0;width:20rem;max-width:80vw;
-  background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);
-  padding:.8rem;z-index:15;
-}
-.bell-dropdown-head{font-family:'Big Shoulders Display',sans-serif;font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-muted);margin-bottom:.5rem;}
-.bell-item{padding:.55rem 0;border-top:1px solid var(--border);}
-.bell-item:first-child{border-top:none;}
-.bell-item.unread{background:var(--accent-soft);margin:0 -.4rem;padding:.55rem .4rem;border-radius:8px;border-top:none;}
-.bell-item .n{font-size:.8rem;font-weight:600;color:var(--ink);}
-.bell-item .d{font-size:.74rem;color:var(--ink-muted);margin-top:.1rem;}
-.bell-item .f{font-size:.68rem;color:var(--ink-faint);margin-top:.2rem;}
-.bell-empty{font-size:.8rem;color:var(--ink-faint);padding:.6rem 0;text-align:center;}
-.bell-dropdown-foot{display:block;text-align:center;font-size:.76rem;color:var(--accent-strong);text-decoration:none;margin-top:.6rem;padding-top:.6rem;border-top:1px solid var(--border);}
-
-.role-switch{display:flex;background:var(--surface-2);border:1px solid var(--border);border-radius:11px;padding:3px;gap:2px;}
-.role-btn{
-  border:none;background:none;padding:.45rem .8rem;border-radius:8px;font-size:.8rem;font-weight:600;
-  color:var(--ink-muted);cursor:pointer;white-space:nowrap;
-}
-.role-btn.active{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08);}
-
-/* ---------- filter row ---------- */
-.filter-row{display:flex;align-items:center;gap:.9rem;padding:.15rem 0;flex-wrap:wrap;}
-.filter-label{font-size:.76rem;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.06em;font-weight:600;}
-.range-pick{display:flex;gap:.3rem;}
-.range-pick button{
-  border:1px solid var(--border);background:var(--surface);color:var(--ink-muted);
-  padding:.35rem .75rem;border-radius:8px;font-size:.8rem;font-weight:600;cursor:pointer;
-}
-.range-pick button.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);}
-
-/* ---------- kpi row ---------- */
-.kpi-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1rem;}
-/* Mismo bug ya documentado abajo para .field-warn (PR3): sin esta regla,
-   el display:grid de arriba le gana al [hidden] por defecto del navegador
-   y las .kpi-row (compras/calidad/gerencia) NUNCA se ocultan, ni con el
-   atributo puesto — verificado en vivo al implementar EDS-96 (applyRole()
-   solo pone/quita `hidden`, nunca toca .style.display a propósito). */
-.kpi-row[hidden]{display:none;}
+/* ---------- stat strip ---------- */
+.kpi-row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1rem;}
 .stat-tile{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1.05rem 1.2rem;display:flex;flex-direction:column;gap:.5rem;}
 .stat-label{font-size:.76rem;color:var(--ink-muted);}
-.stat-value{font-family:'IBM Plex Mono',monospace;font-size:1.65rem;font-weight:600;color:var(--ink);}
-.stat-value .unit{font-size:1rem;color:var(--ink-faint);font-weight:500;margin-left:.15rem;}
-.stat-row{display:flex;align-items:center;justify-content:space-between;gap:.6rem;}
-.stat-delta{font-size:.76rem;font-weight:600;padding:.15rem .55rem;border-radius:20px;white-space:nowrap;}
-.stat-delta.good{background:var(--positive-soft);color:var(--positive-ink);}
-.stat-delta.bad{background:var(--danger-soft);color:var(--danger);}
-.stat-delta.warn{background:var(--warning-soft);color:var(--warning);}
+.stat-value{font-family:'IBM Plex Mono',monospace;font-size:1.55rem;font-weight:600;color:var(--ink);}
+.stat-value .unit{font-size:.9rem;color:var(--ink-faint);font-weight:500;margin-left:.15rem;}
 .stat-sub{font-size:.74rem;color:var(--ink-faint);}
-.spark{display:block;overflow:visible;}
 
-/* ---------- section card ---------- */
+/* ---------- card ---------- */
 .card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:1.5rem 1.6rem;}
 .card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;flex-wrap:wrap;margin-bottom:1.1rem;}
-.card-head h3{font-size:1.22rem;}
-.card-sub{font-size:.82rem;color:var(--ink-muted);margin-top:.2rem;max-width:34rem;}
-.legend-inline{display:flex;gap:1rem;flex-wrap:wrap;}
-.legend-item{display:flex;align-items:center;gap:.4rem;font-size:.74rem;color:var(--ink-muted);}
-.legend-dot{width:9px;height:9px;border-radius:3px;flex:none;}
-.tbl-toggle{
-  border:1px solid var(--border);background:var(--surface-2);color:var(--ink-muted);
-  padding:.35rem .7rem;border-radius:8px;font-size:.76rem;font-weight:600;cursor:pointer;
+.card-head h3{font-size:1.2rem;}
+.card-sub{font-size:.82rem;color:var(--ink-muted);margin-top:.2rem;max-width:36rem;}
+.btn-add{
+  border:none;background:var(--accent);color:var(--accent-ink);
+  padding:.55rem 1rem;border-radius:9px;font-size:.82rem;font-weight:700;cursor:pointer;white-space:nowrap;
 }
-.card-actions{display:flex;gap:.5rem;flex-wrap:wrap;}
-.btn-pdf{
-  border:1px solid var(--accent);background:var(--accent-soft);color:var(--accent-strong);
-  padding:.5rem .85rem;border-radius:9px;font-size:.78rem;font-weight:700;cursor:pointer;white-space:nowrap;
-}
-.insight{
-  margin-top:1rem;padding:.8rem 1rem;border-radius:11px;background:var(--warning-soft);
-  border-left:3px solid var(--warning);font-size:.85rem;color:var(--ink);line-height:1.5;
-}
-.insight b{color:var(--ink);}
 
-/* Banner inline de error (nunca alert() — congela la automatización de
-   pruebas y es peor UX). Sin la regla [hidden], display:flex del autor le
-   gana al estilo por defecto del navegador y el banner nunca se oculta
-   aunque JS ponga hidden=true (bug real encontrado y corregido en PR3). */
+/* ---------- table ---------- */
+.table-scroll{overflow-x:auto;}
+table.roles{border-collapse:collapse;width:100%;min-width:900px;}
+table.roles thead th{
+  text-align:left;font-family:'Big Shoulders Display',sans-serif;font-size:.74rem;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--ink-muted);padding:.6rem .7rem;border-bottom:1.5px solid var(--border);
+  white-space:nowrap;
+}
+table.roles tbody td{padding:.7rem .7rem;border-bottom:1px solid var(--border);vertical-align:top;}
+table.roles tbody tr:last-child td{border-bottom:none;}
+table.roles tbody tr.inactivo td{opacity:.55;}
+table.roles tbody tr.protegido td{opacity:.8;}
+.inactivo-badge{font-size:.72rem;color:var(--ink-faint);white-space:nowrap;}
+.activo-badge{font-size:.72rem;color:var(--positive);font-weight:600;white-space:nowrap;}
+.protegido-badge{font-size:.72rem;color:var(--accent-strong);font-weight:600;white-space:nowrap;}
+
+/* EDS-107 — grid de checkboxes de páginas configurables, una por rol.
+   flex-wrap (no una tabla/grid rígida) porque las 9 etiquetas tienen
+   longitudes muy distintas ("Panel de Control" vs "Cierre de Turno") —
+   mismo criterio que ya usa .footnotes/.modal-actions en esta pantalla. */
+.paginas-grid{display:flex;flex-wrap:wrap;gap:.35rem 1rem;max-width:30rem;}
+.pagina-check{display:inline-flex;align-items:center;gap:.35rem;font-size:.78rem;color:var(--ink);cursor:pointer;white-space:nowrap;}
+.pagina-check input{cursor:pointer;accent-color:var(--accent);width:1rem;height:1rem;}
+.pagina-check input:disabled{cursor:not-allowed;}
+.pagina-check.disabled{color:var(--ink-faint);}
+.protegido-note{display:block;margin-top:.5rem;font-size:.74rem;color:var(--ink-faint);}
+.btn-reactivar{
+  border:1px solid var(--positive);background:var(--positive-soft);color:var(--positive-ink);
+  border-radius:8px;padding:.35rem .6rem;font-size:.74rem;font-weight:700;cursor:pointer;white-space:nowrap;
+}
+
+.field{
+  display:flex;align-items:center;gap:.3rem;background:var(--surface-2);border:1px solid var(--border);
+  border-radius:8px;padding:.3rem .5rem;width:fit-content;
+}
+.field:focus-within{border-color:var(--accent);background:var(--surface);}
+.field input, .field select{
+  border:none;background:none;font-family:'IBM Plex Sans',sans-serif;font-size:.86rem;
+  color:var(--ink);padding:.3rem 0;
+}
+.field input:focus, .field select:focus{outline:none;}
+.field.nombre{width:11rem;}
+.field.nombre input{width:100%;}
+.field.usuario{width:9rem;}
+.field.usuario input{width:100%;font-family:'IBM Plex Mono',monospace;}
+.field.password{width:11.5rem;}
+.field.password input{width:100%;font-family:'IBM Plex Mono',monospace;}
+.field.rol select{width:100%;cursor:pointer;}
+.field.rol{width:10.5rem;}
+
+.icon-btn{
+  border:1px solid var(--border);background:var(--surface-2);color:var(--ink-muted);
+  width:1.9rem;height:1.9rem;border-radius:7px;cursor:pointer;font-size:.85rem;flex:none;
+  display:flex;align-items:center;justify-content:center;
+}
+.icon-btn:hover{border-color:var(--accent);color:var(--accent-strong);}
+.btn-delete{
+  border:1px solid var(--border);background:var(--surface-2);color:var(--danger);
+  width:2rem;height:2rem;border-radius:8px;cursor:pointer;font-size:.9rem;
+  display:flex;align-items:center;justify-content:center;
+}
+.btn-delete:hover{background:var(--danger-soft);border-color:var(--danger);}
+
+/* ---------- modal (agregar usuario / password de un solo vistazo / confirmar desactivar) ---------- */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(20,16,8,.45);display:flex;align-items:center;justify-content:center;
+  padding:1.5rem;z-index:30;
+}
+.modal-overlay[hidden]{display:none;}
+.modal-box{
+  background:var(--surface);border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow);
+  padding:1.6rem;max-width:26rem;width:100%;display:flex;flex-direction:column;gap:1rem;
+}
+.modal-box h3{font-size:1.1rem;}
+.modal-box .field{width:100%;}
+.modal-box .field input, .modal-box .field select{width:100%;}
+.modal-box label{font-size:.76rem;color:var(--ink-muted);display:block;margin-bottom:.3rem;}
+.modal-field-block + .modal-field-block{margin-top:.8rem;}
+.modal-password-display{
+  font-family:'IBM Plex Mono',monospace;font-size:1.1rem;font-weight:600;letter-spacing:.02em;
+  background:var(--surface-2);border:1px solid var(--border);border-radius:9px;padding:.7rem .9rem;
+  text-align:center;color:var(--accent-strong);user-select:all;
+}
+.modal-actions{display:flex;justify-content:flex-end;gap:.6rem;flex-wrap:wrap;}
+.modal-warn{font-size:.78rem;color:var(--warning);background:var(--warning-soft);border-radius:9px;padding:.55rem .7rem;}
+
 .field-warn{
-  margin-top:.6rem;padding:.55rem .7rem;border-radius:9px;
+  margin:.8rem 0 0;padding:.55rem .7rem;border-radius:9px;
   background:var(--warning-soft);color:var(--warning);font-size:.78rem;line-height:1.4;
+  display:flex;flex-direction:column;gap:.4rem;
 }
 .field-warn.error{background:var(--danger-soft);color:var(--danger);}
 .field-warn[hidden]{display:none;}
 
-/* ---------- existencias ---------- */
-.exist-row{display:grid;grid-template-columns:11rem 1fr 5.5rem 6.5rem 8.5rem;gap:.9rem;align-items:center;padding:.6rem 0;border-bottom:1px solid var(--border);}
-.exist-pedir{text-align:right;}
-.exist-pedir b{font-family:'IBM Plex Mono',monospace;font-size:.86rem;color:var(--ink);display:block;}
-.exist-pedir small{color:var(--ink-faint);font-size:.66rem;}
-.exist-pedir.muted b{color:var(--ink-faint);font-weight:400;}
-.exist-row:last-child{border-bottom:none;}
-.exist-name{font-size:.85rem;line-height:1.3;}
-.exist-name small{display:block;color:var(--ink-faint);font-size:.72rem;}
-.exist-track{position:relative;height:13px;background:var(--surface-2);border-radius:7px;}
-.exist-fill{position:absolute;left:0;top:0;height:100%;border-radius:7px 4px 4px 7px;min-width:3px;}
-.exist-fill.crit{background:var(--danger);}
-.exist-fill.warn{background:var(--warning);}
-.exist-fill.ok{background:var(--positive);}
-.exist-fill.neutral{background:var(--ink-faint);}
-.exist-tick{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--ink);opacity:.55;}
-.exist-value{font-family:'IBM Plex Mono',monospace;font-size:.82rem;text-align:right;white-space:nowrap;}
-.exist-value small{display:block;color:var(--ink-faint);font-size:.68rem;font-family:'IBM Plex Sans',sans-serif;}
-.exist-status{display:inline-flex;align-items:center;gap:.4rem;font-size:.74rem;font-weight:600;padding:.25rem .6rem;border-radius:20px;justify-self:end;white-space:nowrap;}
-.exist-status.crit{background:var(--danger-soft);color:var(--danger);}
-.exist-status.warn{background:var(--warning-soft);color:var(--warning);}
-.exist-status.ok{background:var(--positive-soft);color:var(--positive-ink);}
-.exist-status.neutral{background:var(--surface-2);color:var(--ink-faint);}
-.exist-status .dot{width:6px;height:6px;border-radius:50%;background:currentColor;flex:none;}
-
-/* ---------- producción por turno y línea ---------- */
-.prod-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1.4rem;}
-.prod-col-head{display:flex;justify-content:space-between;align-items:center;gap:.6rem;margin-bottom:.5rem;flex-wrap:wrap;}
-.prod-col-title{font-family:'Big Shoulders Display',sans-serif;font-size:1rem;letter-spacing:.02em;color:var(--ink);}
-.objetivo-field{display:flex;align-items:center;gap:.4rem;font-size:.72rem;color:var(--ink-muted);}
-.objetivo-field input{
-  width:4rem;border:1px solid var(--border);background:var(--surface-2);border-radius:7px;
-  padding:.25rem .4rem;font-family:'IBM Plex Mono',monospace;font-size:.8rem;color:var(--ink);text-align:right;
+/* ---------- action bar ---------- */
+.action-bar{
+  position:sticky;bottom:1.2rem;display:flex;justify-content:flex-end;align-items:center;gap:.8rem;
+  flex-wrap:wrap;
+  background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:.8rem 1.1rem;
+  box-shadow:var(--shadow);
 }
-.objetivo-field input:focus{outline:none;border-color:var(--accent);background:var(--surface);}
-.objetivo-field .u{color:var(--ink-faint);}
+.dirty-flag{margin-right:auto;font-size:.8rem;color:var(--warning);font-weight:600;display:none;align-items:center;gap:.4rem;}
+.dirty-flag.show{display:flex;}
+.dirty-flag .dot{width:7px;height:7px;border-radius:50%;background:var(--warning);}
+.btn-ghost{border:1px solid var(--border);background:var(--surface-2);color:var(--ink);border-radius:9px;padding:.6rem 1.1rem;font-size:.85rem;font-weight:600;cursor:pointer;}
+.btn-ghost:disabled{opacity:.4;cursor:not-allowed;}
+.btn-primary{border:none;background:var(--accent);color:var(--accent-ink);border-radius:9px;padding:.6rem 1.3rem;font-size:.85rem;font-weight:700;cursor:pointer;}
+.btn-primary:disabled{background:var(--surface-2);color:var(--ink-faint);cursor:not-allowed;}
 
-/* ---------- producción acumulada (meters) ---------- */
-.meter-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1.4rem;}
-.meter-block{display:flex;flex-direction:column;gap:.5rem;}
-.meter-head{display:flex;justify-content:space-between;align-items:center;gap:.6rem;flex-wrap:wrap;}
-.meter-title{font-family:'Big Shoulders Display',sans-serif;font-size:1rem;letter-spacing:.02em;color:var(--ink);}
-.meter-value{display:flex;align-items:baseline;gap:.5rem;font-size:.8rem;color:var(--ink-muted);}
-.meter-value b{font-family:'IBM Plex Mono',monospace;font-size:1rem;color:var(--ink);font-weight:600;}
-
-/* ---------- stat pair (costo) ---------- */
-.stat-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;margin-bottom:1.3rem;}
-
-/* ---------- line chart ---------- */
-.chart-wrap{position:relative;}
-.chart-svg{width:100%;height:auto;display:block;overflow:visible;}
-.chart-grid line{stroke:var(--border);stroke-width:1;}
-.chart-ytick{fill:var(--ink-faint);font-size:10px;font-family:'IBM Plex Mono',monospace;}
-.chart-xtick{fill:var(--ink-faint);font-size:10px;}
-.chart-area{fill:var(--data);opacity:.10;}
-.chart-line{fill:none;stroke:var(--data);stroke-width:2;stroke-linejoin:round;stroke-linecap:round;}
-.chart-bar{stroke:none;}
-.chart-bar.t1{fill:var(--data);opacity:.45;}
-.chart-bar.t2{fill:var(--data);}
-.chart-target{stroke:var(--ink-muted);stroke-width:1.5;stroke-dasharray:4 3;}
-.chart-target-label{fill:var(--ink-muted);font-size:10.5px;font-weight:600;}
-.chart-endpoint{fill:var(--data);stroke:var(--surface);stroke-width:2;}
-.chart-endpoint-label{fill:var(--ink);font-size:12px;font-weight:600;font-family:'IBM Plex Mono',monospace;}
-.chart-crosshair{stroke:var(--ink-muted);stroke-width:1;opacity:0;pointer-events:none;}
-.chart-hoverdot{fill:var(--data);stroke:var(--surface);stroke-width:2;opacity:0;pointer-events:none;}
-.chart-hit{fill:transparent;cursor:crosshair;}
-.chart-tooltip{
-  position:absolute;pointer-events:none;background:var(--ink);color:var(--bg);
-  padding:.4rem .6rem;border-radius:8px;font-size:.76rem;opacity:0;transform:translate(-50%,-115%);
-  transition:opacity .1s;white-space:nowrap;z-index:5;box-shadow:var(--shadow);
+.toast{
+  position:fixed;left:50%;bottom:5.5rem;transform:translateX(-50%) translateY(10px);
+  background:var(--positive);color:var(--positive-ink);border-radius:10px;padding:.7rem 1.1rem;
+  font-size:.86rem;font-weight:600;box-shadow:var(--shadow);opacity:0;pointer-events:none;
+  transition:opacity .18s, transform .18s;z-index:20;
 }
-:root[data-theme="dark"] .chart-tooltip, :root:not([data-theme="light"]) .chart-tooltip{}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .chart-tooltip{background:var(--surface-2);color:var(--ink);border:1px solid var(--border);}}
-:root[data-theme="dark"] .chart-tooltip{background:var(--surface-2);color:var(--ink);border:1px solid var(--border);}
-.chart-tooltip.show{opacity:1;}
-.chart-tooltip b{font-family:'IBM Plex Mono',monospace;}
-.chart-table{margin-top:1rem;overflow-x:auto;}
-.chart-table table{border-collapse:collapse;width:100%;font-size:.78rem;min-width:480px;}
-.chart-table th,.chart-table td{padding:.4rem .6rem;text-align:right;border-bottom:1px solid var(--border);}
-.chart-table th:first-child,.chart-table td:first-child{text-align:left;color:var(--ink-muted);}
-.chart-table th{font-family:'Big Shoulders Display',sans-serif;font-size:.7rem;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-muted);}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 
-/* ---------- EDS-99: tablas solo-impresión (resumen de KPIs, existencias) ---------- */
-.print-table{border-collapse:collapse;width:100%;}
-.print-table caption{text-align:left;font-family:'Big Shoulders Display',sans-serif;font-size:.95rem;margin-bottom:.4rem;}
-.print-table th,.print-table td{padding:.3rem .5rem;text-align:right;border-bottom:1px solid #ccc;}
-.print-table th:first-child,.print-table td:first-child{text-align:left;}
-.print-table th{font-family:'Big Shoulders Display',sans-serif;font-size:.68rem;letter-spacing:.04em;text-transform:uppercase;color:#555;}
-.print-table + .print-table{margin-top:1rem;}
-/* Líneas compactas del resumen ejecutivo (inventario, costo vs. estándar,
-   producción acumulada) — reemplazan tarjetas/gráficas enteras con un
-   solo renglón de texto cada una. */
-.print-line{margin:.5rem 0;font-size:.8rem;line-height:1.5;}
-.print-table + .print-line, .print-line + .print-table{margin-top:1rem;}
+.footnotes{list-style:none;margin-top:1.2rem;padding:0;display:flex;flex-direction:column;gap:.4rem;}
+.footnotes li{display:flex;gap:.5rem;font-size:.8rem;color:var(--ink-muted);line-height:1.45;}
+.footnotes li::before{content:"";width:5px;height:5px;border-radius:50%;background:var(--accent);margin-top:.5rem;flex:none;}
 
-/* ---------- config cards (admin) ---------- */
-.config-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;}
-.config-card{
-  display:flex;flex-direction:column;gap:.3rem;align-items:flex-start;text-align:left;
-  border:1.5px dashed var(--border);background:var(--surface-2);border-radius:14px;
-  padding:1.1rem 1.2rem;cursor:not-allowed;text-decoration:none;
-}
-.config-card .t{font-family:'Big Shoulders Display',sans-serif;font-size:1.1rem;color:var(--ink);}
-.config-card .s{font-size:.76rem;color:var(--ink-faint);}
-.config-card.live{border-style:solid;border-color:var(--accent);background:var(--surface);cursor:pointer;}
-.config-card.live .t{color:var(--accent-strong);}
-.config-card.live:hover{background:var(--accent-soft);}
+footer.page-foot{font-size:.78rem;color:var(--ink-faint);border-top:1px solid var(--border);padding-top:1.2rem;}
 
 @media (max-width:900px){
-  .kpi-row{grid-template-columns:1fr;}
-  .stat-pair{grid-template-columns:1fr;}
-  .config-cards{grid-template-columns:1fr;}
-  .exist-row{grid-template-columns:1fr;row-gap:.35rem;}
-  .exist-value,.exist-status,.exist-pedir{justify-self:start;text-align:left;}
-  .prod-grid,.meter-row{grid-template-columns:1fr;}
+  .kpi-row{grid-template-columns:repeat(2,1fr);}
   .topbar{flex-direction:column;align-items:flex-start;}
-  .topbar-right{align-items:flex-start;width:100%;}
-  /* Hallazgo real en producción (2026-08-11): los 4 tabs de rol
-     (Compras/Calidad y Producción/Gerencia y Comercial/Admin) tienen
-     white-space:nowrap — su ancho natural excede cualquier pantalla de
-     celular y arrastraba a TODA la página a scroll horizontal. Se
-     contiene el desborde dentro del propio selector (desliza con el
-     dedo, como un segmented control) en vez de dejarlo escapar. */
-  .role-switch{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
-  .role-switch::-webkit-scrollbar{display:none;}
+  .dirty-flag{flex:1 1 100%;margin-right:0;}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none !important;}}
-
-/* ---------- impresión / exportar PDF (Reporte Directivo, EDS-99) ----------
-   Pedido explícito del usuario tras revisar 3 rondas del PDF real: nada de
-   "pantalla impresa" — un resumen ejecutivo de máximo 2 páginas. Existencias
-   y, desde la 4ª ronda, Producción por turno y línea (acotada a 7 días
-   naturales — ver renderProdTablePrint) sobreviven como tarjeta completa;
-   todo lo demás (KPIs, tendencia de costo, costo real de los últimos 6
-   cierres, producción acumulada) vive condensado en el bloque .print-only
-   de arriba — renderReporteEjecutivo() en el script principal. Las
-   secciones que ya no aportan nada distinto de eso se marcan .no-print
-   directo en su HTML (más simple y confiable que apagar cada gráfica/tabla
-   suelta por su cuenta — así se evita repetir el bug real que ya
-   encontramos aquí: "body.print-all .no-print" necesita la MISMA
-   especificidad que "body.print-all .role-section" (2 clases) y, a
-   especificidad igual, gana la regla que aparece DESPUÉS en la hoja de
-   estilos — por eso este bloque va abajo). ---------- */
-.print-only{display:none;}
-#generadoImpresion{font-size:.72rem;color:#666;margin-top:.2rem;}
-@media print{
-  @page{margin:1.1cm;}
-  body{background:#fff !important;color:#111 !important;font-size:.82rem;}
-  .bell-wrap, .role-switch, .btn-pdf, .updated-at, .role-badge, .session-row,
-  .card-actions .tbl-toggle, .tbl-toggle, .config-cards,
-  a[href*="artifact"],
-  .filter-row
-  { display:none !important; }
-
-  .print-only{display:block !important;}
-  .card{border:1px solid #ccc !important;box-shadow:none !important;break-inside:avoid;margin-bottom:8px !important;padding:.6rem .8rem !important;}
-  .card-head{margin-bottom:.5rem !important;}
-  .card-head h3{font-size:1rem !important;}
-  .card-sub{font-size:.72rem !important;}
-  body.print-all .role-section{ display:block !important; }
-  /* Ver comentario de arriba: misma especificidad que la regla de
-     ".role-section" — gana por ir después en la hoja de estilos. */
-  body.print-all .no-print{ display:none !important; }
-  /* Barras de colores de existencias — no aportan en blanco y negro; la
-     tabla compacta (#existListPrint, ya .print-only) trae las mismas
-     cifras. */
-  #existList{display:none !important;}
-  /* Producción por turno y línea (4ª ronda, ya no .no-print): todo
-     .prod-grid (gráficas SVG, títulos "Línea 1/2", campos "Objetivo/turno")
-     y la tabla variable de "Ver tabla" (rango de pantalla, no siempre 7
-     días) no sirven en papel — la tabla fija de 7 días (#prodTablePrint,
-     .print-only) ya trae ambas líneas en sus propias columnas. */
-  .prod-grid, .chart-table{display:none !important;}
-}
 </style>
 </head>
 <body>
 
 <div class="page">
 
-  <header class="topbar">
-    <div>
-      <div class="eyebrow">Tejaflex · Control de Materias Primas</div>
-      <h1>Panel de Control</h1>
-      <!-- EDS-99: solo visible al imprimir — momento real de generación
-           del PDF, útil si alguien archiva o compara dos reportes. -->
-      <div class="print-only" id="generadoImpresion"></div>
-    </div>
-    <div class="topbar-right">
-      <div class="bell-wrap">
-        <button class="bell-btn" id="bellBtn" onclick="toggleBell()" title="Alertas">
-          🔔<span class="bell-badge" id="bellBadge" hidden>0</span>
-        </button>
-        <div class="bell-dropdown" id="bellDropdown" hidden>
-          <div class="bell-dropdown-head">Alertas para tu vista</div>
-          <div id="bellList"></div>
-          <a class="bell-dropdown-foot" href="/alertas-configuracion.html">Ver todas en Configuración de Alertas →</a>
-        </div>
+  <div>
+    <a class="breadcrumb" id="breadcrumbLink" href="/panel-control.html?tab=admin">‹ Admin</a>
+    <header class="topbar">
+      <div>
+        <div class="eyebrow">Tejaflex · Control de Materias Primas</div>
+        <h1>Gestión de Roles</h1>
+        <p class="sub">Crea roles nuevos o edita los existentes, y elige exactamente a qué pantallas tiene acceso cada uno. El rol <b>Admin</b> es protegido — siempre ve todo el sistema, no se edita ni se elimina desde aquí.</p>
       </div>
-      <button class="btn-pdf" onclick="exportPDF()" title="Genera un PDF con todas las secciones, usando Imprimir del navegador">🖨 Exportar PDF</button>
-      <div class="role-switch" id="roleSwitch">
-        <button class="role-btn active" data-role="compras">Compras</button>
-        <button class="role-btn" data-role="calidad">Calidad y Producción</button>
-        <button class="role-btn" data-role="gerencia">Gerencia y Comercial</button>
-        <button class="role-btn" data-role="admin">Admin</button>
-      </div>
-      <div class="updated-at" id="updatedAt">Cargando…</div>
-    </div>
-  </header>
-
-  <div class="field-warn error" id="connError" hidden></div>
-
-  <!-- EDS-99: solo visible al imprimir (.print-only) — resumen de las 4
-       métricas que dependen del selector "Periodo de KPIs" (EDS-97),
-       mostrando último cierre y última semana lado a lado en vez de solo
-       el periodo que haya quedado seleccionado en pantalla. -->
-  <div class="print-only" id="resumenImpresion"></div>
-
-  <div class="filter-row">
-    <span class="filter-label">Tendencias</span>
-    <div class="range-pick" id="rangePick">
-      <button data-n="7">7 días</button>
-      <button class="on" data-n="14">14 días</button>
-      <button data-n="30">30 días</button>
-    </div>
+      <div class="session-row" id="sessionRow"></div>
+    </header>
   </div>
 
-  <!-- EDS-97: periodo de las tarjetas de % merma/producción (Calidad) y
-       costo real/kg/metro (Gerencia) — independiente del selector de
-       Tendencias de arriba, que controla las gráficas de abajo, no estas
-       tarjetas. "Último cierre" (default) es el comportamiento de EDS-90;
-       7/14/30 días agregan varios cierres con kpisPorRango. -->
-  <div class="filter-row">
-    <span class="filter-label">Periodo de KPIs</span>
-    <div class="range-pick" id="periodoKPIPick">
-      <button class="on" data-periodo="ultimo">Último cierre</button>
-      <button data-periodo="7">Última semana</button>
-      <button data-periodo="14">14 días</button>
-      <button data-periodo="30">Últimos 30 días</button>
+  <div class="kpi-row" id="kpiRow"></div>
+
+  <section class="card">
+    <div class="card-head">
+      <div>
+        <h3>Roles</h3>
+        <p class="card-sub">Marca las páginas a las que da acceso cada rol. Un usuario con ese rol podrá abrir cualquiera de las páginas marcadas — y solo esas.</p>
+      </div>
+      <button class="btn-add" onclick="addRole()">+ Nuevo rol</button>
     </div>
+
+    <div class="table-scroll">
+      <table class="roles">
+        <thead>
+          <tr>
+            <th>Nombre</th>
+            <th>Páginas con acceso</th>
+            <th>Estado</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="rolesBody"></tbody>
+      </table>
+    </div>
+
+    <ul class="footnotes">
+      <li>Gestión de Usuarios y Gestión de Roles quedan siempre fuera de esta lista — ningún rol personalizable puede recibir acceso a ellas, por seguridad (evita que un rol se auto-otorgue el control del sistema).</li>
+      <li>El rol <b>Admin</b> es protegido: tiene acceso a todo el sistema siempre, no aparece editable aquí y no se puede eliminar.</li>
+      <li>Un rol con usuarios <b>activos</b> asignados no se puede eliminar — reasígnalos desde Gestión de Usuarios primero. 🗑 lo desactiva (deja de poder asignarse a nadie nuevo) sin borrar su historial; un rol desactivado puede reactivarse desde la misma tabla.</li>
+    </ul>
+  </section>
+
+  <div class="field-warn error" id="saveError" hidden></div>
+
+  <div class="action-bar">
+    <span class="dirty-flag" id="dirtyFlag"><span class="dot"></span>Cambios sin guardar</span>
+    <button class="btn-ghost" id="btnReset" disabled onclick="resetRoles()">Restablecer</button>
+    <button class="btn-primary" id="btnSave" disabled onclick="saveRoles()">Guardar cambios</button>
   </div>
 
-  <!-- KPI: Compras. no-print: EDS-99 — pedido explícito del usuario, el
-       Reporte Directivo no debe pasar de 2 páginas; su contenido vive
-       condensado en el resumen ejecutivo (.print-only) de más arriba. -->
-  <div class="kpi-row role-section no-print" hidden data-roles="compras" id="kpiCompras"></div>
-
-  <!-- KPI: Calidad -->
-  <div class="kpi-row role-section no-print" hidden data-roles="calidad" id="kpiCalidad"></div>
-
-  <!-- KPI: Gerencia -->
-  <div class="kpi-row role-section no-print" hidden data-roles="gerencia" id="kpiGerencia"></div>
-
-  <!-- Existencias -->
-  <section class="card role-section" hidden data-roles="compras">
-    <div class="card-head">
-      <div>
-        <h3>Existencias y punto de reorden</h3>
-        <p class="card-sub">kg actuales por material vs. su punto de reorden (consumo diario teórico de fórmula × lead time + stock de seguridad) — mismo cálculo que Catálogo de Materiales, donde Admin ajusta cargas por turno, turnos por día y líneas activas.</p>
-      </div>
-      <div class="card-actions">
-        <div class="legend-inline">
-          <span class="legend-item"><span class="legend-dot" style="background:var(--danger)"></span>Crítico</span>
-          <span class="legend-item"><span class="legend-dot" style="background:var(--warning)"></span>Por vencer</span>
-          <span class="legend-item"><span class="legend-dot" style="background:var(--positive)"></span>Sano</span>
-          <span class="legend-item"><span class="legend-dot" style="background:var(--ink-faint)"></span>Sin punto de reorden fijo</span>
-        </div>
-        <button class="tbl-toggle" onclick="exportExistenciasCSV()">⬇ Excel (CSV)</button>
-      </div>
-    </div>
-    <a href="/entradas-costeo.html" style="display:inline-flex;align-items:center;gap:.35rem;font-size:.78rem;color:var(--accent-strong);text-decoration:none;margin-bottom:1rem;">🧾 Completar entradas con costeo →</a>
-    <div id="existList"></div>
-    <!-- EDS-99: las barras de colores de #existList no aportan en blanco y
-         negro sobre papel — tabla equivalente, solo visible al imprimir. -->
-    <div class="print-only" id="existListPrint"></div>
-    <div class="insight" id="existInsight"></div>
-  </section>
-
-  <!-- Producción por turno y línea. Ya no .no-print (4ª ronda EDS-99, pedido
-       explícito del usuario): vuelve a imprimirse como tarjeta completa,
-       acotada a los últimos 7 días naturales vía #prodTablePrint
-       (renderProdTablePrint) — las gráficas/objetivos/tabla de rango
-       variable son solo de pantalla, .no-print se maneja por CSS
-       (.chart-wrap/.objetivo-field/.chart-table en @media print). -->
-  <section class="card role-section" hidden data-roles="calidad">
-    <div class="card-head">
-      <div>
-        <h3>Producción por turno y línea</h3>
-        <p class="card-sub">Metros buenos producidos por turno. Columna clara = Turno 1, columna oscura = Turno 2.</p>
-      </div>
-      <div class="card-actions">
-        <button class="tbl-toggle" onclick="toggleTable('prodL1')" id="prodL1TblBtn">Ver tabla</button>
-        <button class="tbl-toggle" onclick="exportProduccionCSV()">⬇ Excel (CSV)</button>
-      </div>
-    </div>
-    <div class="prod-grid">
-      <div class="prod-col">
-        <div class="prod-col-head">
-          <span class="prod-col-title">Línea 1</span>
-          <label class="objetivo-field">Objetivo/turno
-            <input type="number" id="objTurnoL1" value="150"><span class="u">m</span>
-          </label>
-        </div>
-        <div class="chart-wrap" id="prodL1ChartWrap"></div>
-      </div>
-      <div class="prod-col">
-        <div class="prod-col-head">
-          <span class="prod-col-title">Línea 2</span>
-          <label class="objetivo-field">Objetivo/turno
-            <input type="number" id="objTurnoL2" value="150"><span class="u">m</span>
-          </label>
-        </div>
-        <div class="chart-wrap" id="prodL2ChartWrap"></div>
-      </div>
-    </div>
-    <div class="field-warn error" id="objSaveError" hidden></div>
-    <div class="chart-table" id="prodL1Table" hidden></div>
-    <!-- EDS-99 (4ª ronda): tabla fija de 7 días naturales, solo impresión —
-         independiente del rango que esté elegido en pantalla (prodRangeN). -->
-    <div class="print-only" id="prodTablePrint"></div>
-  </section>
-
-  <!-- Producción acumulada. no-print: su dato vive condensado como texto
-       plano en el resumen ejecutivo de arriba. -->
-  <section class="card role-section no-print" hidden data-roles="calidad">
-    <div class="card-head">
-      <div>
-        <h3>Producción acumulada</h3>
-        <p class="card-sub">Metros de ambas líneas y turnos, acumulados contra el objetivo del periodo.</p>
-      </div>
-    </div>
-    <div class="meter-row">
-      <div class="meter-block">
-        <div class="meter-head">
-          <span class="meter-title">Semana <span class="lock" id="semanaRangeLabel"></span></span>
-          <label class="objetivo-field">Objetivo
-            <input type="number" id="objSemana" value="4200"><span class="u">m</span>
-          </label>
-        </div>
-        <div class="exist-track" style="height:16px;">
-          <div class="exist-fill" id="semanaFill" style="width:0%"></div>
-          <div class="exist-tick" id="semanaTick" style="left:0%"></div>
-        </div>
-        <div class="meter-value"><b id="semanaValue">0 m</b><span id="semanaPct"></span></div>
-      </div>
-      <div class="meter-block">
-        <div class="meter-head">
-          <span class="meter-title">Mes <span class="lock" id="mesRangeLabel"></span></span>
-          <label class="objetivo-field">Objetivo
-            <input type="number" id="objMes" value="18000"><span class="u">m</span>
-          </label>
-        </div>
-        <div class="exist-track" style="height:16px;">
-          <div class="exist-fill" id="mesFill" style="width:0%"></div>
-          <div class="exist-tick" id="mesTick" style="left:0%"></div>
-        </div>
-        <div class="meter-value"><b id="mesValue">0 m</b><span id="mesPct"></span></div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Merma trend. no-print: su dato vive condensado en la tabla de
-       tendencia (.print-only) de arriba. -->
-  <section class="card role-section no-print" hidden data-roles="calidad">
-    <div class="card-head">
-      <div>
-        <h3>% de merma — tendencia</h3>
-        <p class="card-sub">Merma del día más reciente sobre el total consumido, contra la meta histórica.</p>
-      </div>
-      <div class="card-actions">
-        <button class="tbl-toggle" onclick="toggleTable('merma')" id="mermaTblBtn">Ver tabla</button>
-        <button class="tbl-toggle" onclick="exportMermaCSV()">⬇ Excel (CSV)</button>
-      </div>
-    </div>
-    <div class="chart-wrap" id="mermaChartWrap"></div>
-    <div class="chart-table" id="mermaTable" hidden></div>
-  </section>
-
-  <!-- Costo real vs estándar. no-print: su dato vive condensado como
-       texto plano en el resumen ejecutivo de arriba. -->
-  <section class="card role-section no-print" hidden data-roles="gerencia">
-    <div class="card-head">
-      <div>
-        <h3>Costo real vs. estándar</h3>
-        <p class="card-sub">Por kg y por metro (4 kg/m), día más reciente y tendencia.</p>
-      </div>
-      <div class="card-actions">
-        <button class="tbl-toggle" onclick="toggleTable('costo')" id="costoTblBtn">Ver tabla</button>
-        <button class="tbl-toggle" onclick="exportCostoCSV()">⬇ Excel (CSV)</button>
-      </div>
-    </div>
-    <div class="stat-pair" id="costoStats"></div>
-    <div class="chart-wrap" id="costoChartWrap"></div>
-    <div class="chart-table" id="costoTable" hidden></div>
-  </section>
-
-  <!-- Admin config. no-print: puro menú de navegación, sin datos. -->
-  <section class="card role-section no-print" hidden data-roles="admin">
-    <div class="card-head">
-      <div>
-        <h3>Configuración</h3>
-        <p class="card-sub">Solo el rol Admin puede editar costos estándar y puntos de reorden manuales.</p>
-      </div>
-    </div>
-    <div class="config-cards">
-      <a class="config-card live" href="/catalogo-materiales.html">
-        <span class="t">Catálogo de Materiales →</span>
-        <span class="s">Costo estándar, lead time, stock de seguridad y punto de reorden</span>
-      </a>
-      <a class="config-card live" href="/correccion-capturas.html">
-        <span class="t">Corrección de Capturas →</span>
-        <span class="s">Editar un cierre de turno o entrada de material de los últimos 10 días</span>
-      </a>
-      <a class="config-card live" href="/parametros-produccion.html">
-        <span class="t">Parámetros de Producción y Fórmula →</span>
-        <span class="s">Cargas por turno, peso teórico y la fórmula fija por carga</span>
-      </a>
-      <a class="config-card live" href="/gestion-usuarios.html">
-        <span class="t">Gestión de Usuarios →</span>
-        <span class="s">Nombre, usuario, contraseña y rol de cada persona</span>
-      </a>
-      <a class="config-card live" href="/gestion-roles.html">
-        <span class="t">Gestión de Roles →</span>
-        <span class="s">Crear o editar roles y elegir a qué pantallas tiene acceso cada uno</span>
-      </a>
-      <a class="config-card live" href="/entradas-costeo.html">
-        <span class="t">Entradas con Costeo →</span>
-        <span class="s">Costo unitario, proveedor, folio y capas PEPS vigentes</span>
-      </a>
-      <a class="config-card live" href="/reporte-diario.html">
-        <span class="t">Reporte Diario →</span>
-        <span class="s">Envío automático por correo y WhatsApp — hora, destinatarios, historial</span>
-      </a>
-      <a class="config-card live" href="/ajustes-inventario.html">
-        <span class="t">Ajustes de Inventario →</span>
-        <span class="s">Entradas y salidas manuales (muestras, faltantes) + reporte por rango de fechas</span>
-      </a>
-      <a class="config-card live" href="/alertas-configuracion.html">
-        <span class="t">Configuración de Alertas →</span>
-        <span class="s">Reglas que avisan solas — umbral, destinatarios por rol y canal de cada una</span>
-      </a>
-    </div>
-  </section>
+  <footer class="page-foot">
+    Crear rol, editar nombre/páginas, guardar cambios y desactivar/reactivar son operaciones reales contra la base de datos — el acceso que cada rol otorga se aplica tanto en el frontend como en cada función del backend (EDS-103, roles personalizables).
+  </footer>
 
 </div>
+
+<div class="modal-overlay" id="modalOverlay" hidden>
+  <div class="modal-box" id="modalBox"></div>
+</div>
+
+<div class="toast" id="toast">✓ Roles actualizados</div>
 
 <script src="/config.js?v=2026081001"></script>
 <script type="module" src="/js/convex-client.js?v=2026081802"></script>
 <script type="module">
-/* Este script pasó a type="module" solo para poder usar el
-   top-level await de Session.requireAcceso (Épica 1 / EDS-106). Las
-   funciones que el HTML llama por onclick="" se exponen a window al final
-   del archivo — un module normal no las haría globales por sí solo. */
 /* ============================================================
-   SESIÓN (autenticación real — Épica 1) — primero que nada: todo lo
-   demás depende de sessionUser/api ya resueltos.
+   SESIÓN (autenticación real — Épica 1). Session.requireRole
+   redirige a /login-acceso.html si no hay sesión o el rol no
+   está permitido; el resto del script de la página solo corre
+   si esta promesa se resuelve. Gestión de Roles se queda en
+   requireRole(['admin']) fijo a propósito (EDS-106/EDS-107) —
+   no depende del sistema dinámico de roles que ella misma
+   administra (mismo motivo que Gestión de Usuarios; ambas están
+   en PAGINAS_NO_CONFIGURABLES, ver convex/lib/paginas.ts).
    ============================================================ */
-const LOGIN_URL = '/login-acceso.html';
-
-// Operador no tiene vista de Panel de Control (su pantalla es Cierre de
-// Turno) — si de algún modo llega aquí, requireAcceso lo manda a login, y
-// login-acceso.html ya lo redirige de vuelta a su pantalla correcta.
-const sessionUser = await window.Session.requireAcceso('panel-control');
-const api = window.api; // expuesto por session.js (bundleado) — ver su comentario
-
-// Hallazgo de la auditoría manual de PR6 (2026-08-10): sessionUser.nombre
-// se interpola en innerHTML sin escapar — mismo patrón sin escapar que en
-// catalogo-materiales.html/parametros-produccion.html, presente en el
-// badge de sesión de TODA página conectada (el fix de XSS de PR7 solo
-// cubrió tablas/modales, nunca este bloque).
+// Este módulo es independiente del segundo <script> de la página (scope
+// propio, sin variables compartidas) — se duplica un escape mínimo aquí
+// en vez de depender del escapeHtml() de allá. Hallazgo de la auditoría
+// manual de PR6 (2026-08-10): el mismo patrón sin escapar en catalogo-
+// materiales.html/parametros-produccion.html también existía AQUÍ (y en
+// toda página conectada) — user.nombre viene de Convex/sesión y se
+// interpola en innerHTML sin escapar. El fix de XSS de PR7 solo cubrió
+// tablas/modales, nunca este bloque de sesión.
 function escapeHtmlSesion(str){
   return String(str ?? '').replace(/[&<>"']/g, c => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   }[c]));
 }
-function renderSessionRow(){
-  const row = document.createElement('div');
-  row.className = 'session-row';
-  row.innerHTML = `<span class="role-badge">🔒 ${escapeHtmlSesion(sessionUser.nombre)} · ${escapeHtmlSesion(sessionUser.rolNombre)}</span><a class="logout-link" href="#" id="logoutLink">Cerrar sesión</a>`;
-  document.querySelector('.topbar-right').prepend(row);
+// Puerta explícita de autorización: se guarda la promesa en window para que
+// el segundo <script type="module"> de esta página (con la lógica
+// principal) la espere explícitamente en su primera línea, en vez de
+// depender solo del orden de documento entre módulos independientes.
+window.__authReady = window.Session.requireRole(['admin']);
+const user = await window.__authReady;
+window.usuarioSesion = user.nombre;
+window.rolSesion = user.rol;
+// _id (inmutable) de la sesión actual — usado más abajo para detectar cuándo
+// un admin está regenerando SU PROPIA contraseña y avisarle que eso cierra
+// su sesión de inmediato (ver regenerarPwd/mostrarPasswordModal). Comparar
+// por `_id` en vez de por `usuario`: el `usuario` es editable en esta misma
+// pantalla (batch de arriba), así que compararlo se rompía si el admin se
+// renombraba a sí mismo antes de regenerar su password (hallazgo de
+// CodeRabbit sobre el fix anterior — un guard de "soy yo" tiene que anclarse
+// a algo que no cambia con la propia edición que se está protegiendo).
+window.miUsuarioId = user._id;
+const row = document.getElementById('sessionRow');
+if (row) {
+  row.innerHTML = `<span class="role-badge">🔒 ${escapeHtmlSesion(user.nombre)} · ${escapeHtmlSesion(user.rolNombre)}</span><a class="logout-link" href="#" id="logoutLink">Cerrar sesión</a>`;
   document.getElementById('logoutLink').addEventListener('click', async (e) => {
     e.preventDefault();
     await window.Session.logout();
-    window.location.href = LOGIN_URL;
+    window.location.href = '/login-acceso.html';
   });
 }
-renderSessionRow();
+</script>
+<script type="module">
+// Puerta explícita: este módulo depende del de sesión de arriba, no solo
+// del orden de documento — espera la MISMA promesa que ya se está
+// resolviendo ahí (no dispara un requireRole nuevo).
+await window.__authReady;
+const api = window.api; // expuesto por session.js (bundleado) — ver su comentario
 
-/* ============================================================
-   ESTADO — se llena con datos reales de Convex (cargarTodo, al final
-   del archivo), nunca hardcodeado.
-   ============================================================ */
-let KPI = null;                          // api.dashboard.getKPIsHoy
-let OBJETIVOS = { turnoL1:0, turnoL2:0, semana:0, mes:0 }; // api.dashboard.getObjetivos
-let DATES30 = [];                        // ["DD/MM", ...] × 30, mismo índice que PROD_SERIE/MERMA_30/COSTO_30
-let PROD_SERIE = [];                     // api.dashboard.produccionPorRango({dias:30})
-let MERMA_30 = [];                       // api.dashboard.tendenciaMerma({dias:30}).map(d=>d.pctMerma)
-let COSTO_30 = [];                       // api.dashboard.tendenciaCosto({dias:30}).map(d=>d.costoRealPorKg)
-const MERMA_META = 5.0; // referencia fija — no hay una meta de merma persistida todavía (solo metas de producción, tarea 6.5)
-let prodRangeN = 14;
+// Catálogo LOCAL de páginas configurables — copia intencional de
+// convex/lib/paginas.ts::PAGINAS menos PAGINAS_NO_CONFIGURABLES
+// ('gestion-usuarios','gestion-roles'). No hay endpoint que devuelva
+// esta lista con labels legibles (el backend solo valida slugs, ver
+// roles.ts::validarPaginas), así que se mantiene aquí a mano — si se
+// agrega una pantalla nueva al catálogo del backend, hay que reflejarla
+// aquí también (el backend igual la rechazaría si se intentara asignar
+// sin agregarla acá, así que no hay riesgo de silenciosamente aceptar
+// una página que esta UI no ofrece).
+const PAGINAS = [
+  {slug:'panel-control', label:'Panel de Control'},
+  {slug:'catalogo-materiales', label:'Catálogo de Materiales'},
+  {slug:'parametros-produccion', label:'Parámetros de Producción'},
+  {slug:'entradas-costeo', label:'Entradas con Costeo'},
+  {slug:'correccion-capturas', label:'Corrección de Capturas'},
+  {slug:'alertas-configuracion', label:'Configuración de Alertas'},
+  {slug:'reporte-diario', label:'Reporte Diario'},
+  {slug:'ajustes-inventario', label:'Ajustes de Inventario'},
+  {slug:'cierre-turno', label:'Cierre de Turno'},
+];
 
-// EDS-97: 'ultimo' (default) usa KPI.*UltimoCierre, ya cargado — sin
-// refetch. '7'/'14'/'30' llaman kpisPorRango({dias}) la primera vez que se
-// eligen y quedan en caché (por eso el objeto, no solo el último valor):
-// cambiar de periodo varias veces no debe volver a pedirle al servidor lo
-// mismo dos veces en la misma sesión de la página.
-let periodoKPI = 'ultimo';
-const KPI_RANGO_CACHE = {}; // { [dias:number]: resultado de kpisPorRango }
-let COSTO_ULTIMOS_6_CIERRES = null; // api.dashboard.costoPromedioUltimosCierres({n:6}) — EDS-99, 4ª ronda
+// ROLES se llena con datos reales de Convex (cargarRoles, más abajo) —
+// nunca hardcodeado. CAMBIOS acumula solo las ediciones de nombre/páginas
+// de roles NO protegidos pendientes de "Guardar cambios" (batch atómico,
+// mismo patrón que gestion-usuarios.html); crear/eliminar/reactivar son
+// acciones inmediatas, cada una con su propia confirmación.
+let ROLES = [];
+let CAMBIOS = {};
+let dirty = false;
 
-const fmt = n => Math.round(n).toLocaleString('es-MX');
-const fmtMoney = n => n.toLocaleString('es-MX', {minimumFractionDigits:2, maximumFractionDigits:2});
-const fmtPct = n => (n>0?'+':'') + n.toFixed(1) + '%';
-function isoADisplayCorto(iso){ const [, m, d] = iso.split('-'); return `${d}/${m}`; }
-function isoADisplayLargo(iso){ const [y, m, d] = iso.split('-'); return `${d}/${m}/${y}`; }
-// EDS-99: guiones, no "/" — "/" es separador de carpeta y los navegadores
-// lo tratarían como parte de una ruta al sugerir el nombre del PDF.
-function isoParaArchivo(iso){ const [y, m, d] = iso.split('-'); return `${d}-${m}-${y}`; }
-
-// Producción por turno/línea — antes un generador determinístico
-// ilustrativo, ahora una simple consulta al arreglo real ya cargado
-// (PROD_SERIE, uno por día en el mismo orden que DATES30/MERMA_30/COSTO_30).
-function metrosTurno(dayIdx, linea, turno){ return PROD_SERIE[dayIdx]?.['linea'+linea+'Turno'+turno] ?? 0; }
-function metrosLineaDia(dayIdx, linea){ return metrosTurno(dayIdx,linea,1) + metrosTurno(dayIdx,linea,2); }
-function metrosPlantaDia(dayIdx){ return metrosLineaDia(dayIdx,1) + metrosLineaDia(dayIdx,2); }
-
-/* ============================================================
-   RENDER: KPIs
-   ============================================================ */
-function sparkPath(values, w, h){
-  const min = Math.min(...values), max = Math.max(...values);
-  const span = (max-min)||1;
-  const pts = values.map((v,i)=>[ (i/(values.length-1))*w, h - ((v-min)/span)*h ]);
-  return {d: pts.map((p,i)=>(i===0?'M':'L')+p[0].toFixed(1)+','+p[1].toFixed(1)).join(' '), last: pts[pts.length-1]};
-}
-function spark(values){
-  const w=90,h=26;
-  const {d,last} = sparkPath(values, w, h);
-  return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
-    <path d="${d}" fill="none" stroke="var(--ink-faint)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-    <circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="3" fill="var(--data)"/>
-  </svg>`;
+// Hallazgo de CodeRabbit en PR7 (gestion-usuarios.html): nombre/_id se
+// interpolaban sin escapar en HTML armado a mano (innerHTML) — un nombre
+// con `"` o `<` rompía el atributo/tag e inyectaba markup arbitrario. Un
+// solo helper, usado en TODO punto donde un valor de la BD se interpola
+// en una plantilla HTML.
+function escapeHtml(str){
+  return String(str ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
 }
 
-// EDS-100 — pedido explícito del usuario: un día sin actividad real (todas
-// las líneas y turnos en 0 — domingo, festivo, o simplemente no se
-// trabajó, sin importar el día de la semana ni depender de un calendario
-// de festivos) no debe contarse en ningún cálculo/promedio de tendencia;
-// se asume que ese día fue no laborable. Recorre hacia atrás sobre los 30
-// días ya cargados (mismo índice que DATES30/MERMA_30/COSTO_30/PROD_SERIE)
-// y devuelve los índices de los últimos `n` días CON producción real,
-// sin importar cuántos días naturales tuvo que saltar para juntarlos.
-// `finExclusivo` (índice, no inclusivo) permite pedir "los n días de
-// actividad ANTES de tal punto" para el grupo de comparación.
-// Señal de actividad: metrosPlantaDia(i) > 0 (producción real), NUNCA
-// costoRealPorKg === 0 — un día que solo usó Triturado (material interno,
-// $0/kg por regla de negocio) sí tuvo actividad real aunque su costo sea
-// $0, y se excluiría incorrectamente si se usara el costo como señal.
-function ultimosDiasConActividad(n, finExclusivo){
-  const idxs = [];
-  for (let i = (finExclusivo ?? DATES30.length) - 1; i >= 0 && idxs.length < n; i--) {
-    if (metrosPlantaDia(i) > 0) idxs.push(i);
+function checkboxesHtml(rol, disabled){
+  return PAGINAS.map(p => `
+    <label class="pagina-check${disabled ? ' disabled' : ''}">
+      <input type="checkbox" value="${p.slug}" ${rol.paginas.includes(p.slug) ? 'checked' : ''} ${disabled ? 'disabled' : ''}>
+      <span>${p.label}</span>
+    </label>`).join('');
+}
+
+function rowHtml(r){
+  const id = escapeHtml(r._id);
+  const nombre = escapeHtml(r.nombre);
+  if(r.protegido){
+    return `<tr class="protegido" data-id="${id}">
+      <td><div class="field nombre"><input type="text" value="${nombre}" disabled></div></td>
+      <td>
+        <div class="paginas-grid">${checkboxesHtml(r, true)}</div>
+        <span class="protegido-note">🔒 Rol protegido — siempre tiene acceso a todo el sistema, sin importar qué páginas muestre esta lista.</span>
+      </td>
+      <td><span class="protegido-badge">Protegido</span></td>
+      <td></td>
+    </tr>`;
   }
-  return idxs.reverse(); // cronológico, del más viejo al más reciente
-}
-
-// Tendencia de costo de los últimos 5 días CON actividad vs. los 5
-// anteriores (también con actividad) — cálculo real simple (no una
-// etiqueta fabricada) a partir de COSTO_30 ya cargado.
-// Hallazgo de CodeRabbit (PR EDS-100, 2ª vuelta): exigir solo
-// anteriores.length>0 no bastaba — con 1 o 2 días de actividad (no 0,
-// pero tampoco 5) igual se calculaba un promedio de muestra chica que
-// podía coincidir en "Estable" por casualidad, y el detalle seguía
-// diciendo "los últimos 5 días" cuando en realidad comparó menos. Ahora
-// se exige EXACTAMENTE 5 días con actividad de cada lado — si cualquiera
-// de los dos grupos queda incompleto, se reporta "Datos insuficientes"
-// en vez de fabricar (o mal etiquetar) una tendencia.
-function tendenciaCostoTexto(){
-  const recientes = ultimosDiasConActividad(5);
-  if(recientes.length < 5) return { texto:'Datos insuficientes', color:'var(--ink-faint)', detalle:'Todavía no hay 5 días con actividad recientes para calcular la tendencia.' };
-  const anteriores = ultimosDiasConActividad(5, recientes[0]);
-  if(anteriores.length < 5) return { texto:'Datos insuficientes', color:'var(--ink-faint)', detalle:'Todavía no hay 5 días con actividad anteriores para comparar la tendencia.' };
-  const avg = idxs => idxs.reduce((s,i)=>s+COSTO_30[i],0)/idxs.length;
-  const avgUlt = avg(recientes);
-  const avgAnt = avg(anteriores);
-  const delta = avgUlt - avgAnt;
-  if(Math.abs(delta) < 0.01) return { texto:'Estable', color:'var(--ink)', detalle:'Sin cambio significativo en los últimos 5 días con actividad.' };
-  if(delta > 0) return { texto:'Repunte reciente', color:'var(--danger)', detalle:`Costo real subió $${delta.toFixed(2)}/kg en promedio en los últimos 5 días con actividad vs. los 5 anteriores.` };
-  return { texto:'Mejora reciente', color:'var(--positive)', detalle:`Costo real bajó $${Math.abs(delta).toFixed(2)}/kg en promedio en los últimos 5 días con actividad vs. los 5 anteriores.` };
-}
-
-// EDS-75: reemplaza el texto estático "Actualizado con el cierre de
-// Turno 2 · 07/08/2026" — ahora viene de KPI.ultimoCierre (real, del
-// backend). Si todavía no hay ningún cierre capturado (KPI.ultimoCierre
-// === null), no inventa una fecha.
-function renderUltimoCierre(){
-  const u = KPI.ultimoCierre;
-  document.getElementById('updatedAt').textContent = u
-    ? `Actualizado con el cierre de Turno ${u.turno} · ${isoADisplayLargo(u.fecha)}`
-    : 'Sin cierres capturados todavía';
-}
-
-// EDS-97: fuente de las 4 tarjetas de % merma/producción/costo real según
-// el periodo elegido. 'ultimo' usa los campos *UltimoCierre de KPI (ya
-// cargados por getKPIsHoy, EDS-90); un número de días usa lo que haya en
-// caché de kpisPorRango (cargarPeriodoKPI ya lo puso ahí antes de llamar a
-// renderKPIs — nunca llega aquí sin datos).
-function datosKPIPeriodo(){
-  if (periodoKPI === 'ultimo') {
-    return {
-      pctMerma: KPI.pctMermaUltimoCierre,
-      produccionMetros: KPI.produccionUltimoCierreMetros,
-      costoRealPorKg: KPI.costoRealPorKgUltimoCierre,
-      costoRealPorMetro: KPI.costoRealPorMetroUltimoCierre,
-      etiqueta: KPI.ultimoCierre ? `último cierre (${isoADisplayCorto(KPI.ultimoCierre.fecha)})` : 'sin cierres',
-    };
+  if(!r.activo){
+    return `<tr class="inactivo" data-id="${id}">
+      <td><div class="field nombre"><input type="text" value="${nombre}" disabled></div></td>
+      <td><div class="paginas-grid">${checkboxesHtml(r, true)}</div></td>
+      <td><span class="inactivo-badge">Desactivado</span></td>
+      <td><button class="btn-reactivar" onclick="reactivar('${id}')" title="Reactivar rol">↺ Reactivar</button></td>
+    </tr>`;
   }
-  const r = KPI_RANGO_CACHE[periodoKPI];
-  const etiquetas = { 7: 'última semana', 14: 'últimos 14 días', 30: 'últimos 30 días' };
-  return {
-    pctMerma: r.pctMerma,
-    produccionMetros: r.produccionMetros,
-    costoRealPorKg: r.costoRealPorKg,
-    costoRealPorMetro: r.costoRealPorMetro,
-    etiqueta: etiquetas[periodoKPI],
-  };
+  return `<tr data-id="${id}">
+    <td><div class="field nombre"><input type="text" value="${nombre}" data-field="nombre" placeholder="Nombre del rol"></div></td>
+    <td><div class="paginas-grid" data-field="paginas">${checkboxesHtml(r, false)}</div></td>
+    <td><span class="activo-badge">Activo</span></td>
+    <td><button class="btn-delete" onclick="confirmarEliminar('${id}')" title="Eliminar rol">🗑</button></td>
+  </tr>`;
 }
 
-function renderKPIs(){
-  const materialesConReorden = KPI.materiales.filter(m=>m.reorderKg!==null);
-  const nCrit = materialesConReorden.filter(m=>m.status==='crit').length;
-  const nWarn = materialesConReorden.filter(m=>m.status==='warn').length;
-  const masUrgente = materialesConReorden.filter(m=>m.status==='crit').sort((a,b)=>(a.coberturaDias??Infinity)-(b.coberturaDias??Infinity))[0];
-  const periodo = datosKPIPeriodo();
-  const mermaHoy = periodo.pctMerma;
-  const costoRealKg = periodo.costoRealPorKg;
-  const costoRealM = periodo.costoRealPorMetro;
-  const costoEstandarKg = KPI.costoEstandarPorKg;
-  const costoEstandarM = KPI.costoEstandarPorMetro;
-  const semanaTotal = Array.from({length:7},(_,i)=>metrosPlantaDia(23+i)).reduce((a,b)=>a+b,0);
-  const semanaPct = OBJETIVOS.semana > 0 ? semanaTotal/OBJETIVOS.semana*100 : 0;
-  const tendencia = tendenciaCostoTexto();
-  // EDS-90/EDS-97: "hoy" nunca tiene cierres capturados el mismo día en la
-  // operación real — estas tarjetas muestran el periodo elegido arriba
-  // (último cierre por default) y lo dejan explícito en la etiqueta.
-  const fechaRef = periodo.etiqueta;
+function renderTable(){
+  document.getElementById('rolesBody').innerHTML = ROLES.map(rowHtml).join('');
+}
 
-  document.getElementById('kpiCompras').innerHTML = `
+function renderKPI(){
+  const activos = ROLES.filter(r=>r.activo);
+  const inactivos = ROLES.length - activos.length;
+  const protegidos = activos.filter(r=>r.protegido).length;
+  // El rol admin (protegido) trae las 11 páginas del catálogo COMPLETO del
+  // backend, incluidas gestion-usuarios/gestion-roles — que no forman
+  // parte de este PAGINAS local de 9 configurables (a propósito, ver
+  // arriba). Sin este filtro, la unión podía superar el denominador
+  // (encontrado real probando esta pantalla: mostraba "11 / 9").
+  const slugsConfigurables = new Set(PAGINAS.map(p=>p.slug));
+  const totalPaginas = new Set(activos.flatMap(r=>r.paginas).filter(p=>slugsConfigurables.has(p))).size;
+  document.getElementById('kpiRow').innerHTML = `
     <div class="stat-tile">
-      <span class="stat-label">Valor total de inventario</span>
-      <span class="stat-value">$${fmt(KPI.valorInventarioTotal)}<span class="unit">MXN</span></span>
-      <span class="stat-sub">${KPI.materiales.length} materias primas, costo estándar de catálogo</span>
-    </div>
-    <div class="stat-tile">
-      <div class="stat-row"><span class="stat-label">Materiales en alerta</span><span class="stat-delta ${(nCrit+nWarn)>0?'bad':'good'}">${nCrit+nWarn} de ${materialesConReorden.length}</span></div>
-      <span class="stat-value">${nCrit}<span class="unit">críticos</span></span>
-      <span class="stat-sub">${nWarn} más por vencer su punto de reorden</span>
-    </div>
-    <div class="stat-tile">
-      <span class="stat-label">Más urgente de reordenar</span>
-      ${masUrgente ? `
-        <span class="stat-value" style="font-size:1.15rem;">${masUrgente.nombre} <small style="display:block;font-family:'IBM Plex Sans',sans-serif;font-size:.72rem;color:var(--ink-faint);font-weight:400;">${masUrgente.variante}</small></span>
-        <span class="stat-sub">${masUrgente.coberturaDias!==null ? `Cobertura: ${masUrgente.coberturaDias.toFixed(0)} días` : 'Sin kg por carga en la fórmula'}</span>
-      ` : `
-        <span class="stat-value" style="font-size:1.15rem;">— <small style="display:block;font-family:'IBM Plex Sans',sans-serif;font-size:.72rem;color:var(--ink-faint);font-weight:400;">Sin materiales críticos</small></span>
-        <span class="stat-sub">Todo por arriba de su punto de reorden</span>
-      `}
-    </div>`;
-
-  document.getElementById('kpiCalidad').innerHTML = `
-    <div class="stat-tile stat-tile-periodo">
-      <div class="stat-row"><span class="stat-label">% merma — ${fechaRef}</span>${spark(MERMA_30.slice(-12))}</div>
-      <span class="stat-value">${mermaHoy.toFixed(1)}<span class="unit">%</span></span>
-      <span class="stat-delta ${mermaHoy>MERMA_META?'bad':'good'}" style="width:fit-content;">${mermaHoy>MERMA_META?'+':''}${(mermaHoy-MERMA_META).toFixed(1)}pp vs. meta ${MERMA_META.toFixed(1)}%</span>
-    </div>
-    <div class="stat-tile stat-tile-periodo">
-      <span class="stat-label">Producción — ${fechaRef}</span>
-      <span class="stat-value">${fmt(periodo.produccionMetros)}<span class="unit">m</span></span>
-      <span class="stat-sub">Ambas líneas y turnos · objetivo ${fmt((OBJETIVOS.turnoL1+OBJETIVOS.turnoL2)*2)} m/día en planta</span>
+      <span class="stat-label">Roles activos</span>
+      <span class="stat-value">${activos.length}</span>
+      <span class="stat-sub">${inactivos>0 ? `${inactivos} desactivado(s)` : 'Sin roles desactivados'}</span>
     </div>
     <div class="stat-tile">
-      <span class="stat-label">Semana vs. objetivo</span>
-      <span class="stat-value">${fmt(semanaPct)}<span class="unit">%</span></span>
-      <span class="stat-sub">Ver detalle en Producción acumulada</span>
-    </div>`;
-
-  document.getElementById('kpiGerencia').innerHTML = `
-    <div class="stat-tile stat-tile-periodo">
-      <div class="stat-row"><span class="stat-label">Costo real / kg — ${fechaRef}</span>${spark(COSTO_30.slice(-12))}</div>
-      <span class="stat-value">$${fmtMoney(costoRealKg)}</span>
-      <span class="stat-delta ${costoEstandarKg>0 && costoRealKg>costoEstandarKg?'bad':'good'}" style="width:fit-content;">${costoEstandarKg>0?fmtPct((costoRealKg/costoEstandarKg-1)*100)+' vs. estándar $'+fmtMoney(costoEstandarKg):'sin estándar configurado'}</span>
-    </div>
-    <div class="stat-tile stat-tile-periodo">
-      <span class="stat-label">Costo real / metro — ${fechaRef}</span>
-      <span class="stat-value">$${fmtMoney(costoRealM)}</span>
-      <span class="stat-delta ${costoEstandarM>0 && costoRealM>costoEstandarM?'bad':'good'}" style="width:fit-content;">${costoEstandarM>0?fmtPct((costoRealM/costoEstandarM-1)*100)+' vs. estándar $'+fmtMoney(costoEstandarM):'sin estándar configurado'}</span>
+      <span class="stat-label">Personalizables</span>
+      <span class="stat-value">${activos.length - protegidos}</span>
+      <span class="stat-sub">Editables desde esta pantalla</span>
     </div>
     <div class="stat-tile">
-      <span class="stat-label">Tendencia 5 días</span>
-      <span class="stat-value" style="font-size:1.05rem;color:${tendencia.color};">${tendencia.texto}</span>
-      <span class="stat-sub">${tendencia.detalle}</span>
+      <span class="stat-label">Protegidos</span>
+      <span class="stat-value">${protegidos}</span>
+      <span class="stat-sub">Admin — acceso total fijo</span>
+    </div>
+    <div class="stat-tile">
+      <span class="stat-label">Páginas en uso</span>
+      <span class="stat-value">${totalPaginas}<span class="unit">/ ${PAGINAS.length}</span></span>
+      <span class="stat-sub">Cubiertas por al menos un rol activo</span>
     </div>`;
 }
 
-// EDS-99 — pedido explícito del usuario, tras 3 rondas de revisión sobre
-// el PDF real: nada de "pantalla completa impresa" — un resumen ejecutivo
-// de máximo 2 páginas. Arma el contenido condensado que reemplaza a las
-// secciones ahora .no-print (KPIs de Compras/Calidad/Gerencia, producción
-// acumulada) — Existencias y, desde la 4ª ronda, Producción por turno y
-// línea (acotada a 7 días) siguen siendo tarjetas completas aparte. La 4ª
-// ronda además quitó % Merma y Producción de la tabla de tendencia (la
-// primera por pedido explícito, la segunda por redundancia con la tarjeta
-// de Producción restaurada) y reemplazó "costo vs. estándar" por el
-// promedio real de los últimos 6 cierres. Requiere KPI_RANGO_CACHE[7] y
-// COSTO_ULTIMOS_6_CIERRES precargados (cargarTodo lo hace siempre, no solo
-// cuando alguien toca el selector de pantalla) — si por lo que sea
-// faltaran, muestra "—" en vez de reventar el PDF.
-function renderReporteEjecutivo(){
-  const fechaCierre = KPI.ultimoCierre ? isoADisplayLargo(KPI.ultimoCierre.fecha) : 'sin cierres';
-  const semana = KPI_RANGO_CACHE[7];
-
-  // Último cierre vs. última semana — las 4 métricas de periodo (EDS-97).
-  const filas = [
-    ['% Merma', `${KPI.pctMermaUltimoCierre.toFixed(1)}%`, semana ? `${semana.pctMerma.toFixed(1)}%` : '—'],
-    ['Producción', `${fmt(KPI.produccionUltimoCierreMetros)} m`, semana ? `${fmt(semana.produccionMetros)} m` : '—'],
-    ['Costo real / kg', `$${fmtMoney(KPI.costoRealPorKgUltimoCierre)}`, semana ? `$${fmtMoney(semana.costoRealPorKg)}` : '—'],
-    ['Costo real / metro', `$${fmtMoney(KPI.costoRealPorMetroUltimoCierre)}`, semana ? `$${fmtMoney(semana.costoRealPorMetro)}` : '—'],
-  ];
-  const resumenHtml = `
-    <table class="print-table">
-      <caption>Resumen — Último cierre (${fechaCierre}) vs. Última semana</caption>
-      <thead><tr><th>Métrica</th><th>Último cierre</th><th>Última semana</th></tr></thead>
-      <tbody>${filas.map(([nombre,uc,sem])=>`<tr><td>${nombre}</td><td class="mono">${uc}</td><td class="mono">${sem}</td></tr>`).join('')}</tbody>
-    </table>`;
-
-  // Mismo dato que las 3 tarjetas de Compras (valor inventario, alertas,
-  // más urgente), condensado en una línea — mismo cálculo que renderKPIs().
-  const materialesConReorden = KPI.materiales.filter(m=>m.reorderKg!==null);
-  const nCrit = materialesConReorden.filter(m=>m.status==='crit').length;
-  const nWarn = materialesConReorden.filter(m=>m.status==='warn').length;
-  const masUrgente = materialesConReorden.filter(m=>m.status==='crit').sort((a,b)=>(a.coberturaDias??Infinity)-(b.coberturaDias??Infinity))[0];
-  const inventarioHtml = `<p class="print-line">
-    <b>Inventario:</b> $${fmt(KPI.valorInventarioTotal)} MXN (${KPI.materiales.length} materias primas) ·
-    <b>Alertas:</b> ${nCrit} críticos, ${nWarn} por vencer de ${materialesConReorden.length} ·
-    <b>Más urgente:</b> ${masUrgente ? `${masUrgente.nombre} (${masUrgente.coberturaDias!==null ? masUrgente.coberturaDias.toFixed(0)+' días de cobertura' : 'sin fórmula'})` : 'ninguno'}
-  </p>`;
-
-  // Tendencia diaria de costo real — últimos 7 días naturales. % Merma y
-  // Producción salieron de esta tabla en la 4ª ronda (pedido explícito del
-  // usuario: "quitar toda la tabla de porcentaje de merma"; Producción
-  // quedó redundante con la tarjeta "Producción por turno y línea", que
-  // volvió a imprimirse completa — ver renderProdTablePrint).
-  const N = 7;
-  const dates = DATES30.slice(-N);
-  const costoN = COSTO_30.slice(-N);
-  const tendenciaHtml = `
-    <table class="print-table">
-      <caption>Costo real / kg — tendencia diaria (últimos 7 días)</caption>
-      <thead><tr><th>Fecha</th><th>Costo real ($/kg)</th></tr></thead>
-      <tbody>${dates.map((d,i)=>`<tr><td>${d}</td><td class="mono">$${fmtMoney(costoN[i])}</td></tr>`).join('')}</tbody>
-    </table>`;
-
-  // 4ª ronda (pedido explícito del usuario): ya no "real vs. estándar" —
-  // promedio real de los últimos 6 CIERRES (no días naturales, ver
-  // costoPromedioUltimosCierres en dashboard.ts). Requiere
-  // COSTO_ULTIMOS_6_CIERRES precargado en cargarTodo(); si por lo que sea
-  // faltara, muestra "—" en vez de reventar el PDF (mismo criterio que el
-  // resto de este reporte).
-  const seis = COSTO_ULTIMOS_6_CIERRES;
-  const costoHtml = `<p class="print-line">
-    <b>Costo real / kg</b> (promedio últimos ${seis ? seis.n : 6} cierres): ${seis ? '$'+fmtMoney(seis.costoRealPorKg) : '—'} ·
-    <b>Costo real / metro</b> (promedio últimos ${seis ? seis.n : 6} cierres): ${seis ? '$'+fmtMoney(seis.costoRealPorMetro) : '—'}
-  </p>`;
-
-  // Mismo dato que "Producción acumulada" (barras Semana/Mes), condensado
-  // — mismo cálculo que renderMeter().
-  const semanaTotal = Array.from({length:7},(_,i)=>metrosPlantaDia(23+i)).reduce((a,b)=>a+b,0);
-  const mesTotal = Array.from({length:30},(_,i)=>metrosPlantaDia(i)).reduce((a,b)=>a+b,0);
-  const semanaPct = OBJETIVOS.semana>0 ? (semanaTotal/OBJETIVOS.semana*100) : 0;
-  const mesPct = OBJETIVOS.mes>0 ? (mesTotal/OBJETIVOS.mes*100) : 0;
-  const acumuladaHtml = `<p class="print-line">
-    <b>Producción semana:</b> ${fmt(semanaTotal)} m${OBJETIVOS.semana>0?` de ${fmt(OBJETIVOS.semana)} m objetivo (${semanaPct.toFixed(0)}%)`:''} ·
-    <b>Mes:</b> ${fmt(mesTotal)} m${OBJETIVOS.mes>0?` de ${fmt(OBJETIVOS.mes)} m objetivo (${mesPct.toFixed(0)}%)`:''}
-  </p>`;
-
-  document.getElementById('resumenImpresion').innerHTML =
-    resumenHtml + inventarioHtml + tendenciaHtml + costoHtml + acumuladaHtml;
-}
-
-/* ============================================================
-   RENDER: Existencias
-   ============================================================ */
-const statusLabel = {crit:'Crítico', warn:'Por vencer', ok:'Sano'};
-function renderExistencias(){
-  document.getElementById('existList').innerHTML = KPI.materiales.map(m=>{
-    const sinReorden = m.reorderKg===null;
-    // Piso de 1 también aquí — un material sin existencia todavía (recién
-    // sembrado, capa en 0) no debe dejar scaleMax en 0 y volver NaN el
-    // ancho de la barra (mismo bloqueante de auditoría que el gráfico de
-    // producción, aplicado de forma preventiva a este otro cálculo).
-    const scaleMax = sinReorden ? Math.max(m.existenciaKg*1.4, 1) : Math.max(m.existenciaKg, m.reorderKg*1.3, 1);
-    const fillPct = Math.min(100, (m.existenciaKg/scaleMax)*100);
-    const tickPct = sinReorden ? null : Math.min(100, (m.reorderKg/scaleMax)*100);
-    const label = m.esInterno ? 'Interno' : m.esSustituto ? 'Sustituto' : statusLabel[m.status];
-    const pedirHtml = m.cantidadPedirKg
-      ? `<div class="exist-pedir ${(m.status==='crit'||m.status==='warn')?'':'muted'}"><b>${fmt(m.cantidadPedirKg)} kg</b><small>a pedir</small></div>`
-      : `<div class="exist-pedir muted"><b>—</b><small>no aplica</small></div>`;
-    return `<div class="exist-row">
-      <div class="exist-name">${m.nombre}<small>${m.variante}</small></div>
-      <div class="exist-track">
-        <div class="exist-fill ${m.status}" style="width:${fillPct}%"></div>
-        ${tickPct!==null ? `<div class="exist-tick" style="left:${tickPct}%" title="Punto de reorden: ${fmt(m.reorderKg)} kg"></div>` : ''}
-      </div>
-      <div class="exist-value">${fmt(m.existenciaKg)} kg<small>${sinReorden ? 'sin reorden fijo' : 'reorden '+fmt(m.reorderKg)}</small></div>
-      ${pedirHtml}
-      <div class="exist-status ${m.status}"><span class="dot"></span>${label}</div>
-    </div>`;
-  }).join('');
-
-  document.getElementById('existListPrint').innerHTML = `
-    <table class="print-table">
-      <thead><tr><th>Material</th><th>Existencia</th><th>Reorden</th><th>A pedir</th><th>Estado</th></tr></thead>
-      <tbody>${KPI.materiales.map(m=>{
-        const sinReorden = m.reorderKg===null;
-        const label = m.esInterno ? 'Interno' : m.esSustituto ? 'Sustituto' : statusLabel[m.status];
-        return `<tr>
-          <td>${m.nombre} — ${m.variante}</td>
-          <td class="mono">${fmt(m.existenciaKg)} kg</td>
-          <td class="mono">${sinReorden ? '—' : fmt(m.reorderKg)+' kg'}</td>
-          <td class="mono">${m.cantidadPedirKg ? fmt(m.cantidadPedirKg)+' kg' : '—'}</td>
-          <td>${label}</td>
-        </tr>`;
-      }).join('')}</tbody>
-    </table>`;
-
-  const criticos = KPI.materiales.filter(m=>m.status==='crit');
-  document.getElementById('existInsight').innerHTML = criticos.length
-    ? `⚠ <b>${criticos.map(m=>m.nombre).join(' y ')}</b> están por debajo de su punto de reorden. ` +
-      criticos.map(m=>`${m.nombre}: ${m.coberturaDias!==null ? m.coberturaDias.toFixed(0)+' días de cobertura' : 'sin kg por carga en la fórmula'}`).join(' · ') +
-      ` — conviene levantar la orden de compra hoy.`
-    : `✓ Ningún material está por debajo de su punto de reorden.`;
-}
-
-/* ============================================================
-   PRODUCCIÓN — metros por turno, línea y acumulados
-   ============================================================ */
-function roundedTopBar(x, yTop, w, h, r){
-  if(h<=0) return '';
-  r = Math.min(r, w/2, h);
-  const yBase = yTop+h;
-  return `M${x},${yBase} L${x},${yTop+r} Q${x},${yTop} ${x+r},${yTop} `+
-         `L${x+w-r},${yTop} Q${x+w},${yTop} ${x+w},${yTop+r} L${x+w},${yBase} Z`;
-}
-
-function renderProdChart(containerId, linea, rangeN){
-  const dates = DATES30.slice(-rangeN);
-  const t1 = dates.map((_,i)=>metrosTurno(30-rangeN+i, linea, 1));
-  const t2 = dates.map((_,i)=>metrosTurno(30-rangeN+i, linea, 2));
-  const target = OBJETIVOS['turnoL'+linea];
-
-  const W=460, H=190, padL=32, padR=14, padT=14, padB=24;
-  const plotW=W-padL-padR, plotH=H-padT-padB;
-  const vMin = 0; // los columnas siempre parten de cero — nunca truncar el eje de un bar chart
-  // Piso de 1 — sin esto, un sistema recién sembrado (sin cierres) con
-  // objetivo también en 0 deja vMax=0, y yAt() más abajo divide entre
-  // cero (v/vMax) produciendo NaN en cada coordenada del SVG (bloqueante
-  // de auditoría de PR 4).
-  const vMax = Math.max(...t1, ...t2, target, 1) * 1.15;
-  const slot = plotW/dates.length;
-  const barW = Math.max(1.5, Math.min(11, slot*0.36));
-  const gapHalf = 1; // 2px de separación entre las dos barras del par
-  const xCenter = i => padL + slot*(i+0.5);
-  const yAt = v => padT + plotH - (v/vMax)*plotH;
-  const ticks = [0, vMax/2, vMax];
-  const gridLines = ticks.map(t=>`<line class="chart-grid" x1="${padL}" x2="${W-padR}" y1="${yAt(t).toFixed(1)}" y2="${yAt(t).toFixed(1)}"/>`).join('');
-  const yLabels = ticks.map(t=>`<text class="chart-ytick" x="${padL-6}" y="${(yAt(t)+3.5).toFixed(1)}" text-anchor="end">${Math.round(t)}</text>`).join('');
-  const targetY = yAt(target).toFixed(1);
-  const baseline = yAt(0).toFixed(1);
-
-  const bars = dates.map((d,i)=>{
-    const cx = xCenter(i);
-    const y1 = yAt(t1[i]), h1 = +baseline - y1;
-    const y2 = yAt(t2[i]), h2 = +baseline - y2;
-    return `<path class="chart-bar t1" d="${roundedTopBar(cx-gapHalf-barW, y1, barW, h1, 3)}"><title>${d} · Turno 1: ${t1[i]} m</title></path>`+
-           `<path class="chart-bar t2" d="${roundedTopBar(cx+gapHalf, y2, barW, h2, 3)}"><title>${d} · Turno 2: ${t2[i]} m</title></path>`;
-  }).join('');
-
-  document.getElementById(containerId).innerHTML = `
-    <svg class="chart-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="Producción Línea ${linea}, columnas por turno">
-      <g>${gridLines}</g><g>${yLabels}</g>
-      ${bars}
-      <line class="chart-target" x1="${padL}" x2="${W-padR}" y1="${targetY}" y2="${targetY}"/>
-      <text class="chart-target-label" x="${W-padR}" y="${(+targetY-5).toFixed(1)}" text-anchor="end">Objetivo ${target} m</text>
-      <text class="chart-xtick" x="${padL}" y="${H-6}" text-anchor="start">${dates[0]}</text>
-      <text class="chart-xtick" x="${W-padR}" y="${H-6}" text-anchor="end">${dates[dates.length-1]}</text>
-    </svg>`;
-
-}
-
-function drawProdCharts(){
-  renderProdChart('prodL1ChartWrap', 1, prodRangeN);
-  renderProdChart('prodL2ChartWrap', 2, prodRangeN);
-  renderProdTable();
-  renderProdTablePrint();
-}
-
-// EDS-99: esta tabla (el "Ver tabla" de pantalla) cubre ambas líneas —
-// antes renderProdChart solo llenaba Línea 1. Sigue usando prodRangeN (el
-// rango que la persona eligió en pantalla, 14 por defecto); no es la que
-// se imprime — ver renderProdTablePrint, siempre a 7 días fijos.
-function renderProdTable(){
-  const tbl = document.getElementById('prodL1Table');
-  if(!tbl) return;
-  const dates = DATES30.slice(-prodRangeN);
-  tbl.innerHTML = `<table><thead><tr>
-      <th>Fecha</th><th>L1 · Turno 1</th><th>L1 · Turno 2</th><th>L2 · Turno 1</th><th>L2 · Turno 2</th><th>Total (m)</th>
-    </tr></thead><tbody>${
-    dates.map((d,i)=>{
-      const idx = 30-prodRangeN+i;
-      const l1t1=metrosTurno(idx,1,1), l1t2=metrosTurno(idx,1,2), l2t1=metrosTurno(idx,2,1), l2t2=metrosTurno(idx,2,2);
-      return `<tr><td>${d}</td><td class="mono">${l1t1}</td><td class="mono">${l1t2}</td><td class="mono">${l2t1}</td><td class="mono">${l2t2}</td><td class="mono">${l1t1+l1t2+l2t1+l2t2}</td></tr>`;
-    }).join('')
-  }</tbody></table>`;
-}
-
-// EDS-99 (4ª ronda) — pedido explícito del usuario: "Producción por turno y
-// línea" vuelve a imprimirse, pero SOLO los últimos 7 días naturales, sin
-// importar qué rango (prodRangeN) esté elegido en pantalla. Tabla
-// independiente de renderProdTable (arriba) por eso mismo — imprimir no
-// debe depender de qué haya tocado la persona en pantalla. Sin <caption>:
-// el <h3> de la tarjeta ya la titula (mismo criterio que #existListPrint).
-function renderProdTablePrint(){
-  const el = document.getElementById('prodTablePrint');
-  if(!el) return;
-  const N = 7;
-  const dates = DATES30.slice(-N);
-  el.innerHTML = `<table class="print-table"><thead><tr>
-      <th>Fecha</th><th>L1 · Turno 1</th><th>L1 · Turno 2</th><th>L2 · Turno 1</th><th>L2 · Turno 2</th><th>Total (m)</th>
-    </tr></thead><tbody>${
-    dates.map((d,i)=>{
-      const idx = 30-N+i;
-      const l1t1=metrosTurno(idx,1,1), l1t2=metrosTurno(idx,1,2), l2t1=metrosTurno(idx,2,1), l2t2=metrosTurno(idx,2,2);
-      return `<tr><td>${d}</td><td class="mono">${l1t1}</td><td class="mono">${l1t2}</td><td class="mono">${l2t1}</td><td class="mono">${l2t2}</td><td class="mono">${l1t1+l1t2+l2t1+l2t2}</td></tr>`;
-    }).join('')
-  }</tbody></table>`;
-}
-
-function renderMeter(fillId, tickId, valueId, pctId, totalDias){
-  const total = Array.from({length: totalDias}, (_,i)=>metrosPlantaDia(30-totalDias+i)).reduce((a,b)=>a+b,0);
-  const target = totalDias===7 ? OBJETIVOS.semana : OBJETIVOS.mes;
-  const scaleMax = Math.max(total, target, 1)*1.15;
-  const fillPct = Math.min(100, (total/scaleMax)*100);
-  const tickPct = Math.min(100, (target/scaleMax)*100);
-  const pct = target>0 ? (total/target*100) : 0;
-  document.getElementById(fillId).style.width = fillPct+'%';
-  document.getElementById(fillId).className = 'exist-fill ' + (pct>=100?'ok':pct>=90?'warn':'crit');
-  document.getElementById(tickId).style.left = tickPct+'%';
-  document.getElementById(tickId).title = 'Objetivo: '+fmt(target)+' m';
-  document.getElementById(valueId).textContent = fmt(total)+' m';
-  document.getElementById(pctId).textContent = target>0 ? pct.toFixed(0)+'% del objetivo ('+fmt(target)+' m)' : 'sin objetivo configurado';
-}
-function drawMeters(){
-  renderMeter('semanaFill','semanaTick','semanaValue','semanaPct', 7);
-  renderMeter('mesFill','mesTick','mesValue','mesPct', 30);
-  document.getElementById('semanaRangeLabel').textContent = '· últimos 7 días';
-  document.getElementById('mesRangeLabel').textContent = '· últimos 30 días';
-}
-
-/* ============================================================
-   METAS DE PRODUCCIÓN (tarea 6.5) — persistidas en Convex, solo admin
-   puede editarlas (mismo criterio que el resto de la configuración del
-   sistema); Calidad/Gerencia las ven en modo lectura.
-   ============================================================ */
-const objSaveError = document.getElementById('objSaveError');
-async function guardarObjetivos(){
-  if(sessionUser.rol !== 'admin') return;
-  objSaveError.hidden = true;
-  try{
-    await window.Session.call(api.dashboard.updateObjetivos, { ...OBJETIVOS }, 'mutation');
-  }catch(err){
-    objSaveError.hidden = false;
-    objSaveError.textContent = '⚠ No se pudo guardar la meta: ' + window.Session.mensajeError(err);
-  }
-}
-function inicializarCamposObjetivos(){
-  const puedeEditar = sessionUser.rol === 'admin';
-  document.getElementById('objTurnoL1').value = OBJETIVOS.turnoL1;
-  document.getElementById('objTurnoL2').value = OBJETIVOS.turnoL2;
-  document.getElementById('objSemana').value = OBJETIVOS.semana;
-  document.getElementById('objMes').value = OBJETIVOS.mes;
-  ['objTurnoL1','objTurnoL2','objSemana','objMes'].forEach(id=>{ document.getElementById(id).disabled = !puedeEditar; });
-
-  ['objTurnoL1','objTurnoL2'].forEach((id,i)=>{
-    const input = document.getElementById(id);
-    input.addEventListener('input', e=>{ OBJETIVOS['turnoL'+(i+1)] = parseFloat(e.target.value)||0; drawProdCharts(); });
-    input.addEventListener('change', guardarObjetivos);
-  });
-  document.getElementById('objSemana').addEventListener('input', e=>{ OBJETIVOS.semana = parseFloat(e.target.value)||0; drawMeters(); });
-  document.getElementById('objSemana').addEventListener('change', guardarObjetivos);
-  document.getElementById('objMes').addEventListener('input', e=>{ OBJETIVOS.mes = parseFloat(e.target.value)||0; drawMeters(); });
-  document.getElementById('objMes').addEventListener('change', guardarObjetivos);
-}
-
-/* ============================================================
-   RENDER: Costo real vs estándar — stat pair
-   ============================================================ */
-function renderCostoStats(){
-  const costoRealKg = KPI.costoRealPorKgUltimoCierre, costoRealM = KPI.costoRealPorMetroUltimoCierre;
-  const costoEstandarKg = KPI.costoEstandarPorKg, costoEstandarM = KPI.costoEstandarPorMetro;
-  // EDS-90: mismo criterio que renderKPIs — "hoy" nunca tiene cierres
-  // capturados el mismo día, se muestra el último cierre real.
-  const fechaRef = KPI.ultimoCierre ? isoADisplayCorto(KPI.ultimoCierre.fecha) : 'sin cierres';
-  document.getElementById('costoStats').innerHTML = `
-    <div class="stat-tile">
-      <span class="stat-label">Costo real / kg — último cierre (${fechaRef})</span>
-      <div class="stat-row"><span class="stat-value">$${fmtMoney(costoRealKg)}</span>${costoEstandarKg>0?`<span class="stat-delta ${costoRealKg>costoEstandarKg?'bad':'good'}">${fmtPct((costoRealKg/costoEstandarKg-1)*100)}</span>`:''}</div>
-      <span class="stat-sub">${costoEstandarKg>0?`Estándar: $${fmtMoney(costoEstandarKg)} / kg`:'Sin estándar configurado'}</span>
-    </div>
-    <div class="stat-tile">
-      <span class="stat-label">Costo real / metro — último cierre (${fechaRef})</span>
-      <div class="stat-row"><span class="stat-value">$${fmtMoney(costoRealM)}</span>${costoEstandarM>0?`<span class="stat-delta ${costoRealM>costoEstandarM?'bad':'good'}">${fmtPct((costoRealM/costoEstandarM-1)*100)}</span>`:''}</div>
-      <span class="stat-sub">${costoEstandarM>0?`Estándar: $${fmtMoney(costoEstandarM)} / m`:'Sin estándar configurado'}</span>
-    </div>`;
-}
-
-/* ============================================================
-   LINE CHART — reutilizable para Merma y Costo
-   ============================================================ */
-const CHARTS = {}; // guarda config por id para recalcular al cambiar rango
-
-function niceTicks(min, max, count){
-  const span = max-min || 1;
-  const step = span/(count-1);
-  return Array.from({length:count}, (_,i)=>min+step*i);
-}
-
-function buildChart(containerId, opts){
-  CHARTS[containerId] = opts;
-  drawChart(containerId);
-}
-
-function drawChart(containerId){
-  const opts = CHARTS[containerId];
-  const n = opts.rangeN;
-  const dates = DATES30.slice(-n);
-  const values = opts.data.slice(-n);
-  const target = opts.target;
-
-  const W = 640, H = 200, padL = 42, padR = 16, padT = 16, padB = 26;
-  const plotW = W-padL-padR, plotH = H-padT-padB;
-
-  const allVals = values.concat([target]);
-  let vMin = Math.min(...allVals), vMax = Math.max(...allVals);
-  const pad = (vMax-vMin)*0.18 || vMax*0.1 || 1;
-  vMin -= pad; vMax += pad;
-
-  const xAt = i => padL + (i/(values.length-1))*plotW;
-  const yAt = v => padT + plotH - ((v-vMin)/(vMax-vMin))*plotH;
-
-  const ticks = niceTicks(vMin, vMax, 4);
-  const gridLines = ticks.map(t=>`<line class="chart-grid" x1="${padL}" x2="${W-padR}" y1="${yAt(t).toFixed(1)}" y2="${yAt(t).toFixed(1)}"/>`).join('');
-  const yLabels = ticks.map(t=>`<text class="chart-ytick" x="${padL-8}" y="${(yAt(t)+3.5).toFixed(1)}" text-anchor="end">${opts.fmtY(t)}</text>`).join('');
-
-  const linePts = values.map((v,i)=>`${xAt(i).toFixed(1)},${yAt(v).toFixed(1)}`).join(' L ');
-  const areaPts = `M ${xAt(0).toFixed(1)},${yAt(vMin).toFixed(1)} L ${linePts.split(' L ').map((p,i)=>p).join(' L ')} L ${xAt(values.length-1).toFixed(1)},${yAt(vMin).toFixed(1)} Z`;
-
-  const lastX = xAt(values.length-1), lastY = yAt(values[values.length-1]);
-  const targetY = yAt(target).toFixed(1);
-
-  const xFirstLabel = dates[0], xLastLabel = dates[dates.length-1];
-
-  const svg = `
-    <svg class="chart-svg" viewBox="0 0 ${W} ${H}" id="${containerId}-svg" role="img" aria-label="${opts.ariaLabel}">
-      <g>${gridLines}</g>
-      <g>${yLabels}</g>
-      <line class="chart-target" x1="${padL}" x2="${W-padR}" y1="${targetY}" y2="${targetY}"/>
-      <text class="chart-target-label" x="${W-padR}" y="${(+targetY-5).toFixed(1)}" text-anchor="end">${opts.targetLabel}</text>
-      <path class="chart-area" d="${areaPts}"/>
-      <path class="chart-line" d="M ${linePts}"/>
-      <circle class="chart-endpoint" cx="${lastX.toFixed(1)}" cy="${lastY.toFixed(1)}" r="4"/>
-      <text class="chart-endpoint-label" x="${(lastX-6).toFixed(1)}" y="${(lastY-10).toFixed(1)}" text-anchor="end">${opts.fmtY(values[values.length-1])}</text>
-      <text class="chart-xtick" x="${padL}" y="${H-6}" text-anchor="start">${xFirstLabel}</text>
-      <text class="chart-xtick" x="${W-padR}" y="${H-6}" text-anchor="end">${xLastLabel}</text>
-      <line class="chart-crosshair" id="${containerId}-cross" x1="0" x2="0" y1="${padT}" y2="${padT+plotH}"/>
-      <circle class="chart-hoverdot" id="${containerId}-dot" r="4"/>
-      <rect class="chart-hit" id="${containerId}-hit" x="${padL}" y="${padT}" width="${plotW}" height="${plotH}"/>
-    </svg>
-    <div class="chart-tooltip" id="${containerId}-tip"></div>`;
-
-  const wrap = document.getElementById(containerId);
-  wrap.style.position = 'relative';
-  wrap.innerHTML = svg;
-
-  const hit = document.getElementById(`${containerId}-hit`);
-  const cross = document.getElementById(`${containerId}-cross`);
-  const dot = document.getElementById(`${containerId}-dot`);
-  const tip = document.getElementById(`${containerId}-tip`);
-  const svgEl = document.getElementById(`${containerId}-svg`);
-
-  function onMove(evt){
-    const rect = svgEl.getBoundingClientRect();
-    const scaleX = W/rect.width;
-    const px = (evt.clientX-rect.left)*scaleX;
-    let idx = Math.round(((px-padL)/plotW)*(values.length-1));
-    idx = Math.max(0, Math.min(values.length-1, idx));
-    const x = xAt(idx), y = yAt(values[idx]);
-    cross.setAttribute('x1', x.toFixed(1)); cross.setAttribute('x2', x.toFixed(1));
-    cross.style.opacity = 1;
-    dot.setAttribute('cx', x.toFixed(1)); dot.setAttribute('cy', y.toFixed(1));
-    dot.style.opacity = 1;
-    const scaleXPage = rect.width/W;
-    tip.style.left = (x*scaleXPage) + 'px';
-    tip.style.top = (y*(rect.height/H)) + 'px';
-    tip.innerHTML = '';
-    const strong = document.createElement('b'); strong.textContent = opts.fmtY(values[idx]);
-    tip.appendChild(strong);
-    tip.appendChild(document.createTextNode(' · ' + dates[idx]));
-    tip.classList.add('show');
-  }
-  function onLeave(){
-    cross.style.opacity = 0; dot.style.opacity = 0; tip.classList.remove('show');
-  }
-  hit.addEventListener('pointermove', onMove);
-  hit.addEventListener('pointerleave', onLeave);
-  hit.addEventListener('focus', ()=>onMove({clientX:hit.getBoundingClientRect().left}));
-
-  // tabla accesible
-  const tblId = containerId.replace('ChartWrap','Table');
-  const tbl = document.getElementById(tblId);
-  if(tbl){
-    tbl.innerHTML = `<table><thead><tr><th>Fecha</th><th>Valor</th></tr></thead><tbody>${
-      dates.map((d,i)=>`<tr><td>${d}</td><td class="mono">${opts.fmtY(values[i])}</td></tr>`).join('')
-    }</tbody></table>`;
-  }
-}
-
-function buildLineCharts(){
-  buildChart('mermaChartWrap', {
-    data: MERMA_30, target: MERMA_META, rangeN: 14,
-    fmtY: v=>v.toFixed(1)+'%', targetLabel: `Meta ${MERMA_META.toFixed(1)}%`,
-    ariaLabel: 'Tendencia de porcentaje de merma'
-  });
-  buildChart('costoChartWrap', {
-    data: COSTO_30, target: KPI.costoEstandarPorKg, rangeN: 14,
-    fmtY: v=>'$'+v.toFixed(2), targetLabel: `Estándar $${fmtMoney(KPI.costoEstandarPorKg)}`,
-    ariaLabel: 'Tendencia de costo real por kilogramo'
-  });
-}
-
-function toggleTable(which){
-  const tbl = document.getElementById(which+'Table');
-  const btn = document.getElementById(which+'TblBtn');
-  const isHidden = tbl.hasAttribute('hidden');
-  if(isHidden){ tbl.removeAttribute('hidden'); btn.textContent = 'Ocultar tabla'; }
-  else { tbl.setAttribute('hidden',''); btn.textContent = 'Ver tabla'; }
-}
-
-/* ============================================================
-   FILTROS Y ROLES
-   ============================================================ */
-document.getElementById('rangePick').addEventListener('click', e=>{
-  const b = e.target.closest('button'); if(!b) return;
-  [...b.parentElement.children].forEach(c=>c.classList.remove('on'));
-  b.classList.add('on');
-  const n = +b.dataset.n;
-  CHARTS['mermaChartWrap'].rangeN = n; drawChart('mermaChartWrap');
-  CHARTS['costoChartWrap'].rangeN = n; drawChart('costoChartWrap');
-  prodRangeN = n; drawProdCharts();
-});
-
-// EDS-97: cambia el periodo de las 4 tarjetas de % merma/producción/costo
-// real (Calidad y Gerencia) — 'ultimo' ya está en KPI (sin refetch);
-// 7/14/30 piden kpisPorRango la primera vez y quedan en KPI_RANGO_CACHE.
-document.getElementById('periodoKPIPick').addEventListener('click', async e=>{
-  const b = e.target.closest('button'); if(!b) return;
-  const periodo = b.dataset.periodo; // 'ultimo' | '7' | '14' | '30'
-  if (periodo === periodoKPI) return; // ya seleccionado, nada que hacer
-
-  const grupo = b.parentElement;
-  if (periodo !== 'ultimo' && !KPI_RANGO_CACHE[periodo]) {
-    // Solo se deshabilita el grupo mientras falta el fetch — cambiar entre
-    // 'ultimo' y un periodo ya cacheado es instantáneo, sin esta espera.
-    [...grupo.children].forEach(c=>c.disabled = true);
-    try {
-      KPI_RANGO_CACHE[periodo] = await window.Session.call(api.dashboard.kpisPorRango, { dias: +periodo }, 'query');
-    } catch (err) {
-      console.error('[panel-control] Error al cargar KPIs por periodo:', err);
-      const errorBox = document.getElementById('connError');
-      errorBox.hidden = false;
-      errorBox.textContent = '⚠ ' + window.Session.mensajeError(err);
-      [...grupo.children].forEach(c=>c.disabled = false);
-      return;
+// `opts.preservarCambios`: las acciones de fila (crear/eliminar/reactivar)
+// recargan la tabla para reflejar el cambio que acaban de hacer, pero eso NO
+// debe descartar ediciones de nombre/páginas que el admin ya haya marcado
+// en otras filas y aún no haya guardado con "Guardar cambios" (mismo
+// hallazgo de CodeRabbit que ya motivó este patrón en gestion-usuarios.html:
+// perder trabajo sin confirmación). Guardar y Restablecer sí deben limpiar
+// CAMBIOS de verdad — ahí la llamada por defecto (sin opts).
+async function cargarRoles(opts = {}){
+  ROLES = await window.Session.call(api.roles.listRoles, {}, 'query');
+  if(opts.preservarCambios){
+    for(const [id, cambios] of Object.entries(CAMBIOS)){
+      const r = ROLES.find(x=>x._id===id);
+      if(r) Object.assign(r, cambios);
     }
-    [...grupo.children].forEach(c=>c.disabled = false);
+  }else{
+    CAMBIOS = {};
   }
+  renderTable();
+  renderKPI();
+}
 
-  periodoKPI = periodo;
-  [...grupo.children].forEach(c=>c.classList.remove('on'));
-  b.classList.add('on');
-  renderKPIs();
-});
+function markDirty(){
+  dirty = true;
+  document.getElementById('dirtyFlag').classList.add('show');
+  document.getElementById('btnSave').disabled = false;
+  document.getElementById('btnReset').disabled = false;
+}
 
-/* ============================================================
-   ALERTAS (7.4) — conteo y lista REAL de no leídas para el usuario de la
-   sesión (api.alertas.noLeidasParaMi), no una simulación por rol
-   previsualizado: el selector de rol de abajo solo cambia qué SECCIONES
-   del dashboard se muestran (para que admin pueda ver las 4 vistas), pero
-   las alertas de la campana son siempre las del usuario real que inició
-   sesión — admin no "hereda" las alertas de Compras solo por
-   previsualizar su vista.
-   ============================================================ */
-let NO_LEIDAS = [];
-// reglaSlug sintético que reporteDiario.ts inserta en alertasHistorial
-// (no es una de las 7 reglas configurables) — la campana lo reconoce para
-// ofrecer el enlace directo a la vista de impresión, en vez de solo
-// marcarlo como leído como al resto de las alertas.
-const REGLA_SLUG_REPORTE = 'reporte-diario-generado';
-function fmtFechaBell(ms){
-  return new Date(ms).toLocaleString('es-MX', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit', hour12:false });
-}
-function renderBell(){
-  const badge = document.getElementById('bellBadge');
-  badge.hidden = NO_LEIDAS.length===0;
-  badge.textContent = NO_LEIDAS.length;
-  document.getElementById('bellList').innerHTML = NO_LEIDAS.length ? NO_LEIDAS.map(a=>{
-    const esReporte = a.reglaSlug === REGLA_SLUG_REPORTE;
-    const tip = esReporte ? 'Clic para abrir la vista de impresión y marcar como leída' : 'Clic para marcar como leída';
-    return `<div class="bell-item unread" data-id="${a._id}" data-slug="${a.reglaSlug}" title="${tip}">
-      <div class="n">${a.nombreRegla}${esReporte?' 🖨️':''}</div>
-      <div class="d">${a.detalle}</div>
-      <div class="f">${fmtFechaBell(a.fecha)}</div>
-    </div>`;
-  }).join('') : '<div class="bell-empty">Sin alertas sin leer.</div>';
-}
-async function cargarAlertas(){
-  NO_LEIDAS = await window.Session.call(api.alertas.noLeidasParaMi, {}, 'query');
-  renderBell();
-}
-document.getElementById('bellList').addEventListener('click', async e=>{
-  const item = e.target.closest('.bell-item[data-id]'); if(!item) return;
-  const id = item.dataset.id;
-  const slug = item.dataset.slug;
-  await window.Session.call(api.alertas.marcarAlertaLeida, { alertaId: id }, 'mutation');
-  NO_LEIDAS = NO_LEIDAS.filter(a=>a._id!==id);
-  renderBell();
-  if(slug === REGLA_SLUG_REPORTE){
-    window.open('/panel-control.html?autoprint=1', '_blank');
+document.getElementById('rolesBody').addEventListener('input', e=>{
+  const tr = e.target.closest('tr');
+  if(!tr) return;
+  const id = tr.dataset.id;
+  const r = ROLES.find(x=>x._id===id);
+  if(!r) return;
+  if(e.target.dataset.field === 'nombre'){
+    r.nombre = e.target.value;
+    CAMBIOS[id] = CAMBIOS[id] || {};
+    CAMBIOS[id].nombre = e.target.value;
+    markDirty();
+    return;
+  }
+  if(e.target.matches('.paginas-grid input[type="checkbox"]')){
+    const grid = e.target.closest('.paginas-grid');
+    const paginas = [...grid.querySelectorAll('input[type="checkbox"]:checked')].map(cb=>cb.value);
+    r.paginas = paginas;
+    CAMBIOS[id] = CAMBIOS[id] || {};
+    CAMBIOS[id].paginas = paginas;
+    renderKPI();
+    markDirty();
   }
 });
-function toggleBell(){
-  document.getElementById('bellDropdown').hidden = !document.getElementById('bellDropdown').hidden;
-}
-document.addEventListener('click', e=>{
-  const wrap = document.querySelector('.bell-wrap');
-  if(wrap && !wrap.contains(e.target)) document.getElementById('bellDropdown').hidden = true;
-});
 
-// EDS-91: cada .role-section matchea por `data-roles.includes(role)`,
-// donde `role` es el tab ACTUALMENTE seleccionado, no sessionUser.rol —
-// admin sigue viendo todo con normalidad al seleccionar Compras/Calidad y
-// Producción/Gerencia y Comercial directamente (esas secciones siguen
-// listando su propio rol en data-roles). Solo se quitó "admin" de la
-// lista de roles de esas secciones, así que cuando el tab seleccionado
-// ES 'admin', ya no matchean — únicamente la sección de Configuración
-// (data-roles="admin" exclusivo) sigue mostrándose ahí. Antes cada
-// sección tenía "<rol> admin", así que el tab Admin mostraba TODO
-// duplicado — información que admin ya puede ver entrando a las otras 3
-// pestañas.
-// EDS-96 — todo .role-section arranca con el atributo `hidden` puesto
-// directo en el HTML (así el navegador nunca lo pinta visible, ni una
-// fracción de segundo, entre el primer paint y que este script — un
-// <script type="module">, que por naturaleza se ejecuta después del
-// parseo del HTML — corra por primera vez). applyRole() usa `el.hidden`
-// en vez de `el.style.display` a propósito: tocar `style.display`
-// directamente pisaría el `display:grid` que necesita `.kpi-row` (CSS)
-// para su layout — con `hidden`, "mostrar" es simplemente quitar el
-// atributo y el elemento vuelve a su display natural de CSS, sin pelear
-// con la cascada (mismo tipo de trampa de especificidad ya documentada
-// arriba para `.no-print` en impresión, evitada aquí desde el diseño).
-let currentRole = 'compras';
-function applyRole(role){
-  currentRole = role;
-  document.querySelectorAll('#roleSwitch .role-btn').forEach(c=>c.classList.toggle('active', c.dataset.role===role));
-  document.querySelectorAll('.role-section').forEach(el=>{
-    const roles = el.dataset.roles.split(' ');
-    el.hidden = !roles.includes(role);
-  });
+/* ---------- modal: nuevo rol / confirmar eliminar ---------- */
+function abrirModal(html){
+  document.getElementById('modalBox').innerHTML = html;
+  document.getElementById('modalOverlay').hidden = false;
 }
-document.getElementById('roleSwitch').addEventListener('click', e=>{
-  const b = e.target.closest('button'); if(!b) return;
-  applyRole(b.dataset.role);
-});
-
-/* ============================================================
-   EXPORTAR — Excel (CSV real) y PDF (impresión del navegador)
-   ============================================================ */
-function downloadCSV(filename, rows){
-  const csv = rows.map(r => r.map(cell=>{
-    const s = String(cell ?? '');
-    return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
-  }).join(',')).join('\r\n');
-  const blob = new Blob(['﻿'+csv], {type:'text/csv;charset=utf-8;'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = filename;
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+function cerrarModal(){
+  document.getElementById('modalOverlay').hidden = true;
+  document.getElementById('modalBox').innerHTML = '';
 }
-function statusLabelExport(m){
-  if(m.esInterno) return 'Interno';
-  if(m.esSustituto) return 'Sustituto';
-  return {crit:'Crítico', warn:'Por vencer', ok:'Sano'}[m.status] || m.status;
-}
-function exportExistenciasCSV(){
-  const rows = [['Material','Variante','Existencia (kg)','Punto de reorden (kg)','Estado','Valor ($)','Cantidad a pedir (kg)']];
-  KPI.materiales.forEach(m=>{
-    rows.push([m.nombre, m.variante, Math.round(m.existenciaKg), m.reorderKg!==null?Math.round(m.reorderKg):'N/A',
-      statusLabelExport(m), Math.round(m.valorKg), m.cantidadPedirKg?Math.round(m.cantidadPedirKg):'N/A']);
-  });
-  downloadCSV('existencias-tejaflex.csv', rows);
-}
-function exportProduccionCSV(){
-  const n = prodRangeN;
-  const dates = DATES30.slice(-n);
-  const rows = [['Fecha','Línea 1 · Turno 1 (m)','Línea 1 · Turno 2 (m)','Línea 2 · Turno 1 (m)','Línea 2 · Turno 2 (m)','Total día (m)']];
-  dates.forEach((d,i)=>{
-    const idx = 30-n+i;
-    const l1t1=metrosTurno(idx,1,1), l1t2=metrosTurno(idx,1,2), l2t1=metrosTurno(idx,2,1), l2t2=metrosTurno(idx,2,2);
-    rows.push([d,l1t1,l1t2,l2t1,l2t2,l1t1+l1t2+l2t1+l2t2]);
-  });
-  downloadCSV('produccion-tejaflex.csv', rows);
-}
-function exportMermaCSV(){
-  const n = CHARTS['mermaChartWrap'].rangeN;
-  const dates = DATES30.slice(-n);
-  const merma = MERMA_30.slice(-n);
-  const rows = [['Fecha','% Merma','Meta (%)']];
-  dates.forEach((d,i)=> rows.push([d, merma[i].toFixed(1), MERMA_META.toFixed(1)]));
-  downloadCSV('merma-tejaflex.csv', rows);
-}
-function exportCostoCSV(){
-  const n = CHARTS['costoChartWrap'].rangeN;
-  const dates = DATES30.slice(-n);
-  const costo = COSTO_30.slice(-n);
-  const rows = [['Fecha','Costo real ($/kg)','Costo estándar ($/kg)']];
-  dates.forEach((d,i)=> rows.push([d, costo[i].toFixed(2), KPI.costoEstandarPorKg.toFixed(2)]));
-  downloadCSV('costo-tejaflex.csv', rows);
-}
-// EDS-99: pedido explícito del usuario — el nombre sugerido al exportar a
-// PDF debe decir "Reporte Directivo Tejaflex" + la fecha del último
-// cierre, no el título genérico de la pestaña. Los navegadores usan
-// document.title como nombre de archivo sugerido en "Guardar como PDF" —
-// se cambia justo antes de imprimir y se restaura después (afterprint),
-// para que la pestaña en pantalla no se quede con el título del reporte.
-const TITULO_PANTALLA = document.title;
-function exportPDF(){
-  document.body.classList.add('print-all');
-  const fechaArchivo = KPI.ultimoCierre ? isoParaArchivo(KPI.ultimoCierre.fecha) : 'sin-cierres';
-  document.title = `Reporte Directivo Tejaflex - ${fechaArchivo}`;
-  // EDS-99: momento REAL de generación (no el de carga de la página) —
-  // se calcula justo antes de imprimir, como el nombre de archivo.
-  const ahora = new Date();
-  const fechaGen = ahora.toLocaleDateString('es-MX', {day:'2-digit', month:'2-digit', year:'numeric'});
-  const horaGen = ahora.toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit'});
-  document.getElementById('generadoImpresion').textContent = `Generado el ${fechaGen} · ${horaGen}`;
-  window.print();
-}
-window.addEventListener('afterprint', ()=> {
-  document.body.classList.remove('print-all');
-  document.title = TITULO_PANTALLA;
-});
-
-/* ============================================================
-   CARGA INICIAL — trae todo de Convex y renderiza en el orden correcto:
-   primero los datos (KPIs, series de 30 días, objetivos), luego todo lo
-   que depende de ellos.
-   ============================================================ */
-async function cargarTodo(){
-  // EDS-99: kpisPorRango({dias:7}) y costoPromedioUltimosCierres({n:6}) se
-  // precargan SIEMPRE aquí (no solo cuando alguien toca un selector) — el
-  // Reporte Directivo necesita "última semana" y "últimos 6 cierres"
-  // listos desde el primer render, incluso si en pantalla sigue
-  // seleccionado "Último cierre".
-  const [kpis, prodSerie, mermaSerie, costoSerie, objetivos, semana, seisCierres] = await Promise.all([
-    window.Session.call(api.dashboard.getKPIsHoy, {}, 'query'),
-    window.Session.call(api.dashboard.produccionPorRango, { dias: 30 }, 'query'),
-    window.Session.call(api.dashboard.tendenciaMerma, { dias: 30 }, 'query'),
-    window.Session.call(api.dashboard.tendenciaCosto, { dias: 30 }, 'query'),
-    window.Session.call(api.dashboard.getObjetivos, {}, 'query'),
-    window.Session.call(api.dashboard.kpisPorRango, { dias: 7 }, 'query'),
-    window.Session.call(api.dashboard.costoPromedioUltimosCierres, { n: 6 }, 'query'),
-    cargarAlertas(),
-  ]);
-  KPI = kpis;
-  DATES30 = prodSerie.map(d => isoADisplayCorto(d.fecha));
-  PROD_SERIE = prodSerie;
-  MERMA_30 = mermaSerie.map(d => d.pctMerma);
-  COSTO_30 = costoSerie.map(d => d.costoRealPorKg);
-  OBJETIVOS = objetivos;
-  KPI_RANGO_CACHE[7] = semana;
-  COSTO_ULTIMOS_6_CIERRES = seisCierres;
-
-  renderUltimoCierre();
-  renderKPIs();
-  renderReporteEjecutivo();
-  renderExistencias();
-  renderCostoStats();
-  drawProdCharts();
-  drawMeters();
-  inicializarCamposObjetivos();
-  buildLineCharts();
-
-  // El selector de rol del mockup (para previsualizar las 4 vistas) solo
-  // tiene sentido para admin, que sí ve todo el sistema; el resto de los
-  // roles queda fijo en su propia vista real, sin poder cambiarla.
-  // EDS-92: ?tab=admin (usado por el breadcrumb "Volver a Admin" de las
-  // pantallas de Configuración) hace que admin aterrice directo en su
-  // propia pestaña en vez del default de Compras — sin el parámetro,
-  // sigue aterrizando en Compras como siempre.
-  const tabInicial = sessionUser.rol === 'admin'
-    ? (new URLSearchParams(location.search).get('tab') === 'admin' ? 'admin' : 'compras')
-    : sessionUser.rol;
-  applyRole(tabInicial);
-  if (sessionUser.rol !== 'admin') {
-    document.getElementById('roleSwitch').style.display = 'none';
-  }
-
-  // Llegando desde Reporte Diario (?autoprint=1) — simula "así se ve el
-  // PDF que se envía". Se dispara aquí, ya con datos reales renderizados,
-  // no antes (si no, el PDF saldría con los contenedores vacíos).
-  if(new URLSearchParams(location.search).get('autoprint')==='1'){
-    setTimeout(exportPDF, 500);
-  }
-}
-
-// EDS-65 (10.1): la carga inicial no tenía try/catch — si Convex no
-// respondía, la pantalla quedaba vacía sin explicación en vez de mostrar
-// un error controlado.
-try {
-  await cargarTodo();
-} catch (err) {
-  console.error('[panel-control] Error al cargar datos iniciales:', err);
-  const errorBox = document.getElementById('connError');
+function mostrarErrorGlobal(err){
+  const errorBox = document.getElementById('saveError');
   errorBox.hidden = false;
-  errorBox.textContent = '⚠ No se pudo conectar con el servidor. Verifica tu conexión y recarga la página.';
+  errorBox.textContent = '⚠ ' + window.Session.mensajeError(err);
+}
+
+function addRole(){
+  abrirModal(`
+    <h3>Nuevo rol</h3>
+    <div class="modal-field-block"><label>Nombre del rol</label><div class="field nombre"><input type="text" id="modalNombre" placeholder="ej. Mantenimiento" style="width:100%;"></div></div>
+    <div class="modal-field-block">
+      <label>Páginas con acceso</label>
+      <div class="paginas-grid">${PAGINAS.map(p=>`
+        <label class="pagina-check"><input type="checkbox" id="modalPagina-${p.slug}" value="${p.slug}"><span>${p.label}</span></label>
+      `).join('')}</div>
+    </div>
+    <div class="field-warn error" id="modalError" hidden></div>
+    <div class="modal-actions">
+      <button class="btn-ghost" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn-primary" id="modalCrearBtn" onclick="crearRolSubmit()">Crear rol</button>
+    </div>
+  `);
+  document.getElementById('modalNombre').focus();
+}
+
+async function crearRolSubmit(){
+  const nombre = document.getElementById('modalNombre').value;
+  const paginas = [...document.querySelectorAll('#modalBox .paginas-grid input[type="checkbox"]:checked')].map(cb=>cb.value);
+  const btn = document.getElementById('modalCrearBtn');
+  const errorBox = document.getElementById('modalError');
+  errorBox.hidden = true;
+  btn.disabled = true; btn.textContent = 'Creando…';
+  try{
+    await window.Session.call(api.roles.crearRol, { nombre, paginas }, 'mutation');
+    cerrarModal();
+    await cargarRoles({ preservarCambios: true });
+    const t = document.getElementById('toast');
+    t.textContent = `✓ Rol "${nombre}" creado`;
+    t.classList.add('show'); setTimeout(()=>{ t.classList.remove('show'); t.textContent = '✓ Roles actualizados'; }, 2400);
+  }catch(err){
+    btn.disabled = false; btn.textContent = 'Crear rol';
+    errorBox.hidden = false;
+    errorBox.textContent = '⚠ ' + window.Session.mensajeError(err);
+  }
+}
+
+function confirmarEliminar(id){
+  const r = ROLES.find(x=>x._id===id);
+  abrirModal(`
+    <h3>¿Eliminar el rol "${escapeHtml(r?.nombre) || 'este rol'}"?</h3>
+    <p style="font-size:.85rem;color:var(--ink-muted);">Deja de poder asignarse a usuarios nuevos. Si algún usuario ACTIVO todavía lo tiene asignado, el sistema rechazará esta acción — reasígnalo desde Gestión de Usuarios primero. Puedes reactivar el rol después desde esta misma tabla.</p>
+    <div class="modal-actions">
+      <button class="btn-ghost" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn-primary" style="background:var(--danger);" onclick="eliminarConfirmado('${id}')">Sí, eliminar</button>
+    </div>
+  `);
+}
+async function eliminarConfirmado(id){
+  cerrarModal();
+  try{
+    await window.Session.call(api.roles.eliminarRol, { rolId: id }, 'mutation');
+    await cargarRoles({ preservarCambios: true });
+  }catch(err){
+    mostrarErrorGlobal(err);
+  }
+}
+
+async function reactivar(id){
+  try{
+    await window.Session.call(api.roles.reactivarRol, { rolId: id }, 'mutation');
+    await cargarRoles({ preservarCambios: true });
+  }catch(err){
+    mostrarErrorGlobal(err);
+  }
+}
+
+async function saveRoles(){
+  const ids = Object.keys(CAMBIOS);
+  if(ids.length===0) return;
+  const btn = document.getElementById('btnSave');
+  const errorBox = document.getElementById('saveError');
+  errorBox.hidden = true;
+  const textoOriginal = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Guardando…';
+  try{
+    // Una sola mutation atómica para todas las filas editadas — mismo
+    // patrón ya establecido para materiales/usuarios/parámetros (evita
+    // el "guardado parcial" que auditorías anteriores encontraron real
+    // cuando el cliente hacía un loop de mutations independientes).
+    await window.Session.call(api.roles.guardarRolesCompleto, {
+      roles: ids.map(id => ({ rolId: id, ...CAMBIOS[id] })),
+    }, 'mutation');
+    dirty = false;
+    document.getElementById('dirtyFlag').classList.remove('show');
+    btn.disabled = true; btn.textContent = textoOriginal;
+    document.getElementById('btnReset').disabled = true;
+    await cargarRoles();
+    const t = document.getElementById('toast');
+    t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 2400);
+  }catch(err){
+    btn.disabled = false; btn.textContent = textoOriginal;
+    mostrarErrorGlobal(err);
+  }
+}
+async function resetRoles(){
+  // Descarta ediciones locales releyendo de Convex — el servidor es la
+  // única fuente de verdad, no una copia en memoria del cliente.
+  await cargarRoles();
+  dirty = false;
+  document.getElementById('dirtyFlag').classList.remove('show');
+  document.getElementById('btnSave').disabled = true;
+  document.getElementById('btnReset').disabled = true;
+  document.getElementById('saveError').hidden = true; // limpia un error de un intento anterior, si quedó visible
 }
 
 /* El HTML llama estas funciones vía onclick="" — en un <script type="module">
    quedan en el scope del módulo, no globales, así que hay que exponerlas
    explícitamente para que esos atributos sigan funcionando. */
-window.toggleBell = toggleBell;
-window.exportPDF = exportPDF;
-window.exportExistenciasCSV = exportExistenciasCSV;
-window.toggleTable = toggleTable;
-window.exportProduccionCSV = exportProduccionCSV;
-window.exportMermaCSV = exportMermaCSV;
-window.exportCostoCSV = exportCostoCSV;
+window.addRole = addRole;
+window.crearRolSubmit = crearRolSubmit;
+window.confirmarEliminar = confirmarEliminar;
+window.eliminarConfirmado = eliminarConfirmado;
+window.reactivar = reactivar;
+window.cerrarModal = cerrarModal;
+window.saveRoles = saveRoles;
+window.resetRoles = resetRoles;
+
+// EDS-65 (10.1): mismo patrón ya establecido en el resto de las pantallas
+// de Configuración — si Convex no responde, la tabla se queda vacía con un
+// error controlado en vez de silenciosamente en blanco.
+try {
+  await cargarRoles();
+} catch (err) {
+  console.error('[gestion-roles] Error al cargar roles:', err);
+  mostrarErrorGlobal(new Error('No se pudo conectar con el servidor. Verifica tu conexión y recarga la página.'));
+}
 </script>
 
 </body>

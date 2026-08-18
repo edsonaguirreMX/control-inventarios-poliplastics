@@ -184,6 +184,15 @@ a{color:inherit;}
       <div id="loginError" class="field-error"></div>
       <button class="btn-primary" id="btnLoginEntrar" type="submit" disabled>Entrar</button>
     </form>
+
+    <!-- EDS-107 (hallazgo de CodeRabbit): un rol sin ninguna página
+         asignada (o inactivo/huérfano) no debe redirigir a ningún lado —
+         redirectByRole() muestra esto en vez de navegar, rompiendo el
+         bucle silencioso login→panel-control→login que existía antes. -->
+    <div id="accesoDenegadoBox" style="display:none;flex-direction:column;gap:1rem;">
+      <div id="accesoDenegadoTexto" class="field-error" style="display:block;"></div>
+      <button class="btn-primary" id="btnCerrarSesionDenegado" type="button">Cerrar sesión</button>
+    </div>
   </div>
 </div>
 
@@ -195,10 +204,80 @@ a{color:inherit;}
 // los módulos se ejecutan en orden de documento tras el parseo del HTML.
 const CIERRE_TURNO_URL = '/cierre-turno-propuestas.html';
 const PANEL_CONTROL_URL = '/panel-control.html';
+// Mapeo slug de página → archivo HTML real — mismo catálogo y mismas
+// excepciones de nombre que convex/lib/paginas.ts (cierre-turno →
+// cierre-turno-propuestas.html, a propósito).
+const PAGINA_URL = {
+  'panel-control': PANEL_CONTROL_URL,
+  'catalogo-materiales': '/catalogo-materiales.html',
+  'parametros-produccion': '/parametros-produccion.html',
+  'entradas-costeo': '/entradas-costeo.html',
+  'correccion-capturas': '/correccion-capturas.html',
+  'alertas-configuracion': '/alertas-configuracion.html',
+  'reporte-diario': '/reporte-diario.html',
+  'ajustes-inventario': '/ajustes-inventario.html',
+  'cierre-turno': CIERRE_TURNO_URL,
+};
 
-function redirectByRole(rol) {
-  window.location.href = rol === 'operador' ? CIERRE_TURNO_URL : PANEL_CONTROL_URL;
+// EDS-107: antes esto era un heurístico fijo de 2 caminos (operador →
+// Cierre de Turno, cualquier otro rol → Panel de Control) — funcionaba
+// siempre porque los 5 roles base originales, salvo operador, TODOS
+// incluían panel-control (ver ROLES_BASE en convex/roles.ts). Con roles
+// personalizables (Gestión de Roles, EDS-107) un admin puede crear un rol
+// que no tenga panel-control NI cierre-turno (ej. un rol de acceso solo a
+// Catálogo) — con el heurístico viejo, ese usuario aterrizaba en
+// panel-control.html, requireAcceso lo rechazaba ahí, y esta misma
+// pantalla lo regresaba sin ninguna explicación (encontrado real
+// verificando EDS-107 en navegador: un usuario válido, recién creado,
+// quedaba rebotado a un formulario de login vacío sin pista de qué pasó).
+// Ahora usa paginasPermitidas real (ya viene en el objeto que devuelven
+// tanto login() como getUser(), ver auth.ts::me): cierre-turno tiene
+// preferencia solo para operador (su pantalla "home" tradicional),
+// panel-control es el default para cualquier otro rol que sí lo tenga, y
+// cualquier rol que no tenga ninguna de las dos cae a la PRIMERA página
+// de su propia lista — nunca a una pantalla a la que no tiene acceso.
+function redirectByRole(user) {
+  const paginas = user.paginasPermitidas || [];
+  if (paginas.length === 0) {
+    // CodeRabbit (PR EDS-107, Major): un rol sin páginas (inactivo,
+    // huérfano, o un rol nuevo al que nadie le marcó nada) SIEMPRE
+    // devuelve paginasPermitidas:[] desde auth.me. Navegar a
+    // PANEL_CONTROL_URL "como último recurso" (versión anterior de este
+    // código) era un bucle infinito real: requireAcceso rechaza ahí,
+    // redirige de vuelta aquí, la sesión sigue viva, y este mismo bloque
+    // volvía a disparar la navegación — sin salida posible salvo borrar
+    // el token a mano en devtools. No navegar a ningún lado; mostrar el
+    // problema real y dar una salida explícita.
+    mostrarAccesoDenegado(user);
+    return;
+  }
+  let destino;
+  if (user.rol === 'operador' && paginas.includes('cierre-turno')) {
+    destino = CIERRE_TURNO_URL;
+  } else if (paginas.includes('panel-control')) {
+    destino = PANEL_CONTROL_URL;
+  } else {
+    destino = PAGINA_URL[paginas[0]] || PANEL_CONTROL_URL;
+  }
+  window.location.href = destino;
 }
+
+function mostrarAccesoDenegado(user) {
+  // El <form> tiene `style="display:flex"` inline (arriba en el HTML) —
+  // el atributo `hidden` (display:none vía la hoja de estilos del
+  // navegador) pierde contra un style inline por especificidad, mismo tipo
+  // de trampa ya documentada en panel-control.html (EDS-96). Se apaga con
+  // style.display directo, no con `.hidden`.
+  document.getElementById('loginForm').style.display = 'none';
+  const texto = document.getElementById('accesoDenegadoTexto');
+  texto.textContent = `Tu rol ("${user.rolNombre || user.rol}") no tiene acceso a ninguna pantalla — contacta a un administrador para que te asigne uno desde Gestión de Roles.`;
+  document.getElementById('accesoDenegadoBox').style.display = 'flex';
+}
+document.getElementById('btnCerrarSesionDenegado').addEventListener('click', async () => {
+  await window.Session.logout();
+  document.getElementById('accesoDenegadoBox').style.display = 'none';
+  document.getElementById('loginForm').style.display = 'flex';
+});
 
 /* ---------- habilitar "Entrar" solo con usuario + contraseña ---------- */
 function wireEntrarState() {
@@ -240,7 +319,7 @@ async function login() {
     // autenticar (antes había 2 pestañas idénticas, Operador/Admin, que no
     // cambiaban nada funcional: cualquiera de las dos mandaba al mismo
     // redirectByRole()).
-    redirectByRole(user.rol);
+    redirectByRole(user);
   } catch (err) {
     btn.disabled = false;
     btn.textContent = textoOriginal;
@@ -275,7 +354,7 @@ document.getElementById('loginForm').addEventListener('submit', (e) => {
 /* ---------- si ya hay una sesión válida (token recordado), saltar el login ---------- */
 (async () => {
   const user = await window.Session.getUser();
-  if (user) redirectByRole(user.rol);
+  if (user) redirectByRole(user);
 })();
 
 // EDS-89: el monitor de inactividad de session.js redirige aquí con

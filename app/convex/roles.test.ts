@@ -116,6 +116,68 @@ describe('roles: actualizarRol (EDS-104)', () => {
   });
 });
 
+describe('roles: guardarRolesCompleto (EDS-107) — batch atómico', () => {
+  test('guarda nombre/páginas de varios roles en una sola transacción', async () => {
+    const t = convexTest(schema, modules);
+    const { adminToken } = await setup(t);
+    const roles = await t.query(api.roles.listRoles, { token: adminToken });
+    const gerencia = roles.find((r) => r.slug === 'gerencia')!;
+    const calidad = roles.find((r) => r.slug === 'calidad')!;
+    await t.mutation(api.roles.guardarRolesCompleto, {
+      roles: [
+        { rolId: gerencia._id, nombre: 'Gerencia General', paginas: ['panel-control', 'reporte-diario'] },
+        { rolId: calidad._id, paginas: ['panel-control', 'ajustes-inventario'] },
+      ],
+      token: adminToken,
+    });
+    const actualizados = await t.query(api.roles.listRoles, { token: adminToken });
+    const g = actualizados.find((r) => r.slug === 'gerencia')!;
+    const c = actualizados.find((r) => r.slug === 'calidad')!;
+    expect(g.nombre).toBe('Gerencia General');
+    expect(g.paginas).toEqual(['panel-control', 'reporte-diario']);
+    expect(c.nombre).toBe('Calidad y Producción'); // no se tocó, solo paginas
+    expect(c.paginas).toEqual(['panel-control', 'ajustes-inventario']);
+  });
+
+  test('BUG DE INTEGRIDAD REGRESIÓN: si un rol del batch falla, NINGUNO queda guardado', async () => {
+    const t = convexTest(schema, modules);
+    const { adminToken } = await setup(t);
+    const roles = await t.query(api.roles.listRoles, { token: adminToken });
+    const gerencia = roles.find((r) => r.slug === 'gerencia')!;
+    const admin = roles.find((r) => r.slug === 'admin')!; // protegido — hace fallar el batch
+    await expect(
+      t.mutation(api.roles.guardarRolesCompleto, {
+        roles: [
+          { rolId: gerencia._id, nombre: 'Gerencia Nueva' },
+          { rolId: admin._id, nombre: 'Superadmin' },
+        ],
+        token: adminToken,
+      })
+    ).rejects.toThrow(/protegido/);
+
+    const actual = (await t.query(api.roles.listRoles, { token: adminToken })).find((r) => r.slug === 'gerencia')!;
+    expect(actual.nombre).toBe('Gerencia y Comercial'); // no quedó en "Gerencia Nueva"
+  });
+
+  test('rechaza un batch vacío', async () => {
+    const t = convexTest(schema, modules);
+    const { adminToken } = await setup(t);
+    await expect(
+      t.mutation(api.roles.guardarRolesCompleto, { roles: [], token: adminToken })
+    ).rejects.toThrow(/no hay cambios/);
+  });
+
+  test('rechaza roles que no sean admin', async () => {
+    const t = convexTest(schema, modules);
+    const { adminToken, comprasToken } = await setup(t);
+    const roles = await t.query(api.roles.listRoles, { token: adminToken });
+    const gerencia = roles.find((r) => r.slug === 'gerencia')!;
+    await expect(
+      t.mutation(api.roles.guardarRolesCompleto, { roles: [{ rolId: gerencia._id, nombre: 'X' }], token: comprasToken })
+    ).rejects.toThrow();
+  });
+});
+
 describe('roles: eliminarRol / reactivarRol (EDS-104)', () => {
   test('rechaza eliminar el rol protegido (admin)', async () => {
     const t = convexTest(schema, modules);

@@ -356,13 +356,18 @@ if (row) {
 // resolviendo ahí (no dispara un requireRole nuevo).
 await window.__authReady;
 const api = window.api; // expuesto por session.js (bundleado) — ver su comentario
-const ROLES = [
-  {id:'operador', label:'Operador'},
-  {id:'admin', label:'Admin'},
-  {id:'gerencia', label:'Gerencia y Comercial'},
-  {id:'compras', label:'Compras'},
-  {id:'calidad', label:'Calidad y Producción'},
-];
+
+// EDS-107 (Fase 4 de EDS-103): ROLES ya NO es un enum fijo — se llena con
+// los roles ACTIVOS reales de Gestión de Roles (cargarRoles, más abajo).
+// Un rol nuevo creado ahí aparece aquí sin tocar código; uno desactivado
+// deja de ofrecerse para asignaciones nuevas (pero optionsHtml, abajo,
+// sigue mostrando correctamente el rol actual de un usuario aunque ese
+// rol se haya desactivado después de asignárselo).
+let ROLES = [];
+async function cargarRoles(){
+  const roles = await window.Session.call(api.roles.listRoles, {}, 'query');
+  ROLES = roles.filter(r=>r.activo).map(r=>({id:r.slug, label:r.nombre}));
+}
 
 // USUARIOS se llena con datos reales de Convex (cargarUsuarios, más abajo)
 // — nunca hardcodeado. CAMBIOS acumula solo las ediciones de nombre/
@@ -388,6 +393,26 @@ function escapeHtml(str){
   }[c]));
 }
 
+// EDS-107: ROLES ya solo trae roles ACTIVOS — un usuario cuyo rol se
+// desactivó (o quedó huérfano, ver seedRolesBase::usuariosHuerfanos)
+// después de asignársele no tendría ninguna <option> que lo represente.
+// Sin este fallback, el <select> mostraría en silencio la primera opción
+// de la lista como si fuera el rol real del usuario — confuso y
+// potencialmente engañoso al editar. Se inyecta su slug crudo como opción
+// deshabilitada visible, en vez de ocultar el problema.
+function optionsHtml(rolActual){
+  // CodeRabbit (PR EDS-107): r.label (roles.nombre) es texto editable por
+  // admin sin restricción de caracteres (roles.ts::crearRol/actualizarRol
+  // solo exige no-vacío) — igual que rolNombre en los badges de sesión
+  // (hallazgo de XSS ya corregido en EDS-106), un nombre de rol con markup
+  // podía inyectar HTML en esta tabla si no se escapa.
+  const opciones = ROLES.map(r=>`<option value="${escapeHtml(r.id)}" ${r.id===rolActual?'selected':''}>${escapeHtml(r.label)}</option>`);
+  if(!ROLES.some(r=>r.id===rolActual)){
+    opciones.unshift(`<option value="${escapeHtml(rolActual)}" selected disabled>${escapeHtml(rolActual)} (rol inactivo/inválido)</option>`);
+  }
+  return opciones.join('');
+}
+
 function rowHtml(u){
   const id = escapeHtml(u._id);
   const nombre = escapeHtml(u.nombre);
@@ -397,7 +422,7 @@ function rowHtml(u){
       <td><div class="field nombre"><input type="text" value="${nombre}" disabled></div></td>
       <td><div class="field usuario"><input type="text" value="${usuario}" disabled></div></td>
       <td><span class="inactivo-badge">Desactivado</span></td>
-      <td><div class="field rol"><select disabled>${ROLES.map(r=>`<option value="${r.id}" ${r.id===u.rol?'selected':''}>${r.label}</option>`).join('')}</select></div></td>
+      <td><div class="field rol"><select disabled>${optionsHtml(u.rol)}</select></div></td>
       <td><button class="btn-reactivar" onclick="reactivar('${id}')" title="Reactivar usuario">↺ Reactivar</button></td>
     </tr>`;
   }
@@ -410,7 +435,7 @@ function rowHtml(u){
         <button class="icon-btn" onclick="regenerarPwd('${id}')" title="Generar nueva contraseña">🎲</button>
       </div>
     </td>
-    <td><div class="field rol"><select data-field="rol">${ROLES.map(r=>`<option value="${r.id}" ${r.id===u.rol?'selected':''}>${r.label}</option>`).join('')}</select></div></td>
+    <td><div class="field rol"><select data-field="rol">${optionsHtml(u.rol)}</select></div></td>
     <td><button class="btn-delete" onclick="confirmarEliminar('${id}')" title="Desactivar usuario">🗑</button></td>
   </tr>`;
 }
@@ -447,8 +472,14 @@ function renderKPI(){
   const activos = USUARIOS.filter(u=>u.activo);
   const inactivos = USUARIOS.length - activos.length;
   const porRol = {};
-  ROLES.forEach(r=>porRol[r.id]=0);
   activos.forEach(u=>porRol[u.rol] = (porRol[u.rol]||0)+1);
+  // EDS-107: antes sumaba gerencia+compras+calidad a mano — con ROLES ya
+  // dinámico (cualquier admin puede crear un rol nuevo desde Gestión de
+  // Roles) esa lista fija subcontaba a cualquier rol nuevo. "Otros roles"
+  // se calcula por resta (total activos − operador − admin), así que
+  // cualquier rol personalizable futuro queda cubierto sin tocar este
+  // archivo otra vez.
+  const otros = activos.length - (porRol.operador||0) - (porRol.admin||0);
   document.getElementById('kpiRow').innerHTML = `
     <div class="stat-tile">
       <span class="stat-label">Usuarios activos</span>
@@ -466,9 +497,9 @@ function renderKPI(){
       <span class="stat-sub">Acceso completo</span>
     </div>
     <div class="stat-tile">
-      <span class="stat-label">Gerencia · Compras · Calidad</span>
-      <span class="stat-value">${(porRol.gerencia||0)+(porRol.compras||0)+(porRol.calidad||0)}</span>
-      <span class="stat-sub">Vistas del Panel de Control</span>
+      <span class="stat-label">Otros roles</span>
+      <span class="stat-value">${otros}</span>
+      <span class="stat-sub">Gerencia, Compras, Calidad y roles personalizados</span>
     </div>`;
 }
 
@@ -577,7 +608,7 @@ function addUser(){
     <h3>Agregar usuario</h3>
     <div class="modal-field-block"><label>Nombre completo</label><div class="field nombre"><input type="text" id="modalNombre" placeholder="Nombre completo"></div></div>
     <div class="modal-field-block"><label>Usuario</label><div class="field usuario"><input type="text" id="modalUsuario" placeholder="usuario"></div></div>
-    <div class="modal-field-block"><label>Rol</label><div class="field rol"><select id="modalRol">${ROLES.map(r=>`<option value="${r.id}">${r.label}</option>`).join('')}</select></div></div>
+    <div class="modal-field-block"><label>Rol</label><div class="field rol"><select id="modalRol">${ROLES.map(r=>`<option value="${escapeHtml(r.id)}">${escapeHtml(r.label)}</option>`).join('')}</select></div></div>
     <div class="field-warn error" id="modalError" hidden></div>
     <div class="modal-actions">
       <button class="btn-ghost" onclick="cerrarModal()">Cancelar</button>
@@ -719,8 +750,11 @@ window.resetUsers = resetUsers;
 
 // EDS-65 (10.1): la carga inicial no tenía try/catch — si Convex no
 // respondía, la tabla se quedaba vacía sin ninguna explicación en vez de
-// mostrar un error controlado.
+// mostrar un error controlado. EDS-107: cargarRoles() va ANTES —
+// cargarUsuarios()/rowHtml() ya necesitan ROLES lleno para armar el
+// <select> de cada fila.
 try {
+  await cargarRoles();
   await cargarUsuarios();
 } catch (err) {
   console.error('[gestion-usuarios] Error al cargar usuarios:', err);
