@@ -184,6 +184,15 @@ a{color:inherit;}
       <div id="loginError" class="field-error"></div>
       <button class="btn-primary" id="btnLoginEntrar" type="submit" disabled>Entrar</button>
     </form>
+
+    <!-- EDS-107 (hallazgo de CodeRabbit): un rol sin ninguna página
+         asignada (o inactivo/huérfano) no debe redirigir a ningún lado —
+         redirectByRole() muestra esto en vez de navegar, rompiendo el
+         bucle silencioso login→panel-control→login que existía antes. -->
+    <div id="accesoDenegadoBox" style="display:none;flex-direction:column;gap:1rem;">
+      <div id="accesoDenegadoTexto" class="field-error" style="display:block;"></div>
+      <button class="btn-primary" id="btnCerrarSesionDenegado" type="button">Cerrar sesión</button>
+    </div>
   </div>
 </div>
 
@@ -229,22 +238,46 @@ const PAGINA_URL = {
 // de su propia lista — nunca a una pantalla a la que no tiene acceso.
 function redirectByRole(user) {
   const paginas = user.paginasPermitidas || [];
+  if (paginas.length === 0) {
+    // CodeRabbit (PR EDS-107, Major): un rol sin páginas (inactivo,
+    // huérfano, o un rol nuevo al que nadie le marcó nada) SIEMPRE
+    // devuelve paginasPermitidas:[] desde auth.me. Navegar a
+    // PANEL_CONTROL_URL "como último recurso" (versión anterior de este
+    // código) era un bucle infinito real: requireAcceso rechaza ahí,
+    // redirige de vuelta aquí, la sesión sigue viva, y este mismo bloque
+    // volvía a disparar la navegación — sin salida posible salvo borrar
+    // el token a mano en devtools. No navegar a ningún lado; mostrar el
+    // problema real y dar una salida explícita.
+    mostrarAccesoDenegado(user);
+    return;
+  }
   let destino;
   if (user.rol === 'operador' && paginas.includes('cierre-turno')) {
     destino = CIERRE_TURNO_URL;
   } else if (paginas.includes('panel-control')) {
     destino = PANEL_CONTROL_URL;
-  } else if (paginas.length > 0) {
-    destino = PAGINA_URL[paginas[0]] || PANEL_CONTROL_URL;
   } else {
-    // Rol sin ninguna página asignada (caso límite real: un admin crea un
-    // rol y no marca nada) — cae a panel-control como último recurso;
-    // requireAcceso lo rechaza ahí igual, pero al menos con el mensaje
-    // real de "tu rol no tiene acceso", no un rebote silencioso.
-    destino = PANEL_CONTROL_URL;
+    destino = PAGINA_URL[paginas[0]] || PANEL_CONTROL_URL;
   }
   window.location.href = destino;
 }
+
+function mostrarAccesoDenegado(user) {
+  // El <form> tiene `style="display:flex"` inline (arriba en el HTML) —
+  // el atributo `hidden` (display:none vía la hoja de estilos del
+  // navegador) pierde contra un style inline por especificidad, mismo tipo
+  // de trampa ya documentada en panel-control.html (EDS-96). Se apaga con
+  // style.display directo, no con `.hidden`.
+  document.getElementById('loginForm').style.display = 'none';
+  const texto = document.getElementById('accesoDenegadoTexto');
+  texto.textContent = `Tu rol ("${user.rolNombre || user.rol}") no tiene acceso a ninguna pantalla — contacta a un administrador para que te asigne uno desde Gestión de Roles.`;
+  document.getElementById('accesoDenegadoBox').style.display = 'flex';
+}
+document.getElementById('btnCerrarSesionDenegado').addEventListener('click', async () => {
+  await window.Session.logout();
+  document.getElementById('accesoDenegadoBox').style.display = 'none';
+  document.getElementById('loginForm').style.display = 'flex';
+});
 
 /* ---------- habilitar "Entrar" solo con usuario + contraseña ---------- */
 function wireEntrarState() {
