@@ -89,6 +89,36 @@ describe('roles: crearRol (EDS-104)', () => {
     const roles = await t.query(api.roles.listRoles, { token: adminToken });
     expect(roles.filter((r) => r.slug.startsWith('compras')).length).toBe(2);
   });
+
+  test('EDS-111: crea un rol con vistasPanel; sin especificarlo, queda en []', async () => {
+    const t = convexTest(schema, modules);
+    const { adminToken } = await setup(t);
+    const conVistas = await t.mutation(api.roles.crearRol, {
+      nombre: 'Compras y Calidad', paginas: ['panel-control'], vistasPanel: ['compras', 'calidad'], token: adminToken,
+    });
+    const sinVistas = await t.mutation(api.roles.crearRol, {
+      nombre: 'Sin Vistas', paginas: ['panel-control'], token: adminToken,
+    });
+    const roles = await t.query(api.roles.listRoles, { token: adminToken });
+    expect(roles.find((x) => x.slug === conVistas.slug)!.vistasPanel).toEqual(['compras', 'calidad']);
+    expect(roles.find((x) => x.slug === sinVistas.slug)!.vistasPanel).toEqual([]);
+  });
+
+  test('EDS-111: rechaza una vista que no existe en el catálogo', async () => {
+    const t = convexTest(schema, modules);
+    const { adminToken } = await setup(t);
+    await expect(
+      t.mutation(api.roles.crearRol, { nombre: 'Rol W', paginas: ['panel-control'], vistasPanel: ['vista-inventada'], token: adminToken })
+    ).rejects.toThrow();
+  });
+
+  test('EDS-111: rechaza "admin" como vista — no es una vista configurable', async () => {
+    const t = convexTest(schema, modules);
+    const { adminToken } = await setup(t);
+    await expect(
+      t.mutation(api.roles.crearRol, { nombre: 'Rol V', paginas: ['panel-control'], vistasPanel: ['admin'], token: adminToken })
+    ).rejects.toThrow();
+  });
 });
 
 describe('roles: actualizarRol (EDS-104)', () => {
@@ -112,6 +142,30 @@ describe('roles: actualizarRol (EDS-104)', () => {
     const admin = roles.find((r) => r.slug === 'admin')!;
     await expect(
       t.mutation(api.roles.actualizarRol, { rolId: admin._id, nombre: 'Superadmin', token: adminToken })
+    ).rejects.toThrow();
+  });
+
+  test('EDS-111: amplía las vistasPanel de un rol (ej. darle a Compras también Calidad)', async () => {
+    const t = convexTest(schema, modules);
+    const { adminToken } = await setup(t);
+    const roles = await t.query(api.roles.listRoles, { token: adminToken });
+    const compras = roles.find((r) => r.slug === 'compras')!;
+    expect(compras.vistasPanel).toEqual(['compras']); // línea base antes de editar
+    await t.mutation(api.roles.actualizarRol, {
+      rolId: compras._id, vistasPanel: ['compras', 'calidad'], token: adminToken,
+    });
+    const actualizado = (await t.query(api.roles.listRoles, { token: adminToken })).find((r) => r.slug === 'compras')!;
+    expect(actualizado.vistasPanel).toEqual(['compras', 'calidad']);
+    expect(actualizado.paginas).toEqual(['panel-control', 'entradas-costeo']); // no se tocó
+  });
+
+  test('EDS-111: rechaza una vista inválida al actualizar', async () => {
+    const t = convexTest(schema, modules);
+    const { adminToken } = await setup(t);
+    const roles = await t.query(api.roles.listRoles, { token: adminToken });
+    const compras = roles.find((r) => r.slug === 'compras')!;
+    await expect(
+      t.mutation(api.roles.actualizarRol, { rolId: compras._id, vistasPanel: ['gerencia', 'admin'], token: adminToken })
     ).rejects.toThrow();
   });
 });
@@ -291,6 +345,51 @@ describe('roles: seedRolesBase (EDS-104)', () => {
     expect(compras.paginas).toEqual(['panel-control']); // NO se pisó (ROLES_BASE trae 2 páginas para compras)
     expect(compras.orden).toBe(99); // NO se pisó
     expect(compras.updatedBy).toBe(adminId); // NO se pisó — sigue apuntando a quien editó de verdad
+  });
+
+  test('EDS-111: completa vistasPanel de un rol base sembrado ANTES de esta épica (campo undefined, no [])', async () => {
+    const t = convexTest(schema, modules);
+    // Simula el estado real de dev/prod el día del deploy de EDS-111: los
+    // 5 roles base ya existen, activos, pero sin el campo vistasPanel en
+    // absoluto (undefined) — sembrados antes de que ese campo existiera.
+    // Sin este backfill, compras perdería de golpe su vista del Panel de
+    // Control (auth.me caería a `[]`) hasta que alguien la marcara a mano.
+    await t.run(async (ctx) => {
+      const now = Date.now();
+      await ctx.db.insert('roles', {
+        slug: 'compras', nombre: 'Compras', paginas: ['panel-control', 'entradas-costeo'],
+        protegido: false, bypassAcceso: false, activo: true, orden: 2, updatedAt: now, updatedBy: null,
+      });
+    });
+    const r = await t.mutation(internal.roles.seedRolesBase, {});
+    expect(r.vistasPanelCompletadas).toBe(1);
+
+    const adminId = await crearUsuarioPrueba(t, 'admin');
+    const adminToken = await crearSesionPrueba(t, adminId);
+    const roles = await t.query(api.roles.listRoles, { token: adminToken });
+    expect(roles.find((x) => x.slug === 'compras')!.vistasPanel).toEqual(['compras']);
+  });
+
+  test('EDS-111: NO pisa un vistasPanel ya editado a mano, ni siquiera si quedó en [] explícito', async () => {
+    const t = convexTest(schema, modules);
+    // Un admin ya entró a Gestión de Roles y le quitó a "compras" su vista
+    // (vistasPanel:[] explícito, no undefined) — correr seedRolesBase de
+    // nuevo no debe reponerla; [] explícito es una decisión real, distinta
+    // de "el campo nunca se tocó" (undefined).
+    await t.run(async (ctx) => {
+      const now = Date.now();
+      await ctx.db.insert('roles', {
+        slug: 'compras', nombre: 'Compras', paginas: ['panel-control', 'entradas-costeo'], vistasPanel: [],
+        protegido: false, bypassAcceso: false, activo: true, orden: 2, updatedAt: now, updatedBy: null,
+      });
+    });
+    const r = await t.mutation(internal.roles.seedRolesBase, {});
+    expect(r.vistasPanelCompletadas).toBe(0);
+
+    const adminId = await crearUsuarioPrueba(t, 'admin');
+    const adminToken = await crearSesionPrueba(t, adminId);
+    const roles = await t.query(api.roles.listRoles, { token: adminToken });
+    expect(roles.find((x) => x.slug === 'compras')!.vistasPanel).toEqual([]);
   });
 
   test('EDS-109: un rol base ya activo no cuenta como reactivado (idempotente, mismo caso que antes)', async () => {

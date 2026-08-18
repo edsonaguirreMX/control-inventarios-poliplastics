@@ -380,4 +380,64 @@ describe('auth.me: rolNombre / paginasPermitidas (EDS-106)', () => {
     expect(me?.rolNombre).toBe('un_rol_que_no_existe');
     expect(me?.paginasPermitidas).toEqual([]);
   });
+
+  // EDS-111: mismo criterio que paginasPermitidas, cobertura dedicada para vistasPanel.
+  test('EDS-111: admin (bypassAcceso) recibe las 3 vistas de Panel de Control', async () => {
+    const t = convexTest(schema, modules);
+    await crearRolesPrueba(t);
+    const adminId = await crearUsuarioPrueba(t, 'admin');
+    const adminToken = await crearSesionPrueba(t, adminId);
+    const me = await t.query(api.auth.me, { token: adminToken });
+    expect(me?.vistasPanel.sort()).toEqual(['calidad', 'compras', 'gerencia']);
+  });
+
+  test('EDS-111: compras recibe exactamente su propia vista, ni calidad ni gerencia', async () => {
+    const t = convexTest(schema, modules);
+    await crearRolesPrueba(t);
+    const comprasId = await crearUsuarioPrueba(t, 'compras');
+    const comprasToken = await crearSesionPrueba(t, comprasId);
+    const me = await t.query(api.auth.me, { token: comprasToken });
+    expect(me?.vistasPanel).toEqual(['compras']);
+  });
+
+  test('EDS-111: operador (sin vistasPanel definido) recibe [], igual que sin acceso al Panel', async () => {
+    const t = convexTest(schema, modules);
+    await crearRolesPrueba(t);
+    const operadorId = await crearUsuarioPrueba(t, 'operador');
+    const operadorToken = await crearSesionPrueba(t, operadorId);
+    const me = await t.query(api.auth.me, { token: operadorToken });
+    expect(me?.vistasPanel).toEqual([]);
+  });
+
+  test('EDS-111: rol inactivo también deja vistasPanel vacío, no solo paginasPermitidas', async () => {
+    const t = convexTest(schema, modules);
+    await crearRolesPrueba(t);
+    const gerenciaId = await crearUsuarioPrueba(t, 'gerencia');
+    const gerenciaToken = await crearSesionPrueba(t, gerenciaId);
+    await t.run(async (ctx) => {
+      const rol = await ctx.db.query('roles').withIndex('by_slug', (q) => q.eq('slug', 'gerencia')).unique();
+      await ctx.db.patch(rol!._id, { activo: false });
+    });
+    const me = await t.query(api.auth.me, { token: gerenciaToken });
+    expect(me?.vistasPanel).toEqual([]);
+  });
+
+  test('EDS-111: un rol sin vistasPanel en el documento (sembrado antes de esta épica) cae a [], sin lanzar', async () => {
+    const t = convexTest(schema, modules);
+    const now = Date.now();
+    // Simula un rol creado ANTES de EDS-111 — el campo vistasPanel
+    // simplemente no existe en el documento (opcional en el schema a
+    // propósito, para no requerir migrar dev/prod).
+    await t.run(async (ctx) => {
+      await ctx.db.insert('roles', {
+        slug: 'legado_sin_vistas', nombre: 'Legado Sin Vistas', paginas: ['panel-control'],
+        protegido: false, bypassAcceso: false, activo: true, orden: 99, updatedAt: now, updatedBy: null,
+      });
+    });
+    const userId = await crearUsuarioPrueba(t, 'legado_sin_vistas' as any);
+    const token = await crearSesionPrueba(t, userId);
+    const me = await t.query(api.auth.me, { token });
+    expect(me?.vistasPanel).toEqual([]);
+    expect(me?.paginasPermitidas).toEqual(['panel-control']); // paginas sí seguía funcionando
+  });
 });

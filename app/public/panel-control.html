@@ -471,6 +471,16 @@ button{font-family:inherit;}
     </div>
   </div>
 
+  <!-- EDS-111: caso límite — un rol con acceso a la página Panel de
+       Control pero sin ninguna vista marcada en Gestión de Roles (error
+       de configuración plausible: se le dio la página pero se olvidó
+       marcar al menos una vista). Sin esto, la pantalla quedaría en
+       blanco debajo del encabezado, sin explicación. -->
+  <section class="card" id="sinVistaAsignada" hidden>
+    <h3>Sin vista asignada</h3>
+    <p class="card-sub">Tu rol tiene acceso a Panel de Control, pero no tiene ninguna vista marcada (Compras, Calidad y Producción o Gerencia y Comercial). Pide a un administrador que te asigne al menos una desde Gestión de Roles.</p>
+  </section>
+
   <!-- KPI: Compras. no-print: EDS-99 — pedido explícito del usuario, el
        Reporte Directivo no debe pasar de 2 páginas; su contenido vive
        condensado en el resumen ejecutivo (.print-only) de más arriba. -->
@@ -1641,19 +1651,49 @@ async function cargarTodo(){
   inicializarCamposObjetivos();
   buildLineCharts();
 
-  // El selector de rol del mockup (para previsualizar las 4 vistas) solo
-  // tiene sentido para admin, que sí ve todo el sistema; el resto de los
-  // roles queda fijo en su propia vista real, sin poder cambiarla.
+  // EDS-111: el selector de pestañas ya no depende del string literal
+  // sessionUser.rol — depende de sessionUser.vistasPanel (real, resuelto
+  // por auth.me contra la tabla `roles`; admin lo recibe completo vía
+  // bypassAcceso, sin caso especial aquí). "Admin" (Configuración) es la
+  // única pestaña que se queda atada al literal 'admin' a propósito — no
+  // es una vista configurable de este catálogo (ver convex/lib/vistasPanel.ts).
+  const misVistas = sessionUser.vistasPanel || [];
+  const esAdmin = sessionUser.rol === 'admin';
+  document.querySelectorAll('#roleSwitch .role-btn').forEach(btn => {
+    const role = btn.dataset.role;
+    btn.hidden = role === 'admin' ? !esAdmin : !misVistas.includes(role);
+  });
+  // Con 0 o 1 pestaña visible no tiene caso mostrar un selector para
+  // elegir entre nada — mismo criterio de "aterriza directo, sin
+  // selector" que ya aplicaba a compras/calidad/gerencia individualmente
+  // antes de esta épica, generalizado ahora a cualquier combinación.
+  const tabsVisibles = [...document.querySelectorAll('#roleSwitch .role-btn')].filter(b => !b.hidden);
+  if (tabsVisibles.length <= 1) {
+    document.getElementById('roleSwitch').style.display = 'none';
+  }
+
   // EDS-92: ?tab=admin (usado por el breadcrumb "Volver a Admin" de las
   // pantallas de Configuración) hace que admin aterrice directo en su
   // propia pestaña en vez del default de Compras — sin el parámetro,
-  // sigue aterrizando en Compras como siempre.
-  const tabInicial = sessionUser.rol === 'admin'
-    ? (new URLSearchParams(location.search).get('tab') === 'admin' ? 'admin' : 'compras')
-    : sessionUser.rol;
-  applyRole(tabInicial);
-  if (sessionUser.rol !== 'admin') {
-    document.getElementById('roleSwitch').style.display = 'none';
+  // sigue aterrizando en Compras como siempre. Para el resto de los roles,
+  // ?tab= también permite deep-linking directo a una vista permitida
+  // (ej. el enlace de una notificación); si no hay parámetro válido, cae
+  // a la primera vista de su lista.
+  const paramTab = new URLSearchParams(location.search).get('tab');
+  let tabInicial;
+  if (esAdmin) {
+    tabInicial = paramTab === 'admin' ? 'admin' : 'compras';
+  } else if (misVistas.length === 0) {
+    tabInicial = null;
+  } else if (paramTab && misVistas.includes(paramTab)) {
+    tabInicial = paramTab;
+  } else {
+    tabInicial = misVistas[0];
+  }
+  if (tabInicial) {
+    applyRole(tabInicial);
+  } else {
+    document.getElementById('sinVistaAsignada').hidden = false;
   }
 
   // Llegando desde Reporte Diario (?autoprint=1) — simula "así se ve el

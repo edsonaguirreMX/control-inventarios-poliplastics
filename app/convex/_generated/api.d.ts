@@ -23,6 +23,7 @@ import type * as lib_auth from "../lib/auth.js";
 import type * as lib_fechaOperativa from "../lib/fechaOperativa.js";
 import type * as lib_paginas from "../lib/paginas.js";
 import type * as lib_puntoReorden from "../lib/puntoReorden.js";
+import type * as lib_vistasPanel from "../lib/vistasPanel.js";
 import type * as materiales from "../materiales.js";
 import type * as parametros from "../parametros.js";
 import type * as peps from "../peps.js";
@@ -57,6 +58,7 @@ declare const fullApi: ApiFromModules<{
   "lib/fechaOperativa": typeof lib_fechaOperativa;
   "lib/paginas": typeof lib_paginas;
   "lib/puntoReorden": typeof lib_puntoReorden;
+  "lib/vistasPanel": typeof lib_vistasPanel;
   materiales: typeof materiales;
   parametros: typeof parametros;
   peps: typeof peps;

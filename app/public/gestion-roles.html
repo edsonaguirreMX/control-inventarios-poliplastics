@@ -112,7 +112,7 @@ a{color:inherit;}
 
 /* ---------- table ---------- */
 .table-scroll{overflow-x:auto;}
-table.roles{border-collapse:collapse;width:100%;min-width:900px;}
+table.roles{border-collapse:collapse;width:100%;min-width:1150px;}
 table.roles thead th{
   text-align:left;font-family:'Big Shoulders Display',sans-serif;font-size:.74rem;letter-spacing:.06em;
   text-transform:uppercase;color:var(--ink-muted);padding:.6rem .7rem;border-bottom:1.5px solid var(--border);
@@ -136,6 +136,10 @@ table.roles tbody tr.protegido td{opacity:.8;}
 .pagina-check input:disabled{cursor:not-allowed;}
 .pagina-check.disabled{color:var(--ink-faint);}
 .protegido-note{display:block;margin-top:.5rem;font-size:.74rem;color:var(--ink-faint);}
+/* EDS-111 — mismo componente visual que .paginas-grid/.pagina-check, clase
+   propia para poder distinguirlas en el delegado de eventos (una fila edita
+   paginas Y vistasPanel a la vez, en 2 grids separados). */
+.vistas-grid{display:flex;flex-wrap:wrap;gap:.35rem 1rem;max-width:16rem;}
 .btn-reactivar{
   border:1px solid var(--positive);background:var(--positive-soft);color:var(--positive-ink);
   border-radius:8px;padding:.35rem .6rem;font-size:.74rem;font-weight:700;cursor:pointer;white-space:nowrap;
@@ -263,7 +267,7 @@ footer.page-foot{font-size:.78rem;color:var(--ink-faint);border-top:1px solid va
     <div class="card-head">
       <div>
         <h3>Roles</h3>
-        <p class="card-sub">Marca las páginas a las que da acceso cada rol. Un usuario con ese rol podrá abrir cualquiera de las páginas marcadas — y solo esas.</p>
+        <p class="card-sub">Marca las páginas a las que da acceso cada rol, y —para Panel de Control— cuáles de sus 3 vistas de solo lectura puede ver. Un usuario con ese rol podrá abrir cualquiera de las páginas marcadas, y solo esas.</p>
       </div>
       <button class="btn-add" onclick="addRole()">+ Nuevo rol</button>
     </div>
@@ -274,6 +278,7 @@ footer.page-foot{font-size:.78rem;color:var(--ink-faint);border-top:1px solid va
           <tr>
             <th>Nombre</th>
             <th>Páginas con acceso</th>
+            <th>Vistas de Panel de Control</th>
             <th>Estado</th>
             <th></th>
           </tr>
@@ -284,6 +289,7 @@ footer.page-foot{font-size:.78rem;color:var(--ink-faint);border-top:1px solid va
 
     <ul class="footnotes">
       <li>Gestión de Usuarios y Gestión de Roles quedan siempre fuera de esta lista — ningún rol personalizable puede recibir acceso a ellas, por seguridad (evita que un rol se auto-otorgue el control del sistema).</li>
+      <li><b>Vistas de Panel de Control</b> solo importan si el rol también tiene acceso a la página "Panel de Control" — son las 3 vistas de solo lectura (Compras, Calidad y Producción, Gerencia y Comercial), todas con los mismos datos reales, solo cambia qué tarjetas se muestran. La pestaña "Admin" (Configuración) no es una vista de esta lista — se queda admin-only fija.</li>
       <li>El rol <b>Admin</b> es protegido: tiene acceso a todo el sistema siempre, no aparece editable aquí y no se puede eliminar.</li>
       <li>Un rol con usuarios <b>activos</b> asignados no se puede eliminar — reasígnalos desde Gestión de Usuarios primero. 🗑 lo desactiva (deja de poder asignarse a nadie nuevo) sin borrar su historial; un rol desactivado puede reactivarse desde la misma tabla.</li>
     </ul>
@@ -390,6 +396,19 @@ const PAGINAS = [
   {slug:'cierre-turno', label:'Cierre de Turno'},
 ];
 
+// EDS-111 — catálogo LOCAL de las 3 vistas internas de Panel de Control,
+// copia intencional de convex/lib/vistasPanel.ts::VISTAS_PANEL (mismo
+// criterio que el catálogo de PAGINAS de arriba: sin endpoint que devuelva
+// labels legibles, se mantiene aquí a mano; el backend valida los slugs
+// igual, así que no hay riesgo de aceptar en silencio una vista que esta
+// UI no ofrece). A propósito NO incluye 'admin' — esa pestaña no es una
+// vista configurable, se queda admin-only fija.
+const VISTAS_PANEL = [
+  {slug:'compras', label:'Compras'},
+  {slug:'calidad', label:'Calidad y Producción'},
+  {slug:'gerencia', label:'Gerencia y Comercial'},
+];
+
 // ROLES se llena con datos reales de Convex (cargarRoles, más abajo) —
 // nunca hardcodeado. CAMBIOS acumula solo las ediciones de nombre/páginas
 // de roles NO protegidos pendientes de "Guardar cambios" (batch atómico,
@@ -418,6 +437,18 @@ function checkboxesHtml(rol, disabled){
     </label>`).join('');
 }
 
+// EDS-111 — vistasPanel es opcional en el schema (roles sembrados antes de
+// esta épica no lo tienen todavía) — `?? []` evita romper al leer un rol
+// viejo sin el campo.
+function vistasCheckboxesHtml(rol, disabled){
+  const vistas = rol.vistasPanel ?? [];
+  return VISTAS_PANEL.map(v => `
+    <label class="pagina-check${disabled ? ' disabled' : ''}">
+      <input type="checkbox" value="${v.slug}" ${vistas.includes(v.slug) ? 'checked' : ''} ${disabled ? 'disabled' : ''}>
+      <span>${v.label}</span>
+    </label>`).join('');
+}
+
 function rowHtml(r){
   const id = escapeHtml(r._id);
   const nombre = escapeHtml(r.nombre);
@@ -428,6 +459,7 @@ function rowHtml(r){
         <div class="paginas-grid">${checkboxesHtml(r, true)}</div>
         <span class="protegido-note">🔒 Rol protegido — siempre tiene acceso a todo el sistema, sin importar qué páginas muestre esta lista.</span>
       </td>
+      <td><div class="vistas-grid">${vistasCheckboxesHtml(r, true)}</div></td>
       <td><span class="protegido-badge">Protegido</span></td>
       <td></td>
     </tr>`;
@@ -436,6 +468,7 @@ function rowHtml(r){
     return `<tr class="inactivo" data-id="${id}">
       <td><div class="field nombre"><input type="text" value="${nombre}" disabled></div></td>
       <td><div class="paginas-grid">${checkboxesHtml(r, true)}</div></td>
+      <td><div class="vistas-grid">${vistasCheckboxesHtml(r, true)}</div></td>
       <td><span class="inactivo-badge">Desactivado</span></td>
       <td><button class="btn-reactivar" onclick="reactivar('${id}')" title="Reactivar rol">↺ Reactivar</button></td>
     </tr>`;
@@ -443,6 +476,7 @@ function rowHtml(r){
   return `<tr data-id="${id}">
     <td><div class="field nombre"><input type="text" value="${nombre}" data-field="nombre" placeholder="Nombre del rol"></div></td>
     <td><div class="paginas-grid" data-field="paginas">${checkboxesHtml(r, false)}</div></td>
+    <td><div class="vistas-grid" data-field="vistasPanel">${vistasCheckboxesHtml(r, false)}</div></td>
     <td><span class="activo-badge">Activo</span></td>
     <td><button class="btn-delete" onclick="confirmarEliminar('${id}')" title="Eliminar rol">🗑</button></td>
   </tr>`;
@@ -535,6 +569,15 @@ document.getElementById('rolesBody').addEventListener('input', e=>{
     CAMBIOS[id].paginas = paginas;
     renderKPI();
     markDirty();
+    return;
+  }
+  if(e.target.matches('.vistas-grid input[type="checkbox"]')){
+    const grid = e.target.closest('.vistas-grid');
+    const vistasPanel = [...grid.querySelectorAll('input[type="checkbox"]:checked')].map(cb=>cb.value);
+    r.vistasPanel = vistasPanel;
+    CAMBIOS[id] = CAMBIOS[id] || {};
+    CAMBIOS[id].vistasPanel = vistasPanel;
+    markDirty();
   }
 });
 
@@ -563,6 +606,12 @@ function addRole(){
         <label class="pagina-check"><input type="checkbox" id="modalPagina-${p.slug}" value="${p.slug}"><span>${p.label}</span></label>
       `).join('')}</div>
     </div>
+    <div class="modal-field-block">
+      <label>Vistas de Panel de Control (solo aplica si marcaste "Panel de Control" arriba)</label>
+      <div class="vistas-grid">${VISTAS_PANEL.map(v=>`
+        <label class="pagina-check"><input type="checkbox" id="modalVista-${v.slug}" value="${v.slug}"><span>${v.label}</span></label>
+      `).join('')}</div>
+    </div>
     <div class="field-warn error" id="modalError" hidden></div>
     <div class="modal-actions">
       <button class="btn-ghost" onclick="cerrarModal()">Cancelar</button>
@@ -575,12 +624,13 @@ function addRole(){
 async function crearRolSubmit(){
   const nombre = document.getElementById('modalNombre').value;
   const paginas = [...document.querySelectorAll('#modalBox .paginas-grid input[type="checkbox"]:checked')].map(cb=>cb.value);
+  const vistasPanel = [...document.querySelectorAll('#modalBox .vistas-grid input[type="checkbox"]:checked')].map(cb=>cb.value);
   const btn = document.getElementById('modalCrearBtn');
   const errorBox = document.getElementById('modalError');
   errorBox.hidden = true;
   btn.disabled = true; btn.textContent = 'Creando…';
   try{
-    await window.Session.call(api.roles.crearRol, { nombre, paginas }, 'mutation');
+    await window.Session.call(api.roles.crearRol, { nombre, paginas, vistasPanel }, 'mutation');
     cerrarModal();
     await cargarRoles({ preservarCambios: true });
     const t = document.getElementById('toast');
