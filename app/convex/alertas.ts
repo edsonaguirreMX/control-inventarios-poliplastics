@@ -2,15 +2,19 @@ import { v, ConvexError } from 'convex/values';
 import { mutation, query, internalMutation } from './_generated/server';
 import type { MutationCtx, QueryCtx } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
-import { requireRole } from './lib/auth';
-import type { Rol } from './lib/auth';
+import { requireAcceso, requireUser } from './lib/auth';
 import { fechaOperativa, sumarDiasISO, horaLocalAInstante, nombreDiaSemana } from './lib/fechaOperativa';
 import { calcularKPIsHoyImpl, requireParametros, cierresEnRango } from './dashboard';
 
-// Cualquier rol autenticado puede leer/marcar SUS PROPIAS alertas — la
-// restricción real de "qué le llega a quién" vive en
-// alertasReglas.destinatariosRoles, no en el guard de estas mutations.
-const CUALQUIER_ROL: Rol[] = ['operador', 'admin', 'gerencia', 'compras', 'calidad'];
+// EDS-105 (Fase 2): antes CUALQUIER_ROL enumeraba los 5 roles fijos — con
+// roles dinámicos ya no se puede enumerar "todos los roles posibles" en
+// código (un rol personalizable futuro no estaría en esa lista). Como el
+// propósito SIEMPRE fue "cualquier usuario autenticado, sea cual sea su
+// rol" (la restricción real de "qué le llega a quién" vive en
+// alertasReglas.destinatariosRoles, no aquí), marcarAlertaLeida/
+// marcarTodasLeidas/noLeidasParaMi pasan a requireUser puro — sin chequeo
+// de página, porque leer/marcar TUS PROPIAS alertas no depende de qué
+// pantallas puedas abrir.
 
 // Margen fijo usado también por panel-control.html (MERMA_META) para el
 // estado "por vencer"/tendencia de merma — no hay una meta de merma
@@ -33,7 +37,7 @@ const NOMBRES_SISTEMA: Record<string, string> = {
 export const listReglas = query({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {
-    await requireRole(ctx, token, ['admin']);
+    await requireAcceso(ctx, token, 'alertas-configuracion');
     return ctx.db.query('alertasReglas').collect();
   },
 });
@@ -77,7 +81,7 @@ export const updateRegla = mutation({
     token: v.string(),
   },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, args.token, ['admin']);
+    const user = await requireAcceso(ctx, args.token, 'alertas-configuracion');
     await actualizarReglaImpl(ctx, user, args);
     return { ok: true };
   },
@@ -98,7 +102,7 @@ export const guardarReglasCompleto = mutation({
     token: v.string(),
   },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, args.token, ['admin']);
+    const user = await requireAcceso(ctx, args.token, 'alertas-configuracion');
     if (args.reglas.length === 0) {
       throw new ConvexError('guardarReglasCompleto: se necesita al menos una regla.');
     }
@@ -132,7 +136,7 @@ async function noLeidasParaUsuarioImpl(ctx: QueryCtx, user: Doc<'users'>): Promi
 export const marcarAlertaLeida = mutation({
   args: { alertaId: v.id('alertasHistorial'), token: v.string() },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, args.token, CUALQUIER_ROL);
+    const user = await requireUser(ctx, args.token);
     const existente = await ctx.db
       .query('alertasLecturas')
       .withIndex('by_alerta_user', (q) => q.eq('alertaId', args.alertaId).eq('userId', user._id))
@@ -148,7 +152,7 @@ export const marcarAlertaLeida = mutation({
 export const marcarTodasLeidas = mutation({
   args: { token: v.string() },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, args.token, CUALQUIER_ROL);
+    const user = await requireUser(ctx, args.token);
     const noLeidas = await noLeidasParaUsuarioImpl(ctx, user);
     const now = Date.now();
     for (const alerta of noLeidas) {
@@ -167,7 +171,7 @@ export const marcarTodasLeidas = mutation({
 export const noLeidasParaMi = query({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {
-    const user = await requireRole(ctx, token, CUALQUIER_ROL);
+    const user = await requireUser(ctx, token);
     const noLeidas = await noLeidasParaUsuarioImpl(ctx, user);
     const reglas = await ctx.db.query('alertasReglas').collect();
     const nombrePorSlug = new Map(reglas.map((r) => [r.slug, r.nombre]));
@@ -186,7 +190,7 @@ export const noLeidasParaMi = query({
 export const listHistorial = query({
   args: { token: v.string(), limite: v.optional(v.number()) },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, args.token, ['admin']);
+    const user = await requireAcceso(ctx, args.token, 'alertas-configuracion');
     const limite = args.limite ?? 40;
     const historial = await ctx.db.query('alertasHistorial').order('desc').take(limite);
     const reglas = await ctx.db.query('alertasReglas').collect();

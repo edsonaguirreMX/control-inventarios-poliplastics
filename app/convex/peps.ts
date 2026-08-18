@@ -2,7 +2,7 @@ import { v, ConvexError } from 'convex/values';
 import { internalMutation, query } from './_generated/server';
 import type { MutationCtx } from './_generated/server';
 import type { Id } from './_generated/dataModel';
-import { requireRole } from './lib/auth';
+import { requireRole, requireAcceso } from './lib/auth';
 
 // Motor de costeo PEPS/FIFO. Reglas de negocio que este archivo existe para
 // garantizar (ver plan: ~/.claude/plans/quiero-que-hagas-el-wise-creek.md):
@@ -260,10 +260,14 @@ export const revertirConsumo = internalMutation({
 // expone costo (solo kg), así que se deja disponible a un set más amplio
 // de roles operativos. ---
 
+// EDS-105: existenciaMaterial no expone costo, solo kg — se mapea a
+// panel-control (la única pantalla que hoy la consume). Cualquier rol con
+// acceso a Panel de Control puede ver existencia, sin importar si también
+// tiene permiso financiero.
 export const existenciaMaterial = query({
   args: { materialId: v.id('materiales'), token: v.string() },
   handler: async (ctx, { materialId, token }) => {
-    await requireRole(ctx, token, ['compras', 'calidad', 'gerencia', 'admin']);
+    await requireAcceso(ctx, token, 'panel-control');
     const capas = await ctx.db
       .query('capasCosto')
       .withIndex('by_material_agotada', (q) => q.eq('materialId', materialId).eq('agotada', false))
@@ -272,6 +276,17 @@ export const existenciaMaterial = query({
   },
 });
 
+// EDS-105: EXCEPCIÓN DELIBERADA — se queda en requireRole, NO se migra a
+// requireAcceso. Motivo (decisión explícita del usuario en la tabla de
+// equivalencia de EDS-105): valorInventarioMaterial expone un dato
+// financiero real (costo × kg), y "acceso a panel-control" ya no basta
+// para expresar esa distinción — Calidad puede ver Panel de Control pero
+// NO debe ver valor de inventario. Esta feature no cubre permisos finos
+// dentro de una misma pantalla (ver plan, "Nota de alcance"), así que la
+// única forma correcta de mantener esa distinción hoy es dejar esta
+// función en el mecanismo fijo de roles — 3ra excepción permanente además
+// de usuarios.ts/roles.ts. No ampliar a 'calidad' sin antes construir
+// permisos finos de verdad.
 export const valorInventarioMaterial = query({
   args: { materialId: v.id('materiales'), token: v.string() },
   handler: async (ctx, { materialId, token }) => {

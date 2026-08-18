@@ -1,7 +1,7 @@
 import { v, ConvexError } from 'convex/values';
 import { mutation, query, internalMutation } from './_generated/server';
 import type { MutationCtx } from './_generated/server';
-import { requireRole } from './lib/auth';
+import { requireAcceso } from './lib/auth';
 import { requireParametros, ROLES_DASHBOARD } from './dashboard';
 import { fechaOperativa, sumarDiasISO, horaLocalAInstante } from './lib/fechaOperativa';
 
@@ -40,7 +40,7 @@ async function crearNotificacionReporte(ctx: MutationCtx, hoy: string, ahoraMs: 
 export const getConfig = query({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {
-    await requireRole(ctx, token, ['admin']);
+    await requireAcceso(ctx, token, 'reporte-diario');
     const config = await ctx.db.query('reporteDiarioConfig').first();
     return config ?? { hora: '14:00', activo: false, correos: [] as string[], whatsapp: [] as string[] };
   },
@@ -55,7 +55,7 @@ export const guardarConfig = mutation({
     token: v.string(),
   },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, args.token, ['admin']);
+    const user = await requireAcceso(ctx, args.token, 'reporte-diario');
     if (!HORA_REGEX.test(args.hora)) {
       throw new ConvexError('guardarConfig: hora inválida — formato esperado HH:MM.');
     }
@@ -82,7 +82,7 @@ export const guardarConfig = mutation({
 export const listHistorial = query({
   args: { token: v.string(), limite: v.optional(v.number()) },
   handler: async (ctx, args) => {
-    await requireRole(ctx, args.token, ['admin']);
+    await requireAcceso(ctx, args.token, 'reporte-diario');
     const limite = args.limite ?? 30;
     return ctx.db.query('reporteDiarioHistorial').order('desc').take(limite);
   },
@@ -98,7 +98,7 @@ export const listHistorial = query({
 export const generarReporteAhora = mutation({
   args: { token: v.string() },
   handler: async (ctx, args) => {
-    await requireRole(ctx, args.token, ['admin']);
+    await requireAcceso(ctx, args.token, 'reporte-diario');
     const params = await requireParametros(ctx);
     const ahoraMs = Date.now();
     const hoy = fechaOperativa(ahoraMs, params.zonaHoraria, params.horaInicioTurno1);

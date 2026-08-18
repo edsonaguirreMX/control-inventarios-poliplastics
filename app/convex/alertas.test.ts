@@ -3,7 +3,7 @@ import { describe, expect, test, vi, afterEach } from 'vitest';
 import schema from './schema';
 import { internal, api } from './_generated/api';
 import { crearCapaImpl } from './peps';
-import { crearMaterialPrueba, crearUsuarioPrueba, crearSesionPrueba, crearParametrosPrueba, crearReglasAlertaPrueba } from './testHelpers';
+import { crearMaterialPrueba, crearUsuarioPrueba, crearSesionPrueba, crearParametrosPrueba, crearReglasAlertaPrueba, crearRolesPrueba } from './testHelpers';
 import { fechaOperativa, horaLocalAInstante } from './lib/fechaOperativa';
 
 const modules = import.meta.glob('./**/*.ts');
@@ -12,6 +12,7 @@ const T1 = '06:00';
 const HOY = fechaOperativa(Date.now(), ZONA, T1);
 
 async function setup(t: Awaited<ReturnType<typeof convexTest>>) {
+  await crearRolesPrueba(t); // EDS-105: requireAcceso resuelve el rol contra la tabla `roles`
   await crearParametrosPrueba(t, 4);
   await crearReglasAlertaPrueba(t); // las 7 reglas reales — evaluarAlertas las necesita, convex-test no corre seed.ts solo
   await crearMaterialPrueba(t, { slug: 'triturado', esInterno: true }); // requerido por aplicarCierreImpl

@@ -2,12 +2,13 @@ import { convexTest } from 'convex-test';
 import { describe, expect, test } from 'vitest';
 import schema from './schema';
 import { api } from './_generated/api';
-import { crearMaterialPrueba, crearUsuarioPrueba, crearSesionPrueba, crearParametrosPrueba } from './testHelpers';
+import { crearMaterialPrueba, crearUsuarioPrueba, crearSesionPrueba, crearParametrosPrueba, crearRolesPrueba } from './testHelpers';
 import { fechaOperativa, sumarDiasISO } from './lib/fechaOperativa';
 
 const modules = import.meta.glob('./**/*.ts');
 
 async function setup(t: Awaited<ReturnType<typeof convexTest>>) {
+  await crearRolesPrueba(t); // EDS-105: requireAcceso resuelve el rol contra la tabla `roles`
   await crearParametrosPrueba(t); // EDS-83: crearEntrada(sBatch) ahora valida fecha contra parametrosProduccion
   const matId = await crearMaterialPrueba(t, { esInterno: false, activo: true });
   const operadorId = await crearUsuarioPrueba(t, 'operador');
@@ -94,6 +95,7 @@ describe('entradas: backend de Entradas (tarea 3.3, endurecido en auditoría)', 
 
   test('rechaza crear entrada con material inactivo', async () => {
     const t = convexTest(schema, modules);
+    await crearRolesPrueba(t); // EDS-105
     await crearParametrosPrueba(t);
     const matInactivoId = await crearMaterialPrueba(t, { activo: false });
     const adminId = await crearUsuarioPrueba(t, 'admin');
@@ -106,6 +108,7 @@ describe('entradas: backend de Entradas (tarea 3.3, endurecido en auditoría)', 
 
   test('rechaza crear entrada con material interno (Triturado no se compra)', async () => {
     const t = convexTest(schema, modules);
+    await crearRolesPrueba(t); // EDS-105
     await crearParametrosPrueba(t);
     const trituradoId = await crearMaterialPrueba(t, { esInterno: true });
     const adminId = await crearUsuarioPrueba(t, 'admin');

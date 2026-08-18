@@ -3,7 +3,7 @@ import { describe, expect, test } from 'vitest';
 import schema from './schema';
 import { api } from './_generated/api';
 import { crearCapaImpl } from './peps';
-import { crearMaterialPrueba, crearUsuarioPrueba, crearSesionPrueba, crearParametrosPrueba } from './testHelpers';
+import { crearMaterialPrueba, crearUsuarioPrueba, crearSesionPrueba, crearParametrosPrueba, crearRolesPrueba } from './testHelpers';
 import { fechaOperativa, sumarDiasISO } from './lib/fechaOperativa';
 
 const modules = import.meta.glob('./**/*.ts');
@@ -18,6 +18,7 @@ const modules = import.meta.glob('./**/*.ts');
 const HOY = fechaOperativa(Date.now(), 'America/Mexico_City', '06:00');
 
 async function setup(t: Awaited<ReturnType<typeof convexTest>>) {
+  await crearRolesPrueba(t); // EDS-105: requireAcceso resuelve el rol contra la tabla `roles`
   await crearParametrosPrueba(t, 4);
   const trituradoId = await crearMaterialPrueba(t, { slug: 'triturado', esInterno: true });
   const matAId = await crearMaterialPrueba(t, { esInterno: false });

@@ -1,6 +1,6 @@
 import { v, ConvexError } from 'convex/values';
 import { mutation, query } from './_generated/server';
-import { requireRole } from './lib/auth';
+import { requireAcceso } from './lib/auth';
 import { aplicarCierreImpl, recapturarCierreImpl } from './cierreEngine';
 import { validarFechaOperativaEnVentana } from './lib/fechaOperativa';
 
@@ -18,7 +18,7 @@ const DIAS_ATRAS_PERMITIDOS = 7;
 export const estadoCierresDelDia = query({
   args: { fecha: v.string(), token: v.string() },
   handler: async (ctx, { fecha, token }) => {
-    await requireRole(ctx, token, ['operador', 'admin']);
+    await requireAcceso(ctx, token, 'cierre-turno');
     const resultado = [];
     for (const linea of LINEAS) {
       for (const turno of TURNOS) {
@@ -48,7 +48,10 @@ export const estadoCierresDelDia = query({
 export const consumoEsperado = query({
   args: { cargasPreparadas: v.number(), token: v.string() },
   handler: async (ctx, { cargasPreparadas, token }) => {
-    await requireRole(ctx, token, ['operador', 'admin']);
+    // EDS-105: compartida entre cierre-turno.html (operador armando el
+    // wizard) y correccion-capturas.html (admin recapturando un cierre) —
+    // ver tabla de equivalencia de EDS-105.
+    await requireAcceso(ctx, token, ['cierre-turno', 'correccion-capturas']);
     const formula = await ctx.db.query('formulaCarga').collect();
     const materiales = await ctx.db.query('materiales').withIndex('by_activo_orden', (q) => q.eq('activo', true)).collect();
     const nombrePorId = new Map(materiales.map((m) => [m._id, m]));
@@ -83,7 +86,7 @@ export const crearCierreTurno = mutation({
     token: v.string(),
   },
   handler: async (ctx, args) => {
-    const user = await requireRole(ctx, args.token, ['operador', 'admin']);
+    const user = await requireAcceso(ctx, args.token, 'cierre-turno');
 
     if (args.cargasPreparadas < 0) {
       throw new ConvexError('crearCierreTurno: cargasPreparadas no puede ser negativo.');
