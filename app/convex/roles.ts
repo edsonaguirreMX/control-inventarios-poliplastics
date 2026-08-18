@@ -35,6 +35,9 @@ function validarPaginas(paginas: string[]) {
 // excluye la vista de Configuración de raíz.
 function validarVistasPanel(vistas: string[]) {
   const validas = new Set<string>(VISTAS_PANEL);
+  if (new Set(vistas).size !== vistas.length) {
+    throw new ConvexError('Las vistas de Panel de Control no se pueden repetir.');
+  }
   for (const vista of vistas) {
     if (!validas.has(vista)) {
       throw new ConvexError(`"${vista}" no es una vista de Panel de Control válida.`);

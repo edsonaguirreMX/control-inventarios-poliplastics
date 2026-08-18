@@ -119,6 +119,16 @@ describe('roles: crearRol (EDS-104)', () => {
       t.mutation(api.roles.crearRol, { nombre: 'Rol V', paginas: ['panel-control'], vistasPanel: ['admin'], token: adminToken })
     ).rejects.toThrow();
   });
+
+  test('EDS-111: rechaza vistasPanel con slugs repetidos al crear', async () => {
+    const t = convexTest(schema, modules);
+    const { adminToken } = await setup(t);
+    await expect(
+      t.mutation(api.roles.crearRol, {
+        nombre: 'Rol Repetido', paginas: ['panel-control'], vistasPanel: ['compras', 'compras'], token: adminToken,
+      })
+    ).rejects.toThrow();
+  });
 });
 
 describe('roles: actualizarRol (EDS-104)', () => {
@@ -166,6 +176,16 @@ describe('roles: actualizarRol (EDS-104)', () => {
     const compras = roles.find((r) => r.slug === 'compras')!;
     await expect(
       t.mutation(api.roles.actualizarRol, { rolId: compras._id, vistasPanel: ['gerencia', 'admin'], token: adminToken })
+    ).rejects.toThrow();
+  });
+
+  test('EDS-111: rechaza vistasPanel con slugs repetidos al actualizar', async () => {
+    const t = convexTest(schema, modules);
+    const { adminToken } = await setup(t);
+    const roles = await t.query(api.roles.listRoles, { token: adminToken });
+    const compras = roles.find((r) => r.slug === 'compras')!;
+    await expect(
+      t.mutation(api.roles.actualizarRol, { rolId: compras._id, vistasPanel: ['compras', 'compras'], token: adminToken })
     ).rejects.toThrow();
   });
 });
