@@ -71,7 +71,9 @@ El **inventario inicial real** (kg y costo por material del corte físico de arr
 
 Sin estas variables configuradas, el envío real simplemente no ocurre — cada intento se loguea como error claro en `notificacionesEnvios`/el historial de Reporte Diario, sin tumbar el cron ni el resto del sistema.
 
-**Importante — WhatsApp en sandbox**: mientras no haya `TWILIO_WHATSAPP_TEMPLATE_SID` (número de producción aprobado por Meta), cada destinatario debe mandar `join <código>` por WhatsApp al número de pruebas de Twilio antes de poder recibir mensajes — ese opt-in caduca cada 72h. No es apto para destinatarios reales de forma sostenida, solo para validar que la integración funciona.
+**Importante — WhatsApp, sandbox vs. producción real**: la condición que importa es qué número tiene `TWILIO_WHATSAPP_FROM`, no si `TWILIO_WHATSAPP_TEMPLATE_SID` está configurado (son cosas independientes — podrías tener un template SID y seguir apuntando al sandbox).
+- **Mientras `TWILIO_WHATSAPP_FROM` sea el número de sandbox de Twilio**: cada destinatario debe mandar `join <código>` por WhatsApp a ese número antes de poder recibir mensajes — ese opt-in caduca cada 72h. No es apto para destinatarios reales de forma sostenida, solo para validar que la integración funciona.
+- **Para producción real**: hace falta un número/sender propio aprobado por Meta, y — para mensajes proactivos como el Reporte Diario, fuera de una ventana de 24h de conversación — un Message Template también aprobado por Meta (`TWILIO_WHATSAPP_TEMPLATE_SID`). Ambos trámites son externos, no bloqueantes para esta fase.
 
 ## Pruebas
 
