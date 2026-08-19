@@ -55,6 +55,26 @@ La base arranca vacía. Para crear el catálogo de 8 materiales, parámetros de 
 
 El **inventario inicial real** (kg y costo por material del corte físico de arranque) se carga aparte — ver tarea 3.5 / `EDS-41` en Linear, bloqueada hasta tener esas cifras.
 
+### Envío real de notificaciones (Reporte Diario) — EDS-69 Fase 1
+
+`convex/notificaciones.ts` manda correo (Resend) y WhatsApp (Twilio) reales cuando se genera el Reporte Diario (botón "Generar ahora" o el cron). Son secretos del deployment de Convex, no del frontend — igual que `SEED_SECRET`, se configuran con `npx convex env set` (dev y, aparte, prod) y nunca viven en `.env.local`/`.env.example`:
+
+| Variable | De dónde sale | Uso |
+|---|---|---|
+| `RESEND_API_KEY` | dashboard de resend.com, tras verificar el dominio remitente | autentica las llamadas a la API de Resend |
+| `RESEND_REMITENTE` | tú lo eliges, ej. `"Tejaflex <notificaciones@aocapp.net>"` | header `from` de cada correo |
+| `TWILIO_ACCOUNT_SID` | Twilio Console | autentica las llamadas a la API de Twilio |
+| `TWILIO_AUTH_TOKEN` | Twilio Console | autentica las llamadas a la API de Twilio |
+| `TWILIO_WHATSAPP_FROM` | Twilio Console → sandbox de WhatsApp (o número de producción cuando exista) | remitente `From` de cada mensaje, ej. `whatsapp:+14155238886` |
+| `TWILIO_WHATSAPP_TEMPLATE_SID` | opcional — Content SID de un Message Template aprobado por Meta | si está seteado, manda por template (requerido en producción real, fuera del sandbox); si no, manda texto libre (solo funciona en sandbox) |
+| `APP_BASE_URL` | tú lo eliges, ej. `https://aocapp.net` en prod | arma el link al Panel de Control dentro del correo/WhatsApp; si no está seteado, el mensaje sale sin link en vez de con una URL rota |
+
+Sin estas variables configuradas, el envío real simplemente no ocurre — cada intento se loguea como error claro en `notificacionesEnvios`/el historial de Reporte Diario, sin tumbar el cron ni el resto del sistema.
+
+**Importante — WhatsApp, sandbox vs. producción real**: la condición que importa es qué número tiene `TWILIO_WHATSAPP_FROM`, no si `TWILIO_WHATSAPP_TEMPLATE_SID` está configurado (son cosas independientes — podrías tener un template SID y seguir apuntando al sandbox).
+- **Mientras `TWILIO_WHATSAPP_FROM` sea el número de sandbox de Twilio**: cada destinatario debe mandar `join <código>` por WhatsApp a ese número antes de poder recibir mensajes — ese opt-in caduca cada 72h. No es apto para destinatarios reales de forma sostenida, solo para validar que la integración funciona.
+- **Para producción real**: hace falta un número/sender propio aprobado por Meta, y — para mensajes proactivos como el Reporte Diario, fuera de una ventana de 24h de conversación — un Message Template también aprobado por Meta (`TWILIO_WHATSAPP_TEMPLATE_SID`). Ambos trámites son externos, no bloqueantes para esta fase.
+
 ## Pruebas
 
 ```bash

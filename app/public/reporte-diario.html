@@ -171,6 +171,11 @@ a{color:inherit;}
 .hist-estado{text-align:right;font-size:.76rem;font-weight:600;}
 .hist-estado.ok{color:var(--positive);}
 .hist-estado.fail{color:var(--danger);}
+/* EDS-69 Fase 1 — línea de resumen de envío real, span completo debajo de
+   fecha/destinatarios/estado (el grid de 3 columnas de .hist-row no le
+   reserva columna propia a propósito, es opcional y solo aplica a partir
+   de esta fase). */
+.hist-envios{grid-column:1 / -1;font-size:.76rem;color:var(--ink-muted);}
 
 .footnotes{list-style:none;margin-top:1.2rem;padding:0;display:flex;flex-direction:column;gap:.4rem;}
 .footnotes li{display:flex;gap:.5rem;font-size:.8rem;color:var(--ink-muted);line-height:1.45;}
@@ -327,7 +332,7 @@ footer.page-foot{font-size:.78rem;color:var(--ink-faint);border-top:1px solid va
   </section>
 
   <footer class="page-foot">
-    Mockup de diseño — la lista de "Contenido del reporte" es ilustrativa (no se guarda todavía). El botón "Generar ahora" sí crea un registro real en el historial y abre la vista de impresión del Panel de Control; la generación automática diaria (a la hora configurada) también es real. El envío por correo/WhatsApp llega en una fase posterior — por ahora los destinatarios solo quedan capturados. Basado en el Documento de Funcionalidades del Sistema de Control de Materias Primas Tejaflex.
+    Mockup de diseño — la lista de "Contenido del reporte" es ilustrativa (no se guarda todavía). El botón "Generar ahora" sí crea un registro real en el historial, abre la vista de impresión del Panel de Control, y envía de verdad por correo y WhatsApp a los destinatarios configurados abajo; la generación automática diaria (a la hora configurada) hace lo mismo. WhatsApp en sandbox requiere opt-in del destinatario (mandar "join &lt;código&gt;" desde su WhatsApp al número de pruebas) hasta tener número de producción aprobado por Meta. Basado en el Documento de Funcionalidades del Sistema de Control de Materias Primas Tejaflex.
   </footer>
 
 </div>
@@ -409,10 +414,27 @@ function renderChips(){
     : '<span class="dest-empty">Sin destinatarios de WhatsApp.</span>';
 }
 
+// EDS-69 Fase 1 — mismo criterio de normalización que el backend
+// (reporteDiario.ts::guardarConfig): correo trim+lowercase, WhatsApp trim
+// + limpieza de espacios/guiones/paréntesis. Antes de esta fase no había
+// normalización aquí, así que "Juan@X.com" y "juan@x.com" se guardaban
+// como 2 destinatarios distintos.
+const TELEFONO_REGEX = /^\+[1-9]\d{7,14}$/;
+function normalizarCorreo(c){ return c.trim().toLowerCase(); }
+function normalizarWhatsapp(n){ return n.trim().replace(/[\s().-]/g, ''); }
+
 function agregarDestinatario(tipo){
   const input = document.getElementById(tipo==='correo' ? 'nuevoCorreo' : 'nuevoWhatsapp');
-  const val = input.value.trim();
-  if(!val) return;
+  const errorBox = document.getElementById('saveError');
+  const crudo = input.value.trim();
+  if(!crudo) return;
+  const val = tipo==='correo' ? normalizarCorreo(crudo) : normalizarWhatsapp(crudo);
+  if(tipo==='whatsapp' && !TELEFONO_REGEX.test(val)){
+    errorBox.hidden = false;
+    errorBox.textContent = '⚠ Número de WhatsApp inválido — usa formato internacional, ej. +523312345678.';
+    return;
+  }
+  errorBox.hidden = true;
   const list = tipo==='correo' ? CONFIG.correos : CONFIG.whatsapp;
   if(list.includes(val)) return;
   list.push(val);
@@ -445,7 +467,7 @@ function renderKPI(){
     <div class="stat-tile">
       <span class="stat-label">Destinatarios capturados</span>
       <span class="stat-value">${totalDest}</span>
-      <span class="stat-sub">${CONFIG.correos.length} correo · ${CONFIG.whatsapp.length} WhatsApp (aún sin envío real)</span>
+      <span class="stat-sub">${CONFIG.correos.length} correo · ${CONFIG.whatsapp.length} WhatsApp</span>
     </div>
     <div class="stat-tile">
       <span class="stat-label">Registrados</span>
@@ -460,11 +482,22 @@ function renderKPI(){
 }
 
 const GENERADO_POR_LABEL = { cron: 'Automático', manual: 'Manual' };
+// enviosOk/enviosError (EDS-69 Fase 1) son opcionales — filas de historial
+// de antes de esta fase no tienen envío real que resumir, se muestran sin
+// esa línea en vez de "undefined destinatario(s)".
+function lineaEnvio(h){
+  if (h.enviosOk === undefined && h.enviosError === undefined) return '';
+  const partes = [];
+  if (h.enviosOk) partes.push(`✓ ${h.enviosOk} enviado(s)`);
+  if (h.enviosError) partes.push(`✗ ${h.enviosError} con error`);
+  return `<div class="hist-envios">${partes.length ? partes.join(' · ') : 'Sin destinatarios que notificar'}</div>`;
+}
 function renderHistorial(){
   document.getElementById('historialList').innerHTML = HISTORIAL.length ? HISTORIAL.map(h=>`
     <div class="hist-row">
       <div class="hist-fecha">${fmtFechaHist(h.fecha)}</div>
       <div class="hist-dest">${GENERADO_POR_LABEL[h.generadoPor]||h.generadoPor} · ${h.destinatariosCount} destinatario(s) capturados</div>
+      ${lineaEnvio(h)}
       <div class="hist-estado ${h.estado==='generado'?'ok':'fail'}">${h.estado==='generado' ? '✓ Generado' : ('✗ Falló' + (h.detalleError?`: ${h.detalleError}`:''))}</div>
     </div>`).join('') : '<p style="color:var(--ink-faint);font-size:.85rem;">Sin reportes generados todavía.</p>';
 }
