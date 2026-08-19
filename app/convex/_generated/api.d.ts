@@ -25,6 +25,7 @@ import type * as lib_paginas from "../lib/paginas.js";
 import type * as lib_puntoReorden from "../lib/puntoReorden.js";
 import type * as lib_vistasPanel from "../lib/vistasPanel.js";
 import type * as materiales from "../materiales.js";
+import type * as notificaciones from "../notificaciones.js";
 import type * as parametros from "../parametros.js";
 import type * as peps from "../peps.js";
 import type * as reporteDiario from "../reporteDiario.js";
@@ -60,6 +61,7 @@ declare const fullApi: ApiFromModules<{
   "lib/puntoReorden": typeof lib_puntoReorden;
   "lib/vistasPanel": typeof lib_vistasPanel;
   materiales: typeof materiales;
+  notificaciones: typeof notificaciones;
   parametros: typeof parametros;
   peps: typeof peps;
   reporteDiario: typeof reporteDiario;

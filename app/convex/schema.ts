@@ -332,7 +332,8 @@ export default defineSchema({
     .index("by_alerta_user", ["alertaId", "userId"]), // idempotencia real en marcarAlertaLeida
 
   reporteDiarioConfig: defineTable({
-    // singleton — correos/whatsapp: captura para uso futuro (icebox I.1), v1 no los usa
+    // singleton — correos/whatsapp: capturados desde el día 1, EDS-69 Fase 1
+    // ya los usa de verdad (envío real por Resend/Twilio, ver notificaciones.ts).
     hora: v.string(), // "HH:MM"
     activo: v.boolean(),
     correos: v.array(v.string()),
@@ -347,7 +348,36 @@ export default defineSchema({
     destinatariosCount: v.number(),
     detalleError: v.union(v.string(), v.null()),
     generadoPor: v.union(v.literal("cron"), v.literal("manual")),
+    // EDS-69 Fase 1 — opcionales a propósito: filas sembradas antes de esta
+    // fase no tienen envío real que resumir, no se migran. Los llena
+    // notificaciones.ts::cerrarResumenEnvio una vez que termina de intentar
+    // el envío (siempre, incluso si todos los intentos fallan o falta
+    // configurar el proveedor — nunca queda a medias).
+    enviosOk: v.optional(v.number()),
+    enviosError: v.optional(v.number()),
   }).index("by_fecha", ["fecha"]),
+
+  // EDS-69 Fase 1 — log de cada intento de envío real (correo/WhatsApp) de
+  // una notificación. `origen` ya incluye 'alerta' aunque Fase 2 (EDS-112)
+  // todavía no lo usa, para no requerir una migración de schema cuando esa
+  // fase arranque. El índice compuesto es la clave de idempotencia: antes
+  // de reintentar un envío se consulta esta combinación exacta (no
+  // by_referenciaId completo) para no reenviar duplicados si la action se
+  // reejecuta.
+  notificacionesEnvios: defineTable({
+    origen: v.union(v.literal("reporteDiario"), v.literal("alerta")),
+    referenciaId: v.id("reporteDiarioHistorial"),
+    canal: v.union(v.literal("correo"), v.literal("whatsapp")),
+    destinatario: v.string(),
+    estado: v.union(v.literal("enviado"), v.literal("error")),
+    detalleError: v.union(v.string(), v.null()),
+    intentos: v.number(), // 1, o 2 si hubo reintento por error 5xx/red
+    proveedorId: v.union(v.string(), v.null()), // id de Resend / SID de Twilio
+    fecha: v.number(),
+  })
+    .index("by_referenciaId", ["referenciaId"])
+    .index("by_referencia_canal_destinatario", ["referenciaId", "canal", "destinatario"])
+    .index("by_fecha", ["fecha"]),
 
   // Rate limiting de authActions.login (EDS-70, deuda de la auditoría de
   // PR1) — por `usuario` (no por IP: Convex actions no exponen la IP real

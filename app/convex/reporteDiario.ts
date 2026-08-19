@@ -1,12 +1,18 @@
 import { v, ConvexError } from 'convex/values';
 import { mutation, query, internalMutation } from './_generated/server';
 import type { MutationCtx } from './_generated/server';
+import { internal } from './_generated/api';
 import { requireAcceso } from './lib/auth';
 import { requireParametros, ROLES_DASHBOARD } from './dashboard';
 import { fechaOperativa, sumarDiasISO, horaLocalAInstante } from './lib/fechaOperativa';
+import { normalizarCorreo, normalizarWhatsapp } from './notificaciones';
 
 const HORA_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
 const CORREO_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// E.164: '+' seguido de 8 a 15 dígitos, el primero distinto de 0 — mismo
+// formato que exige la API de Twilio para WhatsApp (EDS-69 Fase 1, antes
+// de esto no existía ninguna validación de formato de teléfono).
+const TELEFONO_REGEX = /^\+[1-9]\d{7,14}$/;
 
 // Notificación in-app (campana) de que hay un reporte nuevo listo — se
 // inserta en alertasHistorial (mismo mecanismo de 7.1) con un reglaSlug
@@ -32,11 +38,12 @@ async function crearNotificacionReporte(ctx: MutationCtx, hoy: string, ahoraMs: 
   });
 }
 
-// Reporte Diario — pantalla admin-only. v1 solo genera un registro de
-// historial in-app con el enlace de impresión de Panel de Control
-// (?autoprint=1, ya conectado desde PR 4); correos/whatsapp se CAPTURAN
-// para uso futuro (icebox I.1) pero no se envían de verdad todavía — la
-// UI debe dejarlo explícito para no prometer un envío que no ocurre.
+// Reporte Diario — pantalla admin-only. Genera un registro de historial
+// in-app con el enlace de impresión de Panel de Control (?autoprint=1) Y
+// dispara el envío real por correo (Resend) y WhatsApp (Twilio) a los
+// destinatarios configurados (EDS-69 Fase 1, ver notificaciones.ts) —
+// vía ctx.scheduler.runAfter(0, ...) porque una mutation no puede hacer
+// fetch directo, solo agendar una action para que corra justo después.
 export const getConfig = query({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {
@@ -59,15 +66,25 @@ export const guardarConfig = mutation({
     if (!HORA_REGEX.test(args.hora)) {
       throw new ConvexError('guardarConfig: hora inválida — formato esperado HH:MM.');
     }
-    for (const correo of args.correos) {
+    // Normaliza ANTES de validar (EDS-69 Fase 1) — evita que "Juan@X.com" y
+    // "juan@x.com" se guarden como 2 destinatarios distintos, y deja el
+    // número de WhatsApp limpio en el formato que exige Twilio.
+    const correos = args.correos.map(normalizarCorreo);
+    const whatsapp = args.whatsapp.map(normalizarWhatsapp);
+    for (const correo of correos) {
       if (!CORREO_REGEX.test(correo)) {
         throw new ConvexError(`guardarConfig: "${correo}" no parece un correo válido.`);
+      }
+    }
+    for (const telefono of whatsapp) {
+      if (!TELEFONO_REGEX.test(telefono)) {
+        throw new ConvexError(`guardarConfig: "${telefono}" no es un número de WhatsApp válido — usa formato internacional, ej. +523312345678.`);
       }
     }
     const now = Date.now();
     const existente = await ctx.db.query('reporteDiarioConfig').first();
     const datos = {
-      hora: args.hora, activo: args.activo, correos: args.correos, whatsapp: args.whatsapp,
+      hora: args.hora, activo: args.activo, correos, whatsapp,
       updatedAt: now, updatedBy: user._id,
     };
     if (existente) {
@@ -92,9 +109,10 @@ export const listHistorial = query({
 // inmediato (generadoPor:"manual"), SIN deduplicar contra el cron: es una
 // acción humana explícita, puede haber varias en un mismo día operativo
 // (a diferencia del cron, que sí debe disparar como máximo una vez).
-// destinatariosCount solo refleja cuántos hay configurados — correo/
-// WhatsApp no se envían de verdad en v1 (ver comentario de arriba). Mismo
-// flujo que el cron: también notifica por la campana (crearNotificacionReporte).
+// destinatariosCount refleja cuántos hay configurados; enviosOk/enviosError
+// (EDS-69 Fase 1) se llenan después, de forma asíncrona, cuando termine el
+// envío real (ver ctx.scheduler.runAfter abajo). Mismo flujo que el cron:
+// también notifica por la campana (crearNotificacionReporte).
 export const generarReporteAhora = mutation({
   args: { token: v.string() },
   handler: async (ctx, args) => {
@@ -104,10 +122,13 @@ export const generarReporteAhora = mutation({
     const hoy = fechaOperativa(ahoraMs, params.zonaHoraria, params.horaInicioTurno1);
     const config = await ctx.db.query('reporteDiarioConfig').first();
     const destinatariosCount = (config?.correos.length ?? 0) + (config?.whatsapp.length ?? 0);
-    await ctx.db.insert('reporteDiarioHistorial', {
+    const historialId = await ctx.db.insert('reporteDiarioHistorial', {
       fecha: ahoraMs, estado: 'generado', destinatariosCount, detalleError: null, generadoPor: 'manual',
     });
     await crearNotificacionReporte(ctx, hoy, ahoraMs, 'manual');
+    await ctx.scheduler.runAfter(0, internal.notificaciones.enviarReporteDiarioNotificaciones, {
+      reporteDiarioHistorialId: historialId, correos: config?.correos ?? [], whatsapp: config?.whatsapp ?? [], hoy,
+    });
     return { ok: true };
   },
 });
@@ -139,9 +160,12 @@ export const generarReporteDiario = internalMutation({
     if (historialHoy.some((h) => h.generadoPor === 'cron')) return; // ya se generó hoy por cron
 
     const destinatariosCount = config.correos.length + config.whatsapp.length;
-    await ctx.db.insert('reporteDiarioHistorial', {
+    const historialId = await ctx.db.insert('reporteDiarioHistorial', {
       fecha: ahoraMs, estado: 'generado', destinatariosCount, detalleError: null, generadoPor: 'cron',
     });
     await crearNotificacionReporte(ctx, hoy, ahoraMs, 'cron');
+    await ctx.scheduler.runAfter(0, internal.notificaciones.enviarReporteDiarioNotificaciones, {
+      reporteDiarioHistorialId: historialId, correos: config.correos, whatsapp: config.whatsapp, hoy,
+    });
   },
 });
