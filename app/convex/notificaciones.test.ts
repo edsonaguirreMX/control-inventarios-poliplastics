@@ -10,7 +10,9 @@ import {
   normalizarWhatsapp,
   enviarCorreoResend,
   enviarWhatsappTwilio,
+  intentarConstruirAdjuntoPdf,
 } from './notificaciones';
+import type { DatosReportePdf } from './reportePdf';
 
 const modules = import.meta.glob('./**/*.ts');
 
@@ -42,6 +44,20 @@ describe('notificaciones: funciones puras de armado de mensaje', () => {
     expect(texto).toBe('Reporte diario Tejaflex del 2026-08-19 listo. Ingresa al Panel de Control para imprimirlo.');
     expect(html).not.toContain('href=');
     expect(html).not.toMatch(/ver aquí:?\s*$/i);
+  });
+
+  // EDS-113 — mención del adjunto solo cuando existe de verdad (nunca
+  // promete un PDF que no se logró construir).
+  test('armarCuerpoCorreoReporte con conAdjuntoPdf menciona el PDF adjunto', () => {
+    const { html, texto } = armarCuerpoCorreoReporte({ hoy: '2026-08-19', urlReporte: null, conAdjuntoPdf: true });
+    expect(texto).toContain('Se adjunta el reporte en PDF.');
+    expect(html).toContain('Se adjunta el reporte en PDF.');
+  });
+
+  test('armarCuerpoCorreoReporte sin conAdjuntoPdf NO menciona ningún PDF', () => {
+    const { html, texto } = armarCuerpoCorreoReporte({ hoy: '2026-08-19', urlReporte: null });
+    expect(texto).not.toContain('PDF');
+    expect(html).not.toContain('PDF');
   });
 
   test('armarMensajeWhatsappReporte sin urlReporte da una frase completa', () => {
@@ -92,6 +108,42 @@ describe('notificaciones: enviarCorreoResend (fetch mockeado)', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [, init] = fetchMock.mock.calls[0];
     expect(init.headers['Idempotency-Key']).toBe('reporteDiario:abc:correo:a@x.com');
+  });
+
+  // EDS-113 — el adjunto de PDF solo se manda cuando existe; nunca
+  // `attachments: []` ni un adjunto vacío. Punto de cuidado 3 del Go del
+  // usuario: confirmar que attachments[0].content existe y es base64 real.
+  test('con adjuntoPdf: el body incluye attachments[0] con filename/content correctos', async () => {
+    vi.stubEnv('RESEND_API_KEY', 'test-key');
+    vi.stubEnv('RESEND_REMITENTE', 'Tejaflex <notificaciones@aocapp.net>');
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: 'resend-789' }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const contentBase64 = btoa('%PDF-1.7 contenido de prueba');
+    await enviarCorreoResend({
+      destinatario: 'a@x.com', asunto: 'x', html: 'x', texto: 'x', idempotencyKey: 'k',
+      adjuntoPdf: { filename: 'Reporte Directivo Tejaflex - 2026-08-19.pdf', contentBase64 },
+    });
+
+    const [, init] = fetchMock.mock.calls[0];
+    const body = JSON.parse(init.body);
+    expect(body.attachments).toHaveLength(1);
+    expect(body.attachments[0].filename).toBe('Reporte Directivo Tejaflex - 2026-08-19.pdf');
+    expect(body.attachments[0].content).toBe(contentBase64);
+    expect(atob(body.attachments[0].content)).toContain('%PDF-1.7');
+  });
+
+  test('sin adjuntoPdf (o null): el body NO incluye el campo attachments', async () => {
+    vi.stubEnv('RESEND_API_KEY', 'test-key');
+    vi.stubEnv('RESEND_REMITENTE', 'Tejaflex <notificaciones@aocapp.net>');
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: 'resend-999' }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await enviarCorreoResend({ destinatario: 'a@x.com', asunto: 'x', html: 'x', texto: 'x', idempotencyKey: 'k', adjuntoPdf: null });
+
+    const [, init] = fetchMock.mock.calls[0];
+    const body = JSON.parse(init.body);
+    expect(body.attachments).toBeUndefined();
   });
 
   test('400 de Resend — error, NO reintenta (1 sola llamada a fetch)', async () => {
@@ -250,6 +302,48 @@ describe('notificaciones: registrarEnvio / yaEnviado / cerrarResumenEnvio', () =
 });
 
 // ---------------------------------------------------------------------
+// intentarConstruirAdjuntoPdf — separado del handler de la action para
+// poder testearlo con un `ctx` mínimo mockeado (Punto de cuidado 3 del Go
+// del usuario: probar tanto el caso feliz como la degradación con gracia).
+// ---------------------------------------------------------------------
+
+describe('notificaciones: intentarConstruirAdjuntoPdf (EDS-113)', () => {
+  function datosFixture(): DatosReportePdf {
+    return {
+      fecha: '2026-08-19',
+      kpis: {
+        fecha: '2026-08-19', materiales: [], valorInventarioTotal: 0,
+        pctMermaUltimoCierre: 0, produccionUltimoCierreKg: 0, produccionUltimoCierreMetros: 0,
+        costoUltimoCierre: 0, costoRealPorKgUltimoCierre: 0, costoRealPorMetroUltimoCierre: 0,
+        costoEstandarPorKg: 0, costoEstandarPorMetro: 0,
+      },
+      semana: { dias: 7, fechaDesde: '2026-08-13', fechaHasta: '2026-08-19', pctMerma: 0, produccionKg: 0, produccionMetros: 0, costoTotal: 0, costoRealPorKg: 0, costoRealPorMetro: 0 },
+      seisCierres: { n: 0, costoRealPorKg: 0, costoRealPorMetro: 0 },
+      objetivos: { turnoL1: 0, turnoL2: 0, semana: 0, mes: 0 },
+      costoTendencia7: [],
+      nCrit: 0, nWarn: 0, totalMaterialesConReorden: 0, totalMateriales: 0,
+      masUrgente: null, semanaTotal: 0, mesTotal: 0,
+    } as DatosReportePdf;
+  }
+
+  test('caso feliz: devuelve filename con la fecha y contentBase64 como PDF real', async () => {
+    const ctxMock = { runQuery: async () => datosFixture() };
+    const adjunto = await intentarConstruirAdjuntoPdf(ctxMock);
+    expect(adjunto).not.toBeNull();
+    expect(adjunto?.filename).toBe('Reporte Directivo Tejaflex - 2026-08-19.pdf');
+    expect(atob(adjunto!.contentBase64).slice(0, 5)).toBe('%PDF-');
+  });
+
+  // Degradación con gracia (Ajuste 3 del Go del usuario): si falla la
+  // consulta de datos (o la construcción del PDF), nunca lanza — el
+  // llamador manda el correo igual, sin adjunto.
+  test('degradación: si ctx.runQuery falla, devuelve null sin lanzar', async () => {
+    const ctxMock = { runQuery: async () => { throw new Error('Convex no disponible'); } };
+    await expect(intentarConstruirAdjuntoPdf(ctxMock)).resolves.toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------
 // Orquestador completo — enviarReporteDiarioNotificaciones (action).
 // ---------------------------------------------------------------------
 
@@ -309,6 +403,31 @@ describe('notificaciones: enviarReporteDiarioNotificaciones (orquestador)', () =
 
     const historial = await t.run((ctx) => ctx.db.get(historialId));
     expect(historial).toMatchObject({ enviosOk: 2, enviosError: 0 });
+  });
+
+  // EDS-113 — con parámetros configurados (requeridos por datosReportePdf),
+  // el correo real sale CON el PDF adjunto — confirma el wiring completo,
+  // no solo las piezas por separado.
+  test('con parámetros configurados: el correo sale con attachments[0] real', async () => {
+    const t = convexTest(schema, modules);
+    const { crearParametrosPrueba } = await import('./testHelpers');
+    await crearParametrosPrueba(t, 4);
+    const historialId = await crearHistorial(t);
+    vi.stubEnv('RESEND_API_KEY', 'k'); vi.stubEnv('RESEND_REMITENTE', 'Tejaflex <n@aocapp.net>');
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: 'r1' }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await t.action(internal.notificaciones.enviarReporteDiarioNotificaciones, {
+      reporteDiarioHistorialId: historialId, correos: ['a@x.com'], whatsapp: [], hoy: '2026-08-19',
+    });
+
+    const [, init] = fetchMock.mock.calls[0];
+    const body = JSON.parse(init.body);
+    expect(body.attachments).toHaveLength(1);
+    expect(body.attachments[0].filename).toMatch(/^Reporte Directivo Tejaflex - .+\.pdf$/);
+    expect(atob(body.attachments[0].content).slice(0, 5)).toBe('%PDF-');
+    const historial = await t.run((ctx) => ctx.db.get(historialId));
+    expect(historial).toMatchObject({ enviosOk: 1, enviosError: 0 });
   });
 
   // Ajuste 3 del Go del usuario: dedupe/normalización defensiva dentro del

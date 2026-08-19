@@ -278,21 +278,29 @@ function validarDiasRango(nombreFuncion: string, dias: number) {
   }
 }
 
+// EDS-113 — extraído a *Impl para reutilizarse server-side (PDF adjunto de
+// Reporte Diario, ver reportePdf.ts) sin requerir un token de sesión de
+// usuario, que una internalAction de cron no tiene. Mismo patrón *Impl +
+// wrapper delgado que el resto del archivo (calcularKPIsHoyImpl arriba).
+export async function produccionPorRangoImpl(ctx: QueryCtx, dias: number) {
+  validarDiasRango('produccionPorRango', dias);
+  const { fechas, cierres } = await cierresEnRango(ctx, dias);
+  return fechas.map((fecha) => {
+    const delDia = cierres.filter((c) => c.fecha === fecha);
+    const metros = (linea: 1 | 2, turno: 1 | 2) => delDia.find((c) => c.linea === linea && c.turno === turno)?.metrosBuenos ?? 0;
+    return {
+      fecha,
+      linea1Turno1: metros(1, 1), linea1Turno2: metros(1, 2),
+      linea2Turno1: metros(2, 1), linea2Turno2: metros(2, 2),
+    };
+  });
+}
+
 export const produccionPorRango = query({
   args: { dias: v.number(), token: v.string() },
   handler: async (ctx, { dias, token }) => {
     await requireAcceso(ctx, token, 'panel-control');
-    validarDiasRango('produccionPorRango', dias);
-    const { fechas, cierres } = await cierresEnRango(ctx, dias);
-    return fechas.map((fecha) => {
-      const delDia = cierres.filter((c) => c.fecha === fecha);
-      const metros = (linea: 1 | 2, turno: 1 | 2) => delDia.find((c) => c.linea === linea && c.turno === turno)?.metrosBuenos ?? 0;
-      return {
-        fecha,
-        linea1Turno1: metros(1, 1), linea1Turno2: metros(1, 2),
-        linea2Turno1: metros(2, 1), linea2Turno2: metros(2, 2),
-      };
-    });
+    return produccionPorRangoImpl(ctx, dias);
   },
 });
 
@@ -312,18 +320,22 @@ export const tendenciaMerma = query({
   },
 });
 
+export async function tendenciaCostoImpl(ctx: QueryCtx, dias: number) {
+  validarDiasRango('tendenciaCosto', dias);
+  const { fechas, cierres } = await cierresEnRango(ctx, dias);
+  return fechas.map((fecha) => {
+    const delDia = cierres.filter((c) => c.fecha === fecha);
+    const kgBuenos = delDia.reduce((s, c) => s + c.kgBuenos, 0);
+    const costo = delDia.reduce((s, c) => s + c.costoTotalConsumido, 0);
+    return { fecha, costoRealPorKg: kgBuenos > 0 ? costo / kgBuenos : 0 };
+  });
+}
+
 export const tendenciaCosto = query({
   args: { dias: v.number(), token: v.string() },
   handler: async (ctx, { dias, token }) => {
     await requireAcceso(ctx, token, 'panel-control');
-    validarDiasRango('tendenciaCosto', dias);
-    const { fechas, cierres } = await cierresEnRango(ctx, dias);
-    return fechas.map((fecha) => {
-      const delDia = cierres.filter((c) => c.fecha === fecha);
-      const kgBuenos = delDia.reduce((s, c) => s + c.kgBuenos, 0);
-      const costo = delDia.reduce((s, c) => s + c.costoTotalConsumido, 0);
-      return { fecha, costoRealPorKg: kgBuenos > 0 ? costo / kgBuenos : 0 };
-    });
+    return tendenciaCostoImpl(ctx, dias);
   },
 });
 
@@ -335,34 +347,38 @@ export const tendenciaCosto = query({
 // Σcosto/Σkg — nunca un promedio de porcentajes diarios, que subestimaría
 // días de alta producción), pero sobre `cierresEnRango(ctx, dias)` en vez
 // de solo los cierres de la fecha del último cierre.
+export async function kpisPorRangoImpl(ctx: QueryCtx, dias: number) {
+  validarDiasRango('kpisPorRango', dias);
+  const params = await requireParametros(ctx);
+  const { fechas, cierres } = await cierresEnRango(ctx, dias);
+
+  const kgBuenos = cierres.reduce((s, c) => s + c.kgBuenos, 0);
+  const metrosBuenos = cierres.reduce((s, c) => s + c.metrosBuenos, 0);
+  const mermaTotalKg = cierres.reduce((s, c) => s + c.mermaTotalKg, 0);
+  const costoTotal = cierres.reduce((s, c) => s + c.costoTotalConsumido, 0);
+  const totalProcesado = kgBuenos + mermaTotalKg;
+  const pctMerma = totalProcesado > 0 ? (mermaTotalKg / totalProcesado) * 100 : 0;
+  const costoRealPorKg = kgBuenos > 0 ? costoTotal / kgBuenos : 0;
+  const costoRealPorMetro = costoRealPorKg * params.kgPorMetro;
+
+  return {
+    dias,
+    fechaDesde: fechas[0],
+    fechaHasta: fechas[fechas.length - 1],
+    pctMerma,
+    produccionKg: kgBuenos,
+    produccionMetros: metrosBuenos,
+    costoTotal,
+    costoRealPorKg,
+    costoRealPorMetro,
+  };
+}
+
 export const kpisPorRango = query({
   args: { dias: v.number(), token: v.string() },
   handler: async (ctx, { dias, token }) => {
     await requireAcceso(ctx, token, 'panel-control');
-    validarDiasRango('kpisPorRango', dias);
-    const params = await requireParametros(ctx);
-    const { fechas, cierres } = await cierresEnRango(ctx, dias);
-
-    const kgBuenos = cierres.reduce((s, c) => s + c.kgBuenos, 0);
-    const metrosBuenos = cierres.reduce((s, c) => s + c.metrosBuenos, 0);
-    const mermaTotalKg = cierres.reduce((s, c) => s + c.mermaTotalKg, 0);
-    const costoTotal = cierres.reduce((s, c) => s + c.costoTotalConsumido, 0);
-    const totalProcesado = kgBuenos + mermaTotalKg;
-    const pctMerma = totalProcesado > 0 ? (mermaTotalKg / totalProcesado) * 100 : 0;
-    const costoRealPorKg = kgBuenos > 0 ? costoTotal / kgBuenos : 0;
-    const costoRealPorMetro = costoRealPorKg * params.kgPorMetro;
-
-    return {
-      dias,
-      fechaDesde: fechas[0],
-      fechaHasta: fechas[fechas.length - 1],
-      pctMerma,
-      produccionKg: kgBuenos,
-      produccionMetros: metrosBuenos,
-      costoTotal,
-      costoRealPorKg,
-      costoRealPorMetro,
-    };
+    return kpisPorRangoImpl(ctx, dias);
   },
 });
 
@@ -379,34 +395,42 @@ export const kpisPorRango = query({
 // tope permitiría pedir toda la tabla de un jalón.
 const N_CIERRES_MAX = 50;
 
+export async function costoPromedioUltimosCierresImpl(ctx: QueryCtx, n: number) {
+  if (!Number.isInteger(n) || n <= 0 || n > N_CIERRES_MAX) {
+    throw new ConvexError(`costoPromedioUltimosCierres: n debe ser un entero entre 1 y ${N_CIERRES_MAX}.`);
+  }
+  const cierres = await ctx.db.query('cierresTurno').order('desc').take(n);
+  const kgBuenos = cierres.reduce((s, c) => s + c.kgBuenos, 0);
+  const metrosBuenos = cierres.reduce((s, c) => s + c.metrosBuenos, 0);
+  const costoTotal = cierres.reduce((s, c) => s + c.costoTotalConsumido, 0);
+  return {
+    n: cierres.length,
+    costoRealPorKg: kgBuenos > 0 ? costoTotal / kgBuenos : 0,
+    costoRealPorMetro: metrosBuenos > 0 ? costoTotal / metrosBuenos : 0,
+  };
+}
+
 export const costoPromedioUltimosCierres = query({
   args: { n: v.number(), token: v.string() },
   handler: async (ctx, { n, token }) => {
     await requireAcceso(ctx, token, 'panel-control');
-    if (!Number.isInteger(n) || n <= 0 || n > N_CIERRES_MAX) {
-      throw new ConvexError(`costoPromedioUltimosCierres: n debe ser un entero entre 1 y ${N_CIERRES_MAX}.`);
-    }
-    const cierres = await ctx.db.query('cierresTurno').order('desc').take(n);
-    const kgBuenos = cierres.reduce((s, c) => s + c.kgBuenos, 0);
-    const metrosBuenos = cierres.reduce((s, c) => s + c.metrosBuenos, 0);
-    const costoTotal = cierres.reduce((s, c) => s + c.costoTotalConsumido, 0);
-    return {
-      n: cierres.length,
-      costoRealPorKg: kgBuenos > 0 ? costoTotal / kgBuenos : 0,
-      costoRealPorMetro: metrosBuenos > 0 ? costoTotal / metrosBuenos : 0,
-    };
+    return costoPromedioUltimosCierresImpl(ctx, n);
   },
 });
 
 // Metas de producción (tarea 6.5) — singleton, igual patrón que
 // parametrosProduccion. Lectura: cualquiera con acceso a panel-control.
 // Escritura: solo admin — ver nota en updateObjetivos.
+export async function getObjetivosImpl(ctx: QueryCtx) {
+  const obj = await ctx.db.query('objetivosProduccion').first();
+  return obj ?? { turnoL1: 0, turnoL2: 0, semana: 0, mes: 0 };
+}
+
 export const getObjetivos = query({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {
     await requireAcceso(ctx, token, 'panel-control');
-    const obj = await ctx.db.query('objetivosProduccion').first();
-    return obj ?? { turnoL1: 0, turnoL2: 0, semana: 0, mes: 0 };
+    return getObjetivosImpl(ctx);
   },
 });
 
