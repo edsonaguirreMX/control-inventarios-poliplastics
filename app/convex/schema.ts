@@ -47,6 +47,19 @@ export default defineSchema({
     // en vez del string 'admin'.
     protegido: v.boolean(),
     bypassAcceso: v.boolean(),
+    // EDS-111 — vistas internas de Panel de Control (Compras/Calidad/
+    // Gerencia) permitidas para este rol, independiente de `paginas`.
+    // `panel-control` en `paginas` es "puede ENTRAR a la pantalla";
+    // `vistasPanel` es "cuáles de las 3 vistas de solo-lectura ve dentro
+    // de ella" — mismos datos del backend para las 3 (sin filtrado por
+    // rol, confirmado antes de construir esto), la vista es puro
+    // renderizado. La pestaña "Admin" (Configuración) NO es una vista de
+    // este catálogo — se queda admin-only fija, ajena a este campo.
+    // Opcional a propósito: no requiere migrar los roles ya sembrados en
+    // dev/prod (mismo criterio que se evitó en EDS-109 para `reactivados`
+    // — un campo nuevo en Convex exige que TODOS los documentos existentes
+    // ya lo cumplan salvo que sea opcional).
+    vistasPanel: v.optional(v.array(v.string())),
     activo: v.boolean(),
     orden: v.number(),
     updatedAt: v.number(),

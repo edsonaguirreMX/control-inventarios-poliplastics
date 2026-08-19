@@ -3,6 +3,7 @@ import { mutation, query, internalMutation, internalQuery } from './_generated/s
 import { internal } from './_generated/api';
 import { requireUser } from './lib/auth';
 import { PAGINAS } from './lib/paginas';
+import { VISTAS_PANEL } from './lib/vistasPanel';
 
 // Runtime normal (no "use node") — necesario porque logout/me hacen
 // ctx.db.* directo y solo actions pueden usar el runtime Node. El hashing
@@ -208,13 +209,19 @@ export const me = query({
       const rolActivo = rol?.activo ?? false;
       const rolNombre = rol?.nombre ?? user.rol;
       const paginasPermitidas = rolActivo ? (rol!.bypassAcceso ? [...PAGINAS] : rol!.paginas) : [];
+      // EDS-111: mismo criterio que paginasPermitidas, pero para las
+      // vistas internas de Panel de Control (Compras/Calidad/Gerencia) —
+      // bypass (admin) ve las 3, rol inactivo no ve ninguna. `?? []`
+      // porque vistasPanel es opcional en el schema (roles sembrados
+      // antes de EDS-111 no lo tienen todavía).
+      const vistasPanel = rolActivo ? (rol!.bypassAcceso ? [...VISTAS_PANEL] : (rol!.vistasPanel ?? [])) : [];
       // _id (inmutable) incluido junto a los campos editables — gestion-usuarios.html
       // lo usa para detectar "esta fila es mi propia cuenta" de forma estable aunque
       // yo mismo me haya renombrado el `usuario` en la misma sesión (hallazgo de
       // CodeRabbit en PR7: comparar por `usuario` se rompe si cambia a medio camino).
       return {
         _id: user._id, nombre: user.nombre, usuario: user.usuario, rol: user.rol,
-        rolNombre, paginasPermitidas,
+        rolNombre, paginasPermitidas, vistasPanel,
       };
     } catch {
       return null;

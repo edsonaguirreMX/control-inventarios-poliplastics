@@ -128,11 +128,11 @@ export async function crearRolesPrueba(t: AnyTestConvex) {
   return t.run(async (ctx) => {
     const now = Date.now();
     const BASE = [
-      { slug: 'admin', nombre: 'Admin', paginas: ['panel-control', 'catalogo-materiales', 'parametros-produccion', 'entradas-costeo', 'correccion-capturas', 'alertas-configuracion', 'reporte-diario', 'ajustes-inventario', 'cierre-turno', 'gestion-usuarios', 'gestion-roles'], protegido: true, bypassAcceso: true, orden: 0 },
-      { slug: 'gerencia', nombre: 'Gerencia y Comercial', paginas: ['panel-control'], protegido: false, bypassAcceso: false, orden: 1 },
-      { slug: 'compras', nombre: 'Compras', paginas: ['panel-control', 'entradas-costeo'], protegido: false, bypassAcceso: false, orden: 2 },
-      { slug: 'calidad', nombre: 'Calidad y Producción', paginas: ['panel-control'], protegido: false, bypassAcceso: false, orden: 3 },
-      { slug: 'operador', nombre: 'Operador de piso', paginas: ['cierre-turno'], protegido: false, bypassAcceso: false, orden: 4 },
+      { slug: 'admin', nombre: 'Admin', paginas: ['panel-control', 'catalogo-materiales', 'parametros-produccion', 'entradas-costeo', 'correccion-capturas', 'alertas-configuracion', 'reporte-diario', 'ajustes-inventario', 'cierre-turno', 'gestion-usuarios', 'gestion-roles'], vistasPanel: ['compras', 'calidad', 'gerencia'], protegido: true, bypassAcceso: true, orden: 0 },
+      { slug: 'gerencia', nombre: 'Gerencia y Comercial', paginas: ['panel-control'], vistasPanel: ['gerencia'], protegido: false, bypassAcceso: false, orden: 1 },
+      { slug: 'compras', nombre: 'Compras', paginas: ['panel-control', 'entradas-costeo'], vistasPanel: ['compras'], protegido: false, bypassAcceso: false, orden: 2 },
+      { slug: 'calidad', nombre: 'Calidad y Producción', paginas: ['panel-control'], vistasPanel: ['calidad'], protegido: false, bypassAcceso: false, orden: 3 },
+      { slug: 'operador', nombre: 'Operador de piso', paginas: ['cierre-turno'], vistasPanel: [], protegido: false, bypassAcceso: false, orden: 4 },
     ];
     for (const r of BASE) {
       await ctx.db.insert('roles', { ...r, activo: true, updatedAt: now, updatedBy: null });

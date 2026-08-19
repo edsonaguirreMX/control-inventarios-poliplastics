@@ -4,6 +4,7 @@ import type { MutationCtx } from './_generated/server';
 import type { Id } from './_generated/dataModel';
 import { requireRole } from './lib/auth';
 import { PAGINAS, PAGINAS_NO_CONFIGURABLES } from './lib/paginas';
+import { VISTAS_PANEL } from './lib/vistasPanel';
 
 // Gestión de Roles — pantalla admin-only (EDS-104, Fase 1 de la épica
 // EDS-103, roles personalizables). A propósito se autoriza con el
@@ -23,6 +24,23 @@ function validarPaginas(paginas: string[]) {
     }
     if (noConfigurables.has(p)) {
       throw new ConvexError(`"${p}" no es asignable desde aquí — Gestión de Usuarios y Gestión de Roles quedan siempre admin-only, por seguridad.`);
+    }
+  }
+}
+
+// EDS-111 — mismo criterio que validarPaginas, pero para el catálogo (más
+// chico) de vistas internas de Panel de Control. 'admin' nunca es una
+// entrada válida aquí porque ni siquiera aparece en VISTAS_PANEL — no hace
+// falta una lista aparte de "no configurables", el catálogo completo ya
+// excluye la vista de Configuración de raíz.
+function validarVistasPanel(vistas: string[]) {
+  const validas = new Set<string>(VISTAS_PANEL);
+  if (new Set(vistas).size !== vistas.length) {
+    throw new ConvexError('Las vistas de Panel de Control no se pueden repetir.');
+  }
+  for (const vista of vistas) {
+    if (!validas.has(vista)) {
+      throw new ConvexError(`"${vista}" no es una vista de Panel de Control válida.`);
     }
   }
 }
@@ -50,12 +68,17 @@ export const listRoles = query({
 });
 
 export const crearRol = mutation({
-  args: { nombre: v.string(), paginas: v.array(v.string()), token: v.string() },
+  args: {
+    nombre: v.string(), paginas: v.array(v.string()), vistasPanel: v.optional(v.array(v.string())),
+    token: v.string(),
+  },
   handler: async (ctx, args) => {
     const admin = await requireRole(ctx, args.token, ['admin']);
     const nombre = args.nombre.trim();
     if (!nombre) throw new ConvexError('crearRol: el nombre no puede estar vacío.');
     validarPaginas(args.paginas);
+    const vistasPanel = args.vistasPanel ?? [];
+    validarVistasPanel(vistasPanel);
 
     const slugBase = slugify(nombre);
     if (!slugBase) throw new ConvexError('crearRol: el nombre debe tener al menos una letra o número.');
@@ -72,7 +95,7 @@ export const crearRol = mutation({
     const maxOrden = todos.reduce((m, r) => Math.max(m, r.orden), -1);
     const now = Date.now();
     const id = await ctx.db.insert('roles', {
-      slug, nombre, paginas: args.paginas, protegido: false, bypassAcceso: false, activo: true,
+      slug, nombre, paginas: args.paginas, vistasPanel, protegido: false, bypassAcceso: false, activo: true,
       orden: maxOrden + 1, updatedAt: now, updatedBy: admin._id,
     });
     return { ok: true, id, slug };
@@ -87,7 +110,7 @@ export const crearRol = mutation({
 async function actualizarRolImpl(
   ctx: MutationCtx,
   admin: { _id: Id<'users'> },
-  args: { rolId: Id<'roles'>; nombre?: string; paginas?: string[] }
+  args: { rolId: Id<'roles'>; nombre?: string; paginas?: string[]; vistasPanel?: string[] }
 ): Promise<void> {
   const existente = await ctx.db.get(args.rolId);
   if (!existente) throw new ConvexError('actualizarRol: el rol no existe.');
@@ -104,12 +127,17 @@ async function actualizarRolImpl(
     validarPaginas(args.paginas);
     patch.paginas = args.paginas;
   }
+  if (args.vistasPanel !== undefined) {
+    validarVistasPanel(args.vistasPanel);
+    patch.vistasPanel = args.vistasPanel;
+  }
   await ctx.db.patch(args.rolId, patch);
 }
 
 export const actualizarRol = mutation({
   args: {
     rolId: v.id('roles'), nombre: v.optional(v.string()), paginas: v.optional(v.array(v.string())),
+    vistasPanel: v.optional(v.array(v.string())),
     token: v.string(),
   },
   handler: async (ctx, args) => {
@@ -130,6 +158,7 @@ export const guardarRolesCompleto = mutation({
   args: {
     roles: v.array(v.object({
       rolId: v.id('roles'), nombre: v.optional(v.string()), paginas: v.optional(v.array(v.string())),
+      vistasPanel: v.optional(v.array(v.string())),
     })),
     token: v.string(),
   },
@@ -190,12 +219,21 @@ export const reactivarRol = mutation({
 // NUEVO desde cero (hallazgo de CodeRabbit: sin esto, un deployment recién
 // sembrado quedaba con el usuario admin insertado pero sin ninguna fila en
 // `roles` correspondiente, hasta correr seedRolesBase aparte a mano).
-export const ROLES_BASE: Array<{ slug: string; nombre: string; paginas: string[]; protegido: boolean; bypassAcceso: boolean }> = [
-  { slug: 'admin', nombre: 'Admin', paginas: [...PAGINAS], protegido: true, bypassAcceso: true },
-  { slug: 'gerencia', nombre: 'Gerencia y Comercial', paginas: ['panel-control'], protegido: false, bypassAcceso: false },
-  { slug: 'compras', nombre: 'Compras', paginas: ['panel-control', 'entradas-costeo'], protegido: false, bypassAcceso: false },
-  { slug: 'calidad', nombre: 'Calidad y Producción', paginas: ['panel-control'], protegido: false, bypassAcceso: false },
-  { slug: 'operador', nombre: 'Operador de piso', paginas: ['cierre-turno'], protegido: false, bypassAcceso: false },
+// EDS-111: vistasPanel refleja el comportamiento de HOY antes de esta
+// épica (compras solo veía "compras", calidad solo "calidad", etc.) — el
+// punto de esta épica es que ADMIN puede ahora ampliarlo desde Gestión de
+// Roles (ej. darle a "Compras" también la vista "Calidad"), no que los
+// roles base cambien su comportamiento por defecto. admin no necesita
+// listar nada aquí — bypassAcceso ya le da las 3 vistas completas (ver
+// auth.ts::me). operador no usa panel-control, vistasPanel:[] es un no-op.
+export const ROLES_BASE: Array<{
+  slug: string; nombre: string; paginas: string[]; vistasPanel: string[]; protegido: boolean; bypassAcceso: boolean;
+}> = [
+  { slug: 'admin', nombre: 'Admin', paginas: [...PAGINAS], vistasPanel: [...VISTAS_PANEL], protegido: true, bypassAcceso: true },
+  { slug: 'gerencia', nombre: 'Gerencia y Comercial', paginas: ['panel-control'], vistasPanel: ['gerencia'], protegido: false, bypassAcceso: false },
+  { slug: 'compras', nombre: 'Compras', paginas: ['panel-control', 'entradas-costeo'], vistasPanel: ['compras'], protegido: false, bypassAcceso: false },
+  { slug: 'calidad', nombre: 'Calidad y Producción', paginas: ['panel-control'], vistasPanel: ['calidad'], protegido: false, bypassAcceso: false },
+  { slug: 'operador', nombre: 'Operador de piso', paginas: ['cierre-turno'], vistasPanel: [], protegido: false, bypassAcceso: false },
 ];
 
 // EDS-104 — migración idempotente (2ª ronda de revisión: idempotente POR
@@ -220,6 +258,7 @@ export const seedRolesBase = internalMutation({
     let insertados = 0;
     let yaExistian = 0;
     let reactivados = 0;
+    let vistasPanelCompletadas = 0;
     for (const r of ROLES_BASE) {
       const existente = await ctx.db.query('roles').withIndex('by_slug', (q) => q.eq('slug', r.slug)).unique();
       if (existente) {
@@ -241,6 +280,23 @@ export const seedRolesBase = internalMutation({
           await ctx.db.patch(existente._id, { activo: true, updatedAt: now });
           reactivados++;
         }
+        // EDS-111: vistasPanel es un campo NUEVO — los 5 roles base
+        // sembrados ANTES de esta épica (dev/prod) no lo tienen (undefined,
+        // no `[]`). Sin este backfill, tras el deploy compras/calidad/
+        // gerencia perderían de golpe su vista actual del Panel de Control
+        // (auth.me cae a `[]` cuando el campo no existe) hasta que alguien
+        // entrara a mano a Gestión de Roles a marcar las casillas — una
+        // regresión real de UX el mismo día del deploy, no solo un caso
+        // límite teórico. A diferencia de la reactivación, esto NO pisa
+        // ninguna personalización real: `undefined` específicamente
+        // significa "nunca se tocó este campo todavía", así que rellenar
+        // con el default de ROLES_BASE es seguro — si un admin ya lo editó
+        // (aunque sea a `[]` explícito), el campo deja de ser `undefined`
+        // y este bloque nunca se ejecuta de nuevo para ese rol.
+        if (existente.vistasPanel === undefined) {
+          await ctx.db.patch(existente._id, { vistasPanel: r.vistasPanel, updatedAt: now });
+          vistasPanelCompletadas++;
+        }
         continue;
       }
       const maxOrden = (await ctx.db.query('roles').collect()).reduce((m, x) => Math.max(m, x.orden), -1);
@@ -254,6 +310,6 @@ export const seedRolesBase = internalMutation({
       .filter((u) => u.activo && !rolesVigentes.has(u.rol))
       .map((u) => ({ usuario: u.usuario, rol: u.rol }));
 
-    return { ok: true, insertados, yaExistian, reactivados, usuariosHuerfanos };
+    return { ok: true, insertados, yaExistian, reactivados, vistasPanelCompletadas, usuariosHuerfanos };
   },
 });
