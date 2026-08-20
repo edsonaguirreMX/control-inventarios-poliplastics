@@ -29,6 +29,7 @@ import type * as notificaciones from "../notificaciones.js";
 import type * as parametros from "../parametros.js";
 import type * as peps from "../peps.js";
 import type * as reporteDiario from "../reporteDiario.js";
+import type * as reportePdf from "../reportePdf.js";
 import type * as roles from "../roles.js";
 import type * as seed from "../seed.js";
 import type * as seedData from "../seedData.js";
@@ -65,6 +66,7 @@ declare const fullApi: ApiFromModules<{
   parametros: typeof parametros;
   peps: typeof peps;
   reporteDiario: typeof reporteDiario;
+  reportePdf: typeof reportePdf;
   roles: typeof roles;
   seed: typeof seed;
   seedData: typeof seedData;

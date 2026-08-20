@@ -1,6 +1,8 @@
 import { v } from 'convex/values';
 import { internalMutation, internalQuery, internalAction } from './_generated/server';
 import { internal } from './_generated/api';
+import { construirPdfReporteBase64 } from './reportePdf';
+import type { DatosReportePdf } from './reportePdf';
 
 // EDS-69 Fase 1 — envío real de Reporte Diario por correo (Resend) y
 // WhatsApp (Twilio). Sin 'use node': el runtime normal de las actions de
@@ -24,14 +26,18 @@ export function armarAsuntoReporte(hoy: string): string {
 // Precisión 3 del Go del usuario: si no hay APP_BASE_URL configurado, el
 // mensaje debe seguir siendo una frase completa y útil — nunca un "ver
 // aquí:" colgado sin URL.
-export function armarCuerpoCorreoReporte({ hoy, urlReporte }: { hoy: string; urlReporte: string | null }): { html: string; texto: string } {
+export function armarCuerpoCorreoReporte({ hoy, urlReporte, conAdjuntoPdf }: { hoy: string; urlReporte: string | null; conAdjuntoPdf?: boolean }): { html: string; texto: string } {
   const frase = urlReporte
     ? `Ingresa al enlace para ver la vista de impresión del Panel de Control: ${urlReporte}`
     : 'Ingresa al Panel de Control para imprimirlo.';
-  const texto = `Reporte diario Tejaflex del ${hoy} listo. ${frase}`;
+  // EDS-113 — mención breve del PDF adjunto solo cuando existe (nunca
+  // promete un adjunto que no se logró construir, ver degradación con
+  // gracia en enviarReporteDiarioNotificaciones).
+  const fraseAdjunto = conAdjuntoPdf ? ' Se adjunta el reporte en PDF.' : '';
+  const texto = `Reporte diario Tejaflex del ${hoy} listo. ${frase}${fraseAdjunto}`;
   const html = `<p>Reporte diario Tejaflex del <strong>${hoy}</strong> listo.</p><p>${
     urlReporte ? `<a href="${urlReporte}">Ver la vista de impresión del Panel de Control</a>` : 'Ingresa al Panel de Control para imprimirlo.'
-  }</p>`;
+  }</p>${conAdjuntoPdf ? '<p>Se adjunta el reporte en PDF.</p>' : ''}`;
   return { html, texto };
 }
 
@@ -98,6 +104,7 @@ export async function enviarCorreoResend(params: {
   html: string;
   texto: string;
   idempotencyKey: string;
+  adjuntoPdf?: { filename: string; contentBase64: string } | null;
 }): Promise<ResultadoEnvio> {
   const apiKey = process.env.RESEND_API_KEY;
   const remitente = process.env.RESEND_REMITENTE;
@@ -119,6 +126,12 @@ export async function enviarCorreoResend(params: {
           subject: params.asunto,
           html: params.html,
           text: params.texto,
+          // EDS-113 — attachments: [{filename, content}] con content en
+          // base64, formato nativo de la API de Resend (límite 40MB post-
+          // base64, muy por encima de este PDF de 1 página). Solo se
+          // incluye el campo si de verdad hay adjunto — nunca mandar
+          // `attachments: []` ni un adjunto vacío.
+          ...(params.adjuntoPdf ? { attachments: [{ filename: params.adjuntoPdf.filename, content: params.adjuntoPdf.contentBase64 }] } : {}),
         }),
       });
       if (res.ok) {
@@ -248,6 +261,29 @@ function urlReporteActual(): string | null {
   return base ? `${base.replace(/\/$/, '')}/panel-control.html?autoprint=1` : null;
 }
 
+// EDS-113 — separado del handler de la action para poder testearlo con un
+// `ctx` mínimo mockeado (solo necesita `runQuery`), sin pasar por todo el
+// aparato de convex-test. NUNCA lanza — si algo falla en el camino
+// (runQuery o construirPdfReporteBase64), loguea con console.error
+// (visible en logs de Convex) y devuelve `null`; el llamador manda el
+// correo igual, sin adjunto (degradación con gracia, Ajuste 3 del Go del
+// usuario — esto nunca debe inflar enviosError).
+export async function intentarConstruirAdjuntoPdf(ctx: {
+  // Firma deliberadamente laxa (no el tipo genérico real de Convex) — solo
+  // se necesita `runQuery`, así el `ctx` real de la action lo satisface
+  // sin fricción, y en tests basta un mock mínimo `{ runQuery: async () => ... }`.
+  runQuery: (query: unknown, args: Record<string, never>) => Promise<DatosReportePdf>;
+}): Promise<{ filename: string; contentBase64: string } | null> {
+  try {
+    const datos = await ctx.runQuery(internal.reportePdf.datosReportePdf, {});
+    const contentBase64 = await construirPdfReporteBase64(datos);
+    return { filename: `Reporte Directivo Tejaflex - ${datos.fecha}.pdf`, contentBase64 };
+  } catch (err) {
+    console.error('[notificaciones] No se pudo construir el PDF del Reporte Diario — se manda el correo sin adjunto:', err instanceof Error ? err.message : String(err));
+    return null;
+  }
+}
+
 export const enviarReporteDiarioNotificaciones = internalAction({
   args: {
     reporteDiarioHistorialId: v.id('reporteDiarioHistorial'),
@@ -259,8 +295,13 @@ export const enviarReporteDiarioNotificaciones = internalAction({
     const correos = dedupe(args.correos, normalizarCorreo);
     const whatsapp = dedupe(args.whatsapp, normalizarWhatsapp);
     const urlReporte = urlReporteActual();
+
+    // PDF adjunto (solo correo, ver Ajuste 5 del Go del usuario) — se
+    // construye UNA sola vez para todo el envío, no por destinatario.
+    const adjuntoPdf = correos.length > 0 ? await intentarConstruirAdjuntoPdf(ctx) : null;
+
     const asunto = armarAsuntoReporte(args.hoy);
-    const { html, texto } = armarCuerpoCorreoReporte({ hoy: args.hoy, urlReporte });
+    const { html, texto } = armarCuerpoCorreoReporte({ hoy: args.hoy, urlReporte, conAdjuntoPdf: adjuntoPdf !== null });
     const mensajeWhatsapp = armarMensajeWhatsappReporte({ hoy: args.hoy, urlReporte });
 
     let enviosOk = 0;
@@ -272,7 +313,7 @@ export const enviarReporteDiarioNotificaciones = internalAction({
       });
       if (yaExiste) { enviosOk++; continue; }
       const idempotencyKey = `reporteDiario:${args.reporteDiarioHistorialId}:correo:${destinatario}`;
-      const resultado = await enviarCorreoResend({ destinatario, asunto, html, texto, idempotencyKey });
+      const resultado = await enviarCorreoResend({ destinatario, asunto, html, texto, idempotencyKey, adjuntoPdf });
       if (resultado.estado === 'enviado') enviosOk++; else enviosError++;
       await ctx.runMutation(internal.notificaciones.registrarEnvio, { referenciaId: args.reporteDiarioHistorialId, canal: 'correo', destinatario, ...resultado });
     }
